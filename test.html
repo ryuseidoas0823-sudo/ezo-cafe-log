@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Overpass API 抽出 ＆ SQL化ツール</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f4f4f9; color: #333; }
+    button { padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; font-size: 1rem; cursor: pointer; margin-right: 10px; }
+    button:hover { background: #2980b9; }
+    .btn-dl { background: #9b59b6; display: none; }
+    .btn-dl:hover { background: #8e44ad; }
+    pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+
+  <h2>☕️ 札幌市カフェデータ抽出ツール (SQL版)</h2>
+  <button id="fetchBtn" onclick="fetchCafes()">1. データを取得する</button>
+  <button id="dlBtn" class="btn-dl" onclick="downloadSQL()">2. SQLファイルをダウンロード</button>
+  <p id="status"></p>
+  <pre id="result">ここに結果が表示されます...</pre>
+
+  <script>
+    let globalShopList = [];
+
+    async function fetchCafes() {
+      const btn = document.getElementById('fetchBtn');
+      const dlBtn = document.getElementById('dlBtn');
+      const status = document.getElementById('status');
+      const result = document.getElementById('result');
+      
+      btn.disabled = true;
+      status.innerText = "☁️ データを取得中... (数秒かかります)";
+      result.innerText = "";
+      dlBtn.style.display = "none";
+
+      const query = `
+        [out:json][timeout:25];
+        area["name:ja"="札幌市"]->.searchArea;
+        nwr["amenity"="cafe"](area.searchArea);
+        out center;
+      `;
+
+      try {
+        const res = await fetch("https://overpass-api.de/api/interpreter", {
+          method: "POST",
+          body: "data=" + encodeURIComponent(query),
+          headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        });
+
+        if (!res.ok) throw new Error(`サーバーエラー: ${res.status}`);
+
+        const data = await res.json();
+        globalShopList = [];
+        let noNameCount = 0;
+
+        data.elements.forEach(el => {
+          const name = el.tags && el.tags.name ? el.tags.name : "";
+          if (!name) { noNameCount++; return; }
+          
+          const lat = el.lat || (el.center && el.center.lat);
+          const lon = el.lon || (el.center && el.center.lon);
+          const osmid = el.type + "/" + el.id;
+          
+          globalShopList.push({ id: osmid, name, lat, lon });
+        });
+
+        status.innerText = `✅ 取得成功: 名前あり ${globalShopList.length} 件`;
+        result.innerText = "取得完了しました。「2. SQLファイルをダウンロード」を押してください。";
+        dlBtn.style.display = "inline-block";
+
+      } catch (e) {
+        status.innerText = "❌ エラーが発生しました";
+        result.innerText = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // 🌟 D1用のSQLコマンドを生成してダウンロードする関数
+    function downloadSQL() {
+      if (globalShopList.length === 0) return;
+      
+      // 1. テーブルを作成する命令（すでに存在する場合はスキップ）
+      let sqlContent = `CREATE TABLE IF NOT EXISTS shops_master (
+  shop_id TEXT PRIMARY KEY,
+  shop_name TEXT NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL
+);\n\n`;
+
+      // 2. データを挿入する命令（一度に全件入れるための構文）
+      sqlContent += `INSERT INTO shops_master (shop_id, shop_name, latitude, longitude) VALUES\n`;
+      
+      const values = globalShopList.map(shop => {
+        const safeName = shop.name.replace(/'/g, "''"); // SQLでのエラーを防ぐためシングルクォートをエスケープ
+        return `('${shop.id}', '${safeName}', ${shop.lat}, ${shop.lon})`;
+      });
+
+      sqlContent += values.join(",\n") + ";\n";
+
+      // Blobを作成してダウンロード
+      const blob = new Blob([sqlContent], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "insert_shops_master.sql";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
