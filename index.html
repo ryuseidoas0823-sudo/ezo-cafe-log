@@ -648,11 +648,29 @@ function searchMasterShop() {
       });
     };
 
-    function initViewMap() {
-      if (viewMap !== null) { viewMap.invalidateSize(); return; }
-      viewMap = L.map('mapView').setView([43.0686, 141.3508], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(viewMap);
+    // ✅ 修正後のコードのイメージ
+function initViewMap() {
+    // 【手順2-1】まずは地図がすでに作られているか（入れ物が空か）を確認する
+    if (!viewMap) { 
+        // --- 地図が無かった場合（初回のみ実行）ここから ---
+        
+        // 1. 本物の地図データを入れ物にセットする（初期化）
+        // （※ 'viewMapDiv' や [43.064, 141.35] の部分はご自身のコードに合わせてください）
+        viewMap = L.map('viewMapDiv').setView([43.064, 141.35], 13);
+        
+        // 2. タイル（地図の絵）を追加する
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(viewMap);
+        
+        // 3. マーカー（ピン）を読み込む（もしあれば）
+        // loadViewMarkers(); // （※マーカー読み込み関数がある場合のみ）
+
+        // --- ここまで ---
     }
+
+    // 【手順2-2】地図が確実に存在する状態になったので、サイズを調整する
+    // （※これでタブを切り替えた瞬間、マップが表示されます！）
+    viewMap.invalidateSize(); 
+}
 
     function updateViewMarkers(filteredDiaries = globalDiaries) {
       if (!viewMap) return;
