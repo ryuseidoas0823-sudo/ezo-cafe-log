@@ -245,7 +245,8 @@
     const HOME_LNG = 141.3543763;
     const SAFE_DISTANCE_METERS = 20;
 
-    let activeTagFilter = 'null';
+    let activeTagFilter = 'null';  // ←さっき追加した行
+    let viewMap;                  // ←★これを新しく追加！
     let selectedImageBase64 = null; 
     let selectedDatetime = null;
     let currentRecordMode = 'gps'; 
