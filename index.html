@@ -525,17 +525,7 @@ function searchMasterShop() {
       const rawTags = document.getElementById('tagsInput').value;
       
       fetch(CLOUDFLARE_WORKER_URL, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          shopName: shopName, comment: document.getElementById('commentInput').value, 
-          latitude: lat, longitude: lng, imageBase64: selectedImageBase64, tags: parseTags(rawTags).join(','),
-          weatherIcon: weather, temperature: temp, userGender: gender, userAge: age,
-          visitedAt: selectedDatetime // 🌟 取得した撮影日時をWorkerに送る
-        })
-      }).then(res => res.json()).then(data => {
-        if (!data.success) throw new Error(data.error);
-        alert("✨ 記録が完了しました！");
-        resetRecordTab(); fetchAndStoreAllDiaries(); btnElement.disabled = false;
+      // ...（中略）...
       }).catch(err => { document.getElementById('status').innerText = `❌ エラー: ${err.message}`; btnElement.disabled = false; });
     }
 
@@ -556,7 +546,9 @@ function searchMasterShop() {
       const query = searchInputEl ? searchInputEl.value.toLowerCase() : "";
       
       const filtered = globalDiaries.filter(diary => {
-        const matchSearch = diary.shop_name.toLowerCase().includes(query) || (diary.comment && diary.comment.toLowerCase().includes(query));
+        // ★ null対策：店名がない場合は空文字にしてエラーを防ぐ
+        const safeShopName = diary.shop_name || ""; 
+        const matchSearch = safeShopName.toLowerCase().includes(query) || (diary.comment && diary.comment.toLowerCase().includes(query));
         const matchTag = activeTagFilter === "" ? true : (diary.tags && diary.tags.includes(activeTagFilter));
         return matchSearch && matchTag;
       });
@@ -691,20 +683,12 @@ function initViewMap() {
       if (Object.keys(uniqueShops).length > 0) viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     }
 
-    function renderAnalytics() {
-      if (globalDiaries.length === 0) return;
+    globalDiaries.forEach(d => {
+        // ★ null対策を追加
+        const safeShopName = d.shop_name || ""; 
 
-      document.getElementById('statTotal').innerText = globalDiaries.length;
-      const uniqueShops = new Set(globalDiaries.map(d => d.shop_name));
-      document.getElementById('statUnique').innerText = uniqueShops.size;
-
-      let eatin = 0, takeout = 0;
-      let weatherCounts = { '☀️':0, '☁️':0, '☔️':0, '❄️':0 };
-      let timeCounts = { '朝(5-11)':0, '昼(11-15)':0, '夕(15-18)':0, '夜(18-5)':0 };
-
-      globalDiaries.forEach(d => {
-        if(d.shop_name.includes('[店内]')) eatin++;
-        if(d.shop_name.includes('[持帰]')) takeout++;
+        if(safeShopName.includes('[店内]')) eatin++;
+        if(safeShopName.includes('[持帰]')) takeout++;
 
         if(d.weather_icon && weatherCounts[d.weather_icon] !== undefined) weatherCounts[d.weather_icon]++;
 
