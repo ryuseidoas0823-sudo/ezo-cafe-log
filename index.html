@@ -245,11 +245,13 @@
     const HOME_LNG = 141.3543763;
     const SAFE_DISTANCE_METERS = 20;
 
-    let activeTagFilter = 'null';  // ←さっき追加した行
-    let viewMap;                  // ←★これを新しく追加！
+    let activeTagFilter = 'null'; 
+    let viewMap;                  
+    let pickerMap;      // ← ★これを追加（記録用マップの箱）
+    let pickerMarker;   // ← ★これも追加（記録用ピンの箱）
     let selectedImageBase64 = null; 
     let selectedDatetime = null;
-    let currentRecordMode = 'gps'; 
+    let currentRecordMode = 'gps';
     let selectedMasterShop = null; // 🌟 マスタから選ばれた店舗情報を保持
     let searchTimeout = null;      // 🌟 検索の連続実行防止用
 
