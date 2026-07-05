@@ -240,20 +240,22 @@
 
   <script>
     // ★ 自身のWorker URLと自宅GPSを書き換えてください
-    const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; // ← 書き換え！
+    const CLOUDFLARE_WORKER_URL = ""; // ← ★ここにURLを忘れずに入れてください！
     const HOME_LAT = 43.0620958;
     const HOME_LNG = 141.3543763;
     const SAFE_DISTANCE_METERS = 20;
 
-    let activeTagFilter = 'null'; 
-    let viewMap;                  
-    let pickerMap;      // ← ★これを追加（記録用マップの箱）
-    let pickerMarker;   // ← ★これも追加（記録用ピンの箱）
+    let activeTagFilter = "";  // ← nullではなく空文字で初期化
+    let viewMap;                 
+    let pickerMap;      
+    let pickerMarker;   
     let selectedImageBase64 = null; 
     let selectedDatetime = null;
     let currentRecordMode = 'gps';
-    let selectedMasterShop = null; // 🌟 マスタから選ばれた店舗情報を保持
-    let searchTimeout = null;      // 🌟 検索の連続実行防止用
+    let selectedMasterShop = null; 
+    let searchTimeout = null;      
+    let globalDiaries = []; // ★データを保存する箱を追加
+    let charts = {};        // ★グラフを管理する箱を追加
 
     window.onload = function() {
       loadSettings();
@@ -320,9 +322,8 @@
       const file = event.target.files[0];
       if (!file) return;
       currentRecordMode = mode;
-      selectedDatetime = null; // 🌟 毎回リセットする
+      selectedDatetime = null; 
       
-      // 🌟 写真からExif情報（撮影日時）を抽出
       try {
         const exifData = await exifr.parse(file, ['DateTimeOriginal']);
         if (exifData && exifData.DateTimeOriginal) {
@@ -374,11 +375,22 @@
       reader.readAsDataURL(file);
     }
 
+    // ★ 飲み込まれていた関数を分離・修正
     function resetRecordTab() {
-function searchMasterShop() {
+      document.getElementById('step1').style.display = "block";
+      document.getElementById('step2').style.display = "none";
+      document.getElementById('cameraInput').value = ""; document.getElementById('galleryInput').value = "";
+      document.getElementById('shopNameInput').value = ""; document.getElementById('commentInput').value = "";
+      document.getElementById('tagsInput').value = ""; document.getElementById('noLocationCheck').checked = false;
+      document.getElementById('status').innerText = "";
+      selectedImageBase64 = null;
+      selectedDatetime = null;
+    }
+
+    function searchMasterShop() {
       const q = document.getElementById('shopNameInput').value;
       const list = document.getElementById('autocompleteList');
-      selectedMasterShop = null; // 手入力されたら一旦マスタ選択を解除
+      selectedMasterShop = null; 
 
       if (q.length < 1) { list.style.display = "none"; return; }
 
@@ -394,13 +406,12 @@ function searchMasterShop() {
                 li.innerHTML = `<span class="badge-master">公式</span>${escapeHTML(shop.shop_name)}`;
                 li.onclick = () => {
                   document.getElementById('shopNameInput').value = shop.shop_name;
-                  selectedMasterShop = shop; // 🌟 マスタの店を確保！
+                  selectedMasterShop = shop; 
                   list.style.display = "none";
                 };
                 list.appendChild(li);
               });
             }
-            // 最後に「新規店舗として登録」の選択肢を必ず出す
             const newLi = document.createElement('li');
             newLi.innerHTML = `<span class="badge-new">新規</span>「${escapeHTML(q)}」を手動で登録する`;
             newLi.onclick = () => {
@@ -411,15 +422,6 @@ function searchMasterShop() {
             list.style.display = "block";
           });
       }, 300);
-    }
-      document.getElementById('step1').style.display = "block";
-      document.getElementById('step2').style.display = "none";
-      document.getElementById('cameraInput').value = ""; document.getElementById('galleryInput').value = "";
-      document.getElementById('shopNameInput').value = ""; document.getElementById('commentInput').value = "";
-      document.getElementById('tagsInput').value = ""; document.getElementById('noLocationCheck').checked = false;
-      document.getElementById('status').innerText = "";
-      selectedImageBase64 = null;
-      selectedDatetime = null;
     }
 
     function initPickerMap() {
@@ -456,16 +458,13 @@ function searchMasterShop() {
       const userGender = localStorage.getItem('ezo_gender') || "未設定";
       const userAge = localStorage.getItem('ezo_age') || "未設定";
 
-      // 位置情報を送らないモード
       if (document.getElementById('noLocationCheck').checked) {
         sendDataToCloudflare(selectedMasterShop ? selectedMasterShop.shop_id : null, finalShopName, null, null, weatherIcon, null, userGender, userAge, submitBtn);
         return;
       }
 
-      // 🌟 パターンA: マスタから店舗を選んでいる場合（最強の安全モード）
       if (selectedMasterShop) {
         document.getElementById('status').innerText = "📍 公式座標を使用して天気を取得中...";
-        // マスタの座標を使って天気だけ取得する（スマホのGPSは使わないので自宅流出の危険ゼロ）
         let temperature = await fetchTemperature(selectedMasterShop.latitude, selectedMasterShop.longitude);
         document.getElementById('status').innerText = temperature ? `🌡 気温 ${temperature}℃ 取得完了！` : "🌡 気温取得スキップ";
         
@@ -473,7 +472,6 @@ function searchMasterShop() {
         return;
       }
 
-      // ⚠️ パターンB: マスタにない新規店舗の場合（今までの動作）
       if (currentRecordMode === 'manual') {
         const pos = pickerMarker.getLatLng();
         if (getDistanceFromLatLonInM(pos.lat, pos.lng, HOME_LAT, HOME_LNG) < SAFE_DISTANCE_METERS) {
@@ -500,7 +498,7 @@ function searchMasterShop() {
       }
     }
 
-    // 引数に shopId を追加
+    // ★ 重複していた関数を削除し、正しい1つだけを残しました
     function sendDataToCloudflare(shopId, shopName, lat, lng, weather, temp, gender, age, btnElement) {
       document.getElementById('status').innerText = "☁️ データを保存中...";
       const rawTags = document.getElementById('tagsInput').value;
@@ -517,15 +515,6 @@ function searchMasterShop() {
         if (!data.success) throw new Error(data.error);
         alert("✨ 記録が完了しました！");
         resetRecordTab(); fetchAndStoreAllDiaries(); btnElement.disabled = false;
-      }).catch(err => { document.getElementById('status').innerText = `❌ エラー: ${err.message}`; btnElement.disabled = false; });
-    }
-
-    function sendDataToCloudflare(shopName, lat, lng, weather, temp, gender, age, btnElement) {
-      document.getElementById('status').innerText = "☁️ データを保存中...";
-      const rawTags = document.getElementById('tagsInput').value;
-      
-      fetch(CLOUDFLARE_WORKER_URL, {
-      // ...（中略）...
       }).catch(err => { document.getElementById('status').innerText = `❌ エラー: ${err.message}`; btnElement.disabled = false; });
     }
 
@@ -546,7 +535,6 @@ function searchMasterShop() {
       const query = searchInputEl ? searchInputEl.value.toLowerCase() : "";
       
       const filtered = globalDiaries.filter(diary => {
-        // ★ null対策：店名がない場合は空文字にしてエラーを防ぐ
         const safeShopName = diary.shop_name || ""; 
         const matchSearch = safeShopName.toLowerCase().includes(query) || (diary.comment && diary.comment.toLowerCase().includes(query));
         const matchTag = activeTagFilter === "" ? true : (diary.tags && diary.tags.includes(activeTagFilter));
@@ -642,21 +630,12 @@ function searchMasterShop() {
       });
     };
 
-    // ✅ 修正後のコードのイメージ
-function initViewMap() {
-      // 1. 地図がまだ作られていない場合のみ初期化
+    function initViewMap() {
       if (!viewMap) { 
-        // ★修正: 'viewMapDiv' ではなく 'mapView' に変更！
         viewMap = L.map('mapView').setView([43.064, 141.35], 13);
-        
-        // 地図の画像を読み込む
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(viewMap);
       }
-
-      // 2. 地図のサイズを綺麗に調整する（タブ切り替えのバグ対策として少しだけ待機させる）
-      setTimeout(() => {
-        viewMap.invalidateSize();
-      }, 100); 
+      setTimeout(() => { viewMap.invalidateSize(); }, 100); 
     }
 
     function updateViewMarkers(filteredDiaries = globalDiaries) {
@@ -683,8 +662,19 @@ function initViewMap() {
       if (Object.keys(uniqueShops).length > 0) viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     }
 
-    globalDiaries.forEach(d => {
-        // ★ null対策を追加
+    // ★ 頭が消えていた分析機能を完全修復
+    function renderAnalytics() {
+      if (!globalDiaries || globalDiaries.length === 0) return;
+
+      document.getElementById('statTotal').innerText = globalDiaries.length;
+      const uniqueShops = new Set(globalDiaries.map(d => d.shop_name || ""));
+      document.getElementById('statUnique').innerText = uniqueShops.size;
+
+      let eatin = 0, takeout = 0;
+      let weatherCounts = { '☀️':0, '☁️':0, '☔️':0, '❄️':0 };
+      let timeCounts = { '朝(5-11)':0, '昼(11-15)':0, '夕(15-18)':0, '夜(18-5)':0 };
+
+      globalDiaries.forEach(d => {
         const safeShopName = d.shop_name || ""; 
 
         if(safeShopName.includes('[店内]')) eatin++;
