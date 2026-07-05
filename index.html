@@ -72,8 +72,6 @@
     .stat-value { font-size: 1.5rem; font-weight: bold; color: #e74c3c; }
     .stat-label { font-size: 0.8rem; color: #7f8c8d; }
     .chart-container { position: relative; width: 100%; }
-
-    /* 👁️ ピン隠しボタン用スタイル */
     .hide-pins-btn { position: absolute; top: 10px; right: 10px; z-index: 1000; padding: 8px 12px; background: rgba(255,255,255,0.9); border: 2px solid #ccc; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); font-weight: bold; font-size: 0.85rem; color: #333; cursor: pointer; }
   </style>
 </head>
@@ -111,14 +109,12 @@
       <div id="step2" style="display: none;">
         <img id="previewImg" src="">
         
-        <!-- 利用タイプの選択 -->
         <div class="type-selector">
           <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
           <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイクアウト</label>
           <label><input type="radio" name="eatType" value="🛍️豆・グッズ購入">🛍️ 豆・グッズ</label>
         </div>
 
-        <!-- ★追加：業種タイプの選択 -->
         <p style="margin: 0 0 5px 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">お店のタイプは？</p>
         <select id="shopCategorySelect" style="margin-bottom: 15px; padding: 10px; font-weight: bold; color: #2c3e50;">
           <option value="🏢喫茶・カフェ">🏢 喫茶・カフェ (自家焙煎含む)</option>
@@ -141,10 +137,13 @@
           </div>
         </div>
 
+        <div id="smartSuggestArea" style="display: none; margin-bottom: 15px;"></div>
+
         <div class="autocomplete-container">
          <input type="text" id="shopNameInput" placeholder="店名を入力して検索..." autocomplete="off" oninput="searchMasterShop()">
          <ul id="autocompleteList" class="autocomplete-list"></ul>
         </div>
+        
         <input type="text" id="tagsInput" placeholder="タグ (カンマ区切り。例: 作業用, 静か)">
         <textarea id="commentInput" placeholder="感想やメモ"></textarea>
         
@@ -201,27 +200,18 @@
     <div id="settings" class="content">
       <div class="dashboard-card">
         <h3>👤 アナリティクス用属性設定</h3>
-        <p style="font-size: 0.85rem; color: #7f8c8d;">※ここで設定した属性は記録と一緒に保存され、将来SNS化した際の統計データにのみ利用されます。</p>
         <div id="currentSettingsDisplay" style="background: #e8f8f5; padding: 10px; border-radius: 8px; margin-bottom: 15px; color: #16a085; font-weight: bold; text-align: center;">
           現在の設定: <span id="displayGender">未設定</span> / <span id="displayAge">未設定</span>
         </div>
         <p style="margin: 10px 0 5px; font-weight: bold;">性別</p>
         <select id="settingGender">
           <option value="">選択してください</option>
-          <option value="男性">男性</option>
-          <option value="女性">女性</option>
-          <option value="その他">その他</option>
-          <option value="回答しない">回答しない</option>
+          <option value="男性">男性</option><option value="女性">女性</option><option value="その他">その他</option><option value="回答しない">回答しない</option>
         </select>
         <p style="margin: 10px 0 5px; font-weight: bold;">年代</p>
         <select id="settingAge">
           <option value="">選択してください</option>
-          <option value="10代">10代</option>
-          <option value="20代">20代</option>
-          <option value="30代">30代</option>
-          <option value="40代">40代</option>
-          <option value="50代">50代</option>
-          <option value="60代以上">60代以上</option>
+          <option value="10代">10代</option><option value="20代">20代</option><option value="30代">30代</option><option value="40代">40代</option><option value="50代">50代</option><option value="60代以上">60代以上</option>
         </select>
         <button onclick="saveSettings()" style="background-color: #3498db; margin-top: 15px;">💾 設定をスマホに保存</button>
       </div>
@@ -265,7 +255,7 @@
   </div>
 
   <script>
-    // ★ 自身のWorker URLを忘れずに書き換えてください！
+    // ★ Cloudflare WorkerのURLを必ず貼り直してください！
     const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; 
     const HOME_LAT = 43.0620958;
     const HOME_LNG = 141.3543763;
@@ -289,7 +279,7 @@
       setupHidePinsButtons();
     }
 
-    // 👁️ ピン隠しボタンのセットアップ
+    // 👁️ ピン隠しボタン設定
     function setupHidePinsButtons() {
       const hideFunc = (mapObj) => { if(mapObj) mapObj.eachLayer(l => { if(l instanceof L.Marker && l.setOpacity) l.setOpacity(0); }); };
       const showFunc = (mapObj) => { if(mapObj) mapObj.eachLayer(l => { if(l instanceof L.Marker && l.setOpacity) l.setOpacity(1); }); };
@@ -309,6 +299,7 @@
       }
     }
 
+    // 設定管理
     function loadSettings() {
       const g = localStorage.getItem('ezo_gender');
       const a = localStorage.getItem('ezo_age');
@@ -330,13 +321,14 @@
 
     function checkSettingsAndClick(inputId) {
       if (!localStorage.getItem('ezo_gender') || !localStorage.getItem('ezo_age')) {
-        alert("📊 アナリティクス機能を利用するため、先に「設定」タブで性別と年代を登録してください。");
+        alert("📊 アナリティクス機能を利用するため、先に「設定」タブで登録してください。");
         switchTab('settings');
         return;
       }
       document.getElementById(inputId).click();
     }
 
+    // タブ切り替え
     function switchTab(tabId) {
       document.querySelectorAll('.content, .tab').forEach(el => el.classList.remove('active'));
       document.getElementById(tabId).classList.add('active');
@@ -349,92 +341,115 @@
       if(tabId === 'settings') loadSettings(); 
     }
 
+    // タグ色生成・パース
     function getColorFromTag(tag) {
       if (!tag) return "#34495e";
       let hash = 0; for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
       return `hsl(${Math.abs(hash) % 360}, 70%, 45%)`; 
     }
-
     function parseTags(tagsString) {
       if (!tagsString) return [];
       return tagsString.split(',').map(t => t.trim()).filter(t => t !== "");
     }
 
-    // 📝 写真無しで記録
+    // 💡 スマートサジェスト
+    function checkSmartSuggest(lat, lng) {
+      const areaDiv = document.getElementById('smartSuggestArea');
+      areaDiv.style.display = "none";
+      areaDiv.innerHTML = "";
+
+      const nearbyShops = new Set();
+      globalDiaries.forEach(d => {
+        if (d.latitude && d.longitude) {
+          const dist = getDistanceFromLatLonInM(lat, lng, d.latitude, d.longitude);
+          if (dist <= 50) nearbyShops.add(d.shop_name);
+        }
+      });
+
+      const shopsArray = Array.from(nearbyShops);
+      if (shopsArray.length > 0 && shopsArray.length <= 2) {
+         let html = `<p style="font-size: 0.85rem; color: #e67e22; margin: 0 0 5px; font-weight: bold;">📍 もしかして？</p><div style="display: flex; gap: 8px; flex-wrap: wrap;">`;
+         shopsArray.forEach(shop => {
+           html += `<button type="button" style="background: #fdf2e9; border: 1px solid #e67e22; color: #d35400; padding: 8px 12px; border-radius: 20px; font-size: 0.9rem; width: auto; margin: 0;" onclick="applySmartSuggest('${escapeHTML(shop)}')">💡 ${escapeHTML(shop)}</button>`;
+         });
+         html += `</div>`;
+         areaDiv.innerHTML = html;
+         areaDiv.style.display = "block";
+      }
+    }
+
+    window.applySmartSuggest = function(shopName) {
+       document.getElementById('shopNameInput').value = shopName;
+       searchMasterShop();
+    };
+
+    // 記録モード起動系
     function startNoPhotoRecord() {
       if (!localStorage.getItem('ezo_gender') || !localStorage.getItem('ezo_age')) {
-        alert("📊 アナリティクス機能を利用するため、先に「設定」タブで登録してください。");
-        switchTab('settings'); return;
+        alert("📊 先に「設定」タブで登録してください。"); switchTab('settings'); return;
       }
-      currentRecordMode = 'manual'; 
-      selectedDatetime = null;
-      selectedImageBase64 = null;
-
+      currentRecordMode = 'manual'; selectedDatetime = null; selectedImageBase64 = null;
       document.getElementById('previewImg').style.display = "none";
       document.getElementById('step1').style.display = "none";
       document.getElementById('step2').style.display = "block";
       document.getElementById('weatherSelectorDiv').style.display = "block";
-      
       document.getElementById('manualMapArea').style.display = "block";
       initPickerMap();
       document.querySelector('input[name="weatherType"][value="❓"]').checked = true;
     }
 
-    // 💭 ブックマークモード
     function startBookmarkRecord() {
       startNoPhotoRecord();
       document.querySelector('input[name="weatherType"][value="💭"]').checked = true;
       document.getElementById('weatherSelectorDiv').style.display = "none";
     }
 
-    // 👣 足跡へ昇格
     window.upgradeToFootprint = function(shopName) {
-      switchTab('record');
-      startNoPhotoRecord();
+      switchTab('record'); startNoPhotoRecord();
       document.getElementById('shopNameInput').value = shopName;
       searchMasterShop();
       alert(`「${shopName}」の訪問記録をつけます！\n（※写真がある場合は一度『やり直す』を押して写真を選んでください）`);
     };
 
-    // 🖼️ 写真から記録（省メモリ対応）
+    // 写真読み込みとEXIFワープ
     async function handleImageSelect(event, mode) {
       const file = event.target.files[0];
       if (!file) return;
-      currentRecordMode = mode;
-      selectedDatetime = null; 
+      currentRecordMode = mode; selectedDatetime = null; 
       
       try {
-        const exifData = await exifr.parse(file, ['DateTimeOriginal']);
-        if (exifData && exifData.DateTimeOriginal) {
-          const d = new Date(exifData.DateTimeOriginal);
-          const yyyy = d.getFullYear(); const mm = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0');
-          const hh = String(d.getHours()).padStart(2, '0'); const min = String(d.getMinutes()).padStart(2, '0'); const ss = String(d.getSeconds()).padStart(2, '0');
-          selectedDatetime = `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+        const exifData = await exifr.parse(file, ['DateTimeOriginal', 'latitude', 'longitude']);
+        if (exifData) {
+          if (exifData.DateTimeOriginal) {
+            const d = new Date(exifData.DateTimeOriginal);
+            selectedDatetime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+          }
+          if (exifData.latitude && exifData.longitude && pickerMap && pickerMarker) {
+            setTimeout(() => {
+              pickerMap.setView([exifData.latitude, exifData.longitude], 16);
+              pickerMarker.setLatLng([exifData.latitude, exifData.longitude]);
+              checkSmartSuggest(exifData.latitude, exifData.longitude); 
+            }, 500);
+          }
         }
-      } catch(e) { console.log("EXIF読み取りスキップ"); }
+      } catch(e) { console.log("EXIF読取スキップ"); }
 
       document.querySelector('input[name="weatherType"][value="❓"]').checked = true;
-
       const img = new Image();
       img.onload = function() {
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
+        const canvas = document.getElementById('canvas'); const ctx = canvas.getContext('2d');
         const scaleSize = Math.min(800 / img.width, 1);
         canvas.width = img.width * scaleSize; canvas.height = img.height * scaleSize;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
         selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.6);
         document.getElementById('previewImg').src = selectedImageBase64;
         document.getElementById('previewImg').style.display = "block";
-        
         document.getElementById('step1').style.display = "none";
         document.getElementById('step2').style.display = "block";
         document.getElementById('weatherSelectorDiv').style.display = "block";
-        
         document.getElementById('manualMapArea').style.display = "block";
         initPickerMap();
-        
-        URL.revokeObjectURL(img.src); // メモリ解放
+        URL.revokeObjectURL(img.src); 
       }
       img.src = URL.createObjectURL(file);
     }
@@ -444,26 +459,24 @@
       document.getElementById('step2').style.display = "none";
       document.getElementById('previewImg').style.display = "none";
       document.getElementById('weatherSelectorDiv').style.display = "block";
+      document.getElementById('smartSuggestArea').style.display = "none";
       document.getElementById('galleryInput').value = "";
       document.getElementById('shopNameInput').value = ""; document.getElementById('commentInput').value = "";
       document.getElementById('tagsInput').value = ""; document.getElementById('noLocationCheck').checked = false;
       document.getElementById('status').innerText = "";
-      selectedImageBase64 = null;
-      selectedDatetime = null;
+      selectedImageBase64 = null; selectedDatetime = null;
     }
 
+    // マスター検索
     function searchMasterShop() {
       const q = document.getElementById('shopNameInput').value;
       const list = document.getElementById('autocompleteList');
       selectedMasterShop = null; 
-
       if (q.length < 1) { list.style.display = "none"; return; }
-
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
         fetch(`${CLOUDFLARE_WORKER_URL}?action=search_master&query=${encodeURIComponent(q)}`)
-          .then(res => res.json())
-          .then(data => {
+          .then(res => res.json()).then(data => {
             list.innerHTML = "";
             if (data.success && data.data.length > 0) {
               data.data.forEach(shop => {
@@ -471,10 +484,7 @@
                 li.innerHTML = `<span class="badge-master">公式</span>${escapeHTML(shop.shop_name)}`;
                 li.onclick = () => {
                   document.getElementById('shopNameInput').value = shop.shop_name;
-                  selectedMasterShop = shop; 
-                  list.style.display = "none";
-                  
-                  // 公式店舗を選んだらマップのピンも移動させる
+                  selectedMasterShop = shop; list.style.display = "none";
                   if(pickerMap && pickerMarker && shop.latitude) {
                     pickerMap.setView([shop.latitude, shop.longitude], 16);
                     pickerMarker.setLatLng([shop.latitude, shop.longitude]);
@@ -492,12 +502,14 @@
       }, 300);
     }
 
+    // ピッカーマップ
     function initPickerMap() {
       if (!pickerMap) {
         pickerMap = L.map('pickerMap', { doubleClickZoom: false }).setView([43.0686, 141.3508], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(pickerMap);
         pickerMarker = L.marker([43.0686, 141.3508], { draggable: true }).addTo(pickerMap);
-        pickerMap.on('dblclick', function(e) { pickerMarker.setLatLng(e.latlng); });
+        pickerMap.on('dblclick', function(e) { pickerMarker.setLatLng(e.latlng); checkSmartSuggest(e.latlng.lat, e.latlng.lng); });
+        pickerMarker.on('dragend', function(e) { const pos = pickerMarker.getLatLng(); checkSmartSuggest(pos.lat, pos.lng); });
       }
       setTimeout(() => pickerMap.invalidateSize(), 100);
     }
@@ -510,21 +522,24 @@
       } catch (e) { return null; }
     }
 
+    // 🚀 データ送信
     async function submitDiary() {
-      let rawShopName = document.getElementById('shopNameInput').value;
-      if (!rawShopName) { alert("店名を入力してください！"); return; }
+      let finalShopName = document.getElementById('shopNameInput').value;
+      if (!finalShopName) { alert("店名を入力してください！"); return; }
       
       const eatType = document.querySelector('input[name="eatType"]:checked').value;
-      const finalShopName = eatType === 'eat-in' ? `[店内] ${rawShopName}` : `[持帰] ${rawShopName}`;
+      const shopCategory = document.getElementById('shopCategorySelect').value;
       const weatherIcon = document.querySelector('input[name="weatherType"]:checked').value;
-      const submitBtn = document.getElementById('submitBtn');
-      submitBtn.disabled = true;
+      const submitBtn = document.getElementById('submitBtn'); submitBtn.disabled = true;
+
+      const userTags = document.getElementById('tagsInput').value;
+      const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
 
       const userGender = localStorage.getItem('ezo_gender') || "未設定";
       const userAge = localStorage.getItem('ezo_age') || "未設定";
 
       if (document.getElementById('noLocationCheck').checked) {
-        sendDataToCloudflare(selectedMasterShop ? selectedMasterShop.shop_id : null, finalShopName, null, null, weatherIcon, null, userGender, userAge, submitBtn);
+        sendDataToCloudflare(selectedMasterShop ? selectedMasterShop.shop_id : null, finalShopName, null, null, weatherIcon, null, userGender, userAge, combinedTags, submitBtn);
         return;
       }
 
@@ -532,7 +547,7 @@
         document.getElementById('status').innerText = "📍 公式座標を使用して天気を取得中...";
         let temperature = await fetchTemperature(selectedMasterShop.latitude, selectedMasterShop.longitude);
         document.getElementById('status').innerText = temperature ? `🌡 気温 ${temperature}℃ 取得完了！` : "🌡 気温取得スキップ";
-        sendDataToCloudflare(selectedMasterShop.shop_id, finalShopName, selectedMasterShop.latitude, selectedMasterShop.longitude, weatherIcon, temperature, userGender, userAge, submitBtn);
+        sendDataToCloudflare(selectedMasterShop.shop_id, finalShopName, selectedMasterShop.latitude, selectedMasterShop.longitude, weatherIcon, temperature, userGender, userAge, combinedTags, submitBtn);
         return;
       }
 
@@ -540,25 +555,21 @@
       if (getDistanceFromLatLonInM(pos.lat, pos.lng, HOME_LAT, HOME_LNG) < SAFE_DISTANCE_METERS) {
         alert(`🚨【自宅ガード発動】自宅周辺です。新規店舗の場合は「位置情報を送らない」をお使いください。`); submitBtn.disabled = false; return;
       }
-      sendDataToCloudflare(null, finalShopName, pos.lat, pos.lng, weatherIcon, null, userGender, userAge, submitBtn);
+      sendDataToCloudflare(null, finalShopName, pos.lat, pos.lng, weatherIcon, null, userGender, userAge, combinedTags, submitBtn);
     }
 
-    function sendDataToCloudflare(shopId, shopName, lat, lng, weather, temp, gender, age, btnElement) {
+    function sendDataToCloudflare(shopId, shopName, lat, lng, weather, temp, gender, age, tagsString, btnElement) {
       document.getElementById('status').innerText = "☁️ データを保存中...";
-      const rawTags = document.getElementById('tagsInput').value;
-      
       fetch(CLOUDFLARE_WORKER_URL, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           shopId: shopId, shopName: shopName, comment: document.getElementById('commentInput').value, 
-          latitude: lat, longitude: lng, imageBase64: selectedImageBase64, tags: parseTags(rawTags).join(','),
-          weatherIcon: weather, temperature: temp, userGender: gender, userAge: age,
-          visitedAt: selectedDatetime 
+          latitude: lat, longitude: lng, imageBase64: selectedImageBase64, tags: parseTags(tagsString).join(','),
+          weatherIcon: weather, temperature: temp, userGender: gender, userAge: age, visitedAt: selectedDatetime 
         })
       }).then(res => res.json()).then(data => {
         if (!data.success) throw new Error(data.error);
-        alert("✨ 記録が完了しました！");
-        resetRecordTab(); fetchAndStoreAllDiaries(); btnElement.disabled = false;
+        alert("✨ 記録が完了しました！"); resetRecordTab(); fetchAndStoreAllDiaries(); btnElement.disabled = false;
       }).catch(err => { document.getElementById('status').innerText = `❌ エラー: ${err.message}`; btnElement.disabled = false; });
     }
 
@@ -568,71 +579,46 @@
       return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
     }
 
+    // 履歴取得＆自動コンバート
     function fetchAndStoreAllDiaries() {
       fetch(`${CLOUDFLARE_WORKER_URL}?query=`).then(res => res.json()).then(data => {
         if (data.success) {
-          // ★ 過去の古いデータを新システムへ自動コンバートする処理
           globalDiaries = data.data.map(diary => {
-            let name = diary.shop_name || "";
-            let currentTags = parseTags(diary.tags);
-
-            // 店名に [店内] が含まれていたら削り、タグに変換
-            if (name.includes('[店内]')) {
-              name = name.replace('[店内]', '').trim();
-              if (!currentTags.includes('☕️店内')) currentTags.unshift('☕️店内');
-            }
-            // 店名に [持帰] が含まれていたら削り、タグに変換
-            if (name.includes('[持帰]')) {
-              name = name.replace('[持帰]', '').trim();
-              if (!currentTags.includes('🥡テイクアウト')) currentTags.unshift('🥡テイクアウト');
-            }
-
-            // 過去データに業種タイプが無ければ、デフォルトで「喫茶・カフェ」を滑り込ませる
+            let name = diary.shop_name || ""; let currentTags = parseTags(diary.tags);
+            if (name.includes('[店内]')) { name = name.replace('[店内]', '').trim(); if (!currentTags.includes('☕️店内')) currentTags.unshift('☕️店内'); }
+            if (name.includes('[持帰]')) { name = name.replace('[持帰]', '').trim(); if (!currentTags.includes('🥡テイクアウト')) currentTags.unshift('🥡テイクアウト'); }
+            
             const hasCategory = currentTags.some(t => t.includes('🏢') || t.includes('🔥') || t.includes('🎪') || t.includes('🍸') || t.includes('🍰') || t.includes('🍵'));
-            if (!hasCategory && !currentTags.includes('💭')) {
-              currentTags.splice(1, 0, '🏢喫茶・カフェ'); // 2番目に挿入
-            }
+            if (!hasCategory && !currentTags.includes('💭')) currentTags.splice(1, 0, '🏢喫茶・カフェ'); 
 
-            diary.shop_name = name;
-            diary.tags = currentTags.join(', ');
+            diary.shop_name = name; diary.tags = currentTags.join(', ');
             return diary;
           });
-
           applyFilters();
         }
       });
     }
 
+    // フィルタ・リスト・マップ描画
     function applyFilters() {
-      const searchInputEl = document.getElementById('searchInput');
-      const query = searchInputEl ? searchInputEl.value.toLowerCase() : "";
-      
+      const query = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase() : "";
       const filtered = globalDiaries.filter(diary => {
         const safeShopName = diary.shop_name || ""; 
         const matchSearch = safeShopName.toLowerCase().includes(query) || (diary.comment && diary.comment.toLowerCase().includes(query));
         const matchTag = activeTagFilter === "" ? true : (diary.tags && diary.tags.includes(activeTagFilter));
         return matchSearch && matchTag;
       });
-
-      renderTagClouds();
-      renderDiariesList(filtered);
-      updateViewMarkers(filtered);
+      renderTagClouds(); renderDiariesList(filtered); updateViewMarkers(filtered);
     }
 
-    window.toggleTagFilter = function(tag) {
-      activeTagFilter = (activeTagFilter === tag) ? "" : tag;
-      applyFilters();
-    };
+    window.toggleTagFilter = function(tag) { activeTagFilter = (activeTagFilter === tag) ? "" : tag; applyFilters(); };
 
     function renderTagClouds() {
-      const allTags = new Set();
-      globalDiaries.forEach(d => { parseTags(d.tags).forEach(t => allTags.add(t)); });
+      const allTags = new Set(); globalDiaries.forEach(d => { parseTags(d.tags).forEach(t => allTags.add(t)); });
       let html = "";
       if (allTags.size > 0) {
         html += `<span class="tag-btn ${activeTagFilter === '' ? 'active' : ''}" onclick="toggleTagFilter('')">すべて</span>`;
-        allTags.forEach(tag => {
-          html += `<span class="tag-btn ${activeTagFilter === tag ? 'active' : ''}" onclick="toggleTagFilter('${escapeHTML(tag)}')">${escapeHTML(tag)}</span>`;
-        });
+        allTags.forEach(tag => { html += `<span class="tag-btn ${activeTagFilter === tag ? 'active' : ''}" onclick="toggleTagFilter('${escapeHTML(tag)}')">${escapeHTML(tag)}</span>`; });
       }
       if(document.getElementById('tagCloudView')) document.getElementById('tagCloudView').innerHTML = html;
       if(document.getElementById('tagCloudMap')) document.getElementById('tagCloudMap').innerHTML = html;
@@ -647,20 +633,14 @@
       diaries.forEach((diary) => {
         let tagsHTML = "";
         parseTags(diary.tags).forEach(tag => { tagsHTML += `<span class="tag-badge" style="background-color: ${getColorFromTag(tag)};">${escapeHTML(tag)}</span>`; });
-
         const isBookmark = diary.weather_icon === "💭";
         const cardBg = isBookmark ? "background: #fdf2e9; border: 2px dashed #e67e22;" : "background: white;";
-
         let tempStr = diary.temperature ? `${diary.temperature}℃` : '';
         let weatherStr = (!isBookmark && diary.weather_icon && diary.weather_icon !== "❓") ? `${diary.weather_icon} ${tempStr}` : '';
-        
         const safeDiary = encodeURIComponent(JSON.stringify(diary));
 
-        // ★ Googleマップ連携ボタンを追加
         let mapLinkBtn = "";
-        if (diary.latitude && diary.longitude) {
-          mapLinkBtn = `<a href="https://www.google.com/maps/dir/?api=1&destination=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none; margin-right:5px;">🗺️ 行き方</a>`;
-        }
+        if (diary.latitude && diary.longitude) mapLinkBtn = `<a href="https://www.google.com/maps/dir/?api=1&destination=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none; margin-right:5px;">🗺️ 行き方</a>`;
 
         html += `
           <div class="card" style="${cardBg}">
@@ -671,52 +651,36 @@
               <button class="action-btn" onclick="deleteDiary(${diary.id})" style="background:none;">🗑️</button>
             </div>
             <div class="card-title">${isBookmark ? '💭 ' : ''}${escapeHTML(diary.shop_name)}</div>
-            <div class="card-meta">🕒 ${diary.created_at} &nbsp; ${weatherStr}</div>
+            <div class="card-meta">🕒 ${diary.created_at}   ${weatherStr}</div>
             <div style="margin-bottom:10px;">${tagsHTML}</div>
             ${diary.image_base64 ? `<img src="${diary.image_base64}">` : ''}
             <div class="card-comment">${escapeHTML(diary.comment || "")}</div>
-          </div>
-        `;
+          </div>`;
       });
       listDiv.innerHTML = html;
     }
 
     window.deleteDiary = function(id) {
       if (!confirm("削除しますか？")) return;
-      fetch(`${CLOUDFLARE_WORKER_URL}?id=${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => {
-        if (data.success) { fetchAndStoreAllDiaries(); }
-      });
+      fetch(`${CLOUDFLARE_WORKER_URL}?id=${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => { if (data.success) fetchAndStoreAllDiaries(); });
     };
 
+    // 編集モーダル制御
     window.openEditModal = function(safeDiary) {
       const diary = JSON.parse(decodeURIComponent(safeDiary));
-      document.getElementById('editId').value = diary.id;
-      document.getElementById('editShopName').value = diary.shop_name;
-      document.getElementById('editComment').value = diary.comment || "";
+      document.getElementById('editId').value = diary.id; document.getElementById('editShopName').value = diary.shop_name; document.getElementById('editComment').value = diary.comment || "";
       
       const currentTags = parseTags(diary.tags);
-      
-      // 1. 利用タイプの復元
-      const eatTypes = ['☕️店内', '🥡テイクアウト', '🛍️豆・グッズ購入'];
-      let foundEatType = '☕️店内';
-      eatTypes.forEach(t => {
-        if (currentTags.includes(t)) foundEatType = t;
-      });
+      const eatTypes = ['☕️店内', '🥡テイクアウト', '🛍️豆・グッズ購入']; let foundEatType = '☕️店内';
+      eatTypes.forEach(t => { if (currentTags.includes(t)) foundEatType = t; });
       document.querySelector(`input[name="editEatType"][value="${foundEatType}"]`).checked = true;
 
-      // 2. 業種タイプの復元
-      const categories = ['🏢喫茶・カフェ', '🔥ロースター', '🎪無店舗・間借り', '🍸カフェバー', '🍰お菓子屋の喫茶室', '🍵和風喫茶'];
-      let foundCategory = '🏢喫茶・カフェ';
-      categories.forEach(c => {
-        if (currentTags.includes(c)) foundCategory = c;
-      });
+      const categories = ['🏢喫茶・カフェ', '🔥ロースター', '🎪無店舗・間借り', '🍸カフェバー', '🍰お菓子屋の喫茶室', '🍵和風喫茶']; let foundCategory = '🏢喫茶・カフェ';
+      categories.forEach(c => { if (currentTags.includes(c)) foundCategory = c; });
       document.getElementById('editShopCategorySelect').value = foundCategory;
 
-      // 3. ユーザーの手入力タグだけをテキストボックスに戻す
-      const filteredTags = currentTags.filter(t => !eatTypes.includes(t) && !categories.includes(t));
-      document.getElementById('editTags').value = filteredTags.join(', ');
+      document.getElementById('editTags').value = currentTags.filter(t => !eatTypes.includes(t) && !categories.includes(t)).join(', ');
 
-      // 4. 天気の復元
       const wRadios = document.getElementsByName('editWeather');
       for(let r of wRadios) { if(r.value === diary.weather_icon) r.checked = true; }
 
@@ -724,31 +688,22 @@
     };
 
     window.saveEditDiary = function() {
-      const id = document.getElementById('editId').value;
-      const shopName = document.getElementById('editShopName').value;
-      const weather = document.querySelector('input[name="editWeather"]:checked').value;
-      
       const eatType = document.querySelector('input[name="editEatType"]:checked').value;
       const shopCategory = document.getElementById('editShopCategorySelect').value;
       const userTags = document.getElementById('editTags').value;
-      
-      // システムタグとユーザー入力タグを再合体
       const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
 
       fetch(CLOUDFLARE_WORKER_URL, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          id: id, 
-          shopName: shopName, 
-          tags: parseTags(combinedTags).join(', '), 
-          comment: document.getElementById('editComment').value, 
-          weatherIcon: weather 
+          id: document.getElementById('editId').value, shopName: document.getElementById('editShopName').value, 
+          tags: parseTags(combinedTags).join(', '), comment: document.getElementById('editComment').value, 
+          weatherIcon: document.querySelector('input[name="editWeather"]:checked').value 
         })
-      }).then(res => res.json()).then(data => {
-        if(data.success) { document.getElementById('editModal').style.display = "none"; fetchAndStoreAllDiaries(); }
-      });
+      }).then(res => res.json()).then(data => { if(data.success) { document.getElementById('editModal').style.display = "none"; fetchAndStoreAllDiaries(); } });
     };
-    
+
+    // 🗺️ 全体マップ描画
     function initViewMap() {
       if (!viewMap) { 
         viewMap = L.map('mapView').setView([43.064, 141.35], 13);
@@ -761,107 +716,55 @@
       if (!viewMap) return;
       viewMap.eachLayer((layer) => { if (layer instanceof L.Marker) viewMap.removeLayer(layer); });
       
-      const bounds = L.latLngBounds();
-      const uniqueShops = {};
+      const bounds = L.latLngBounds(); const uniqueShops = {};
       
       filteredDiaries.forEach(diary => {
         if (diary.latitude && diary.longitude) {
-          const s = diary.shop_name;
-          const isBookmark = diary.weather_icon === "💭";
-
+          const s = diary.shop_name; const isBookmark = diary.weather_icon === "💭";
           if (!uniqueShops[s]) {
-            uniqueShops[s] = { 
-              lat: diary.latitude, lng: diary.longitude, 
-              isTakeout: s.includes('[持帰]'), shopName: s, 
-              mainTag: parseTags(diary.tags)[0]||"",
-              visitCount: isBookmark ? 0 : 1, 
-              isBookmarkOnly: isBookmark
-            };
+            uniqueShops[s] = { lat: diary.latitude, lng: diary.longitude, isTakeout: diary.tags && diary.tags.includes('🥡テイクアウト'), shopName: s, mainTag: parseTags(diary.tags)[2]||"", visitCount: isBookmark ? 0 : 1, isBookmarkOnly: isBookmark };
           } else {
-            if (!isBookmark) {
-              uniqueShops[s].visitCount++;
-              uniqueShops[s].isBookmarkOnly = false; 
-            }
+            if (!isBookmark) { uniqueShops[s].visitCount++; uniqueShops[s].isBookmarkOnly = false; }
           }
         }
       });
 
       Object.values(uniqueShops).forEach(shop => {
         const emoji = shop.isBookmarkOnly ? '💭' : (shop.isTakeout ? '🥡' : '☕️');
-        const badgeHtml = shop.visitCount > 0 
-          ? `<div style="position:absolute; bottom:-5px; right:-5px; background:#e74c3c; color:white; border-radius:50%; width:18px; height:18px; font-size:11px; font-weight:bold; line-height:18px; text-align:center;">${shop.visitCount}</div>` 
-          : '';
-
-        const customIcon = L.divIcon({ 
-          html: `<div class="emoji-pin" style="background-color: ${getColorFromTag(shop.mainTag)}; position:relative;">${emoji}${badgeHtml}</div>`, 
-          className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] 
-        });
-        
-        L.marker([shop.lat, shop.lng], {icon: customIcon}).addTo(viewMap)
-         .bindTooltip(escapeHTML(shop.shopName), { permanent: true, direction: 'right', className: 'map-label', offset: [15, 0] });
+        const badgeHtml = shop.visitCount > 0 ? `<div style="position:absolute; bottom:-5px; right:-5px; background:#e74c3c; color:white; border-radius:50%; width:18px; height:18px; font-size:11px; font-weight:bold; line-height:18px; text-align:center;">${shop.visitCount}</div>` : '';
+        const customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: ${getColorFromTag(shop.mainTag)}; position:relative;">${emoji}${badgeHtml}</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
+        L.marker([shop.lat, shop.lng], {icon: customIcon}).addTo(viewMap).bindTooltip(escapeHTML(shop.shopName), { permanent: true, direction: 'right', className: 'map-label', offset: [15, 0] });
         bounds.extend([shop.lat, shop.lng]);
       });
-      
       if (Object.keys(uniqueShops).length > 0) viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     }
 
+    // 📊 アナリティクス
     function renderAnalytics() {
       if (!globalDiaries || globalDiaries.length === 0) return;
-
-      // ★ ブックマーク（💭）を除外して集計
       const actualVisits = globalDiaries.filter(d => d.weather_icon !== "💭");
 
       document.getElementById('statTotal').innerText = actualVisits.length;
-      const uniqueShops = new Set(actualVisits.map(d => d.shop_name || ""));
-      document.getElementById('statUnique').innerText = uniqueShops.size;
+      document.getElementById('statUnique').innerText = new Set(actualVisits.map(d => d.shop_name || "")).size;
 
-      let eatin = 0, takeout = 0;
-      let weatherCounts = { '☀️':0, '☁️':0, '☔️':0, '❄️':0 };
-      let timeCounts = { '朝(5-11)':0, '昼(11-15)':0, '夕(15-18)':0, '夜(18-5)':0 };
-
+      let eatin = 0, takeout = 0; let weatherCounts = { '☀️':0, '☁️':0, '☔️':0, '❄️':0 }; let timeCounts = { '朝(5-11)':0, '昼(11-15)':0, '夕(15-18)':0, '夜(18-5)':0 };
       actualVisits.forEach(d => {
-        const safeShopName = d.shop_name || ""; 
-        if(safeShopName.includes('[店内]')) eatin++;
-        if(safeShopName.includes('[持帰]')) takeout++;
-
+        if(d.tags && d.tags.includes('☕️店内')) eatin++;
+        if(d.tags && d.tags.includes('🥡テイクアウト')) takeout++;
         if(d.weather_icon && weatherCounts[d.weather_icon] !== undefined) weatherCounts[d.weather_icon]++;
-
         if(d.created_at) {
           const hour = parseInt(d.created_at.substring(11, 13));
-          if(hour >= 5 && hour < 11) timeCounts['朝(5-11)']++;
-          else if(hour >= 11 && hour < 15) timeCounts['昼(11-15)']++;
-          else if(hour >= 15 && hour < 18) timeCounts['夕(15-18)']++;
-          else timeCounts['夜(18-5)']++;
+          if(hour >= 5 && hour < 11) timeCounts['朝(5-11)']++; else if(hour >= 11 && hour < 15) timeCounts['昼(11-15)']++; else if(hour >= 15 && hour < 18) timeCounts['夕(15-18)']++; else timeCounts['夜(18-5)']++;
         }
       });
 
-      if(charts.eatType) charts.eatType.destroy();
-      if(charts.weather) charts.weather.destroy();
-      if(charts.time) charts.time.destroy();
+      if(charts.eatType) charts.eatType.destroy(); if(charts.weather) charts.weather.destroy(); if(charts.time) charts.time.destroy();
 
-      const ctxEat = document.getElementById('chartEatType').getContext('2d');
-      charts.eatType = new Chart(ctxEat, {
-        type: 'doughnut',
-        data: { labels: ['☕️ 店内', '🥡 テイクアウト'], datasets: [{ data: [eatin, takeout], backgroundColor: ['#3498db', '#e67e22'] }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-      });
-
-      const ctxWeather = document.getElementById('chartWeather').getContext('2d');
-      charts.weather = new Chart(ctxWeather, {
-        type: 'bar',
-        data: { labels: ['☀️ 晴れ', '☁️ 曇り', '☔️ 雨', '❄️ 雪'], datasets: [{ label: '記録数', data: [weatherCounts['☀️'], weatherCounts['☁️'], weatherCounts['☔️'], weatherCounts['❄️']], backgroundColor: ['#f1c40f', '#95a5a6', '#3498db', '#ecf0f1'], borderColor: '#bdc3c7', borderWidth: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-      });
-
-      const ctxTime = document.getElementById('chartTime').getContext('2d');
-      charts.time = new Chart(ctxTime, {
-        type: 'line',
-        data: { labels: Object.keys(timeCounts), datasets: [{ label: '訪問回数', data: Object.values(timeCounts), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, tension: 0.4 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-      });
+      charts.eatType = new Chart(document.getElementById('chartEatType').getContext('2d'), { type: 'doughnut', data: { labels: ['☕️ 店内', '🥡 テイクアウト'], datasets: [{ data: [eatin, takeout], backgroundColor: ['#3498db', '#e67e22'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
+      charts.weather = new Chart(document.getElementById('chartWeather').getContext('2d'), { type: 'bar', data: { labels: ['☀️ 晴れ', '☁️ 曇り', '☔️ 雨', '❄️ 雪'], datasets: [{ label: '記録数', data: [weatherCounts['☀️'], weatherCounts['☁️'], weatherCounts['☔️'], weatherCounts['❄️']], backgroundColor: ['#f1c40f', '#95a5a6', '#3498db', '#ecf0f1'], borderColor: '#bdc3c7', borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
+      charts.time = new Chart(document.getElementById('chartTime').getContext('2d'), { type: 'line', data: { labels: Object.keys(timeCounts), datasets: [{ label: '訪問回数', data: Object.values(timeCounts), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
     }
-
-    function escapeHTML(str) { return str ? str.replace(/[&<>'"]/g, tag => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[tag])) : ""; }
+    function escapeHTML(str) { return str ? str.replace(/[&<>'"]/g, tag => ({'&': '&', '<': '<', '>': '>', "'": ''', '"': '"'}[tag])) : ""; }
   </script>
 </body>
 </html>
