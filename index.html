@@ -553,7 +553,36 @@
 
     function fetchAndStoreAllDiaries() {
       fetch(`${CLOUDFLARE_WORKER_URL}?query=`).then(res => res.json()).then(data => {
-        if (data.success) { globalDiaries = data.data; applyFilters(); }
+        if (data.success) {
+          // ★ 過去の古いデータを新システムへ自動コンバートする処理
+          globalDiaries = data.data.map(diary => {
+            let name = diary.shop_name || "";
+            let currentTags = parseTags(diary.tags);
+
+            // 店名に [店内] が含まれていたら削り、タグに変換
+            if (name.includes('[店内]')) {
+              name = name.replace('[店内]', '').trim();
+              if (!currentTags.includes('☕️店内')) currentTags.unshift('☕️店内');
+            }
+            // 店名に [持帰] が含まれていたら削り、タグに変換
+            if (name.includes('[持帰]')) {
+              name = name.replace('[持帰]', '').trim();
+              if (!currentTags.includes('🥡テイクアウト')) currentTags.unshift('🥡テイクアウト');
+            }
+
+            // 過去データに業種タイプが無ければ、デフォルトで「喫茶・カフェ」を滑り込ませる
+            const hasCategory = currentTags.some(t => t.includes('🏢') || t.includes('🔥') || t.includes('🎪') || t.includes('🍸') || t.includes('🍰') || t.includes('🍵'));
+            if (!hasCategory && !currentTags.includes('💭')) {
+              currentTags.splice(1, 0, '🏢喫茶・カフェ'); // 2番目に挿入
+            }
+
+            diary.shop_name = name;
+            diary.tags = currentTags.join(', ');
+            return diary;
+          });
+
+          applyFilters();
+        }
       });
     }
 
