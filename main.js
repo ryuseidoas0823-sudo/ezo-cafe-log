@@ -598,14 +598,21 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
 function renderAnalytics() {
   if (!globalDiaries || globalDiaries.length === 0) return;
   const actualVisits = globalDiaries.filter(d => d.weather_icon !== "💭" && d.weather_icon !== "📦");
+  const bookmarks = globalDiaries.filter(d => d.weather_icon === "💭");
 
   document.getElementById('statTotal').innerText = actualVisits.length;
   document.getElementById('statUnique').innerText = new Set(actualVisits.map(d => d.shop_name || "")).size;
 
-  let eatin = 0, takeout = 0; let weatherCounts = { '☀️':0, '☁️':0, '☔️':0, '❄️':0 }; let timeCounts = { '朝(5-11)':0, '昼(11-15)':0, '夕(15-18)':0, '夜(18-5)':0 };
+  let eatin = 0, takeout = 0, sweetsCount = 0, roasterCount = 0; 
+  let weatherCounts = { '☀️':0, '☁️':0, '☔️':0, '❄️':0 }; 
+  let timeCounts = { '朝(5-11)':0, '昼(11-15)':0, '夕(15-18)':0, '夜(18-5)':0 };
+  
   actualVisits.forEach(d => {
     if(d.tags && d.tags.includes('☕️店内')) eatin++;
     if(d.tags && d.tags.includes('🥡テイクアウト')) takeout++;
+    if(d.tags && d.tags.includes('🍰お菓子屋の喫茶室')) sweetsCount++;
+    if(d.tags && d.tags.includes('🔥ロースター')) roasterCount++;
+    
     if(d.weather_icon && weatherCounts[d.weather_icon] !== undefined) weatherCounts[d.weather_icon]++;
     if(d.created_at) {
       const hour = parseInt(d.created_at.substring(11, 13));
@@ -613,6 +620,29 @@ function renderAnalytics() {
     }
   });
 
+  // 🏆 称号バッジのマスターデータと獲得条件
+  const badges = [
+    { id: 'first_step', icon: '🔰', name: '初めの一歩', condition: actualVisits.length >= 1, color: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' },
+    { id: 'traveler', icon: '🥉', name: 'トラベラー', condition: actualVisits.length >= 10, color: 'linear-gradient(135deg, #d4a373 0%, #faedcd 100%)' },
+    { id: 'eatin_master', icon: '☕️', name: '店内マスター', condition: eatin >= 5, color: 'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)' },
+    { id: 'takeout_pro', icon: '🥡', name: '持帰りの達人', condition: takeout >= 5, color: 'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)' },
+    { id: 'sweets_hunter', icon: '🍰', name: '甘党ハンター', condition: sweetsCount >= 3, color: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%)' },
+    { id: 'roaster_mania', icon: '🔥', name: '焙煎マニア', condition: roasterCount >= 3, color: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)' },
+    { id: 'bookmark_craft', icon: '💭', name: '行きたい職人', condition: bookmarks.length >= 5, color: 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)' }
+  ];
+
+  // バッジHTMLの生成
+  let badgeHtml = '';
+  badges.forEach(b => {
+    if (b.condition) {
+      badgeHtml += `<div class="badge-item" style="background: ${b.color};" title="${b.name}"><div class="badge-icon">${b.icon}</div><div class="badge-title">${b.name}</div></div>`;
+    } else {
+      badgeHtml += `<div class="badge-item badge-locked" title="未獲得"><div class="badge-icon">🔒</div><div class="badge-title">???</div></div>`;
+    }
+  });
+  document.getElementById('badgeContainer').innerHTML = badgeHtml;
+
+  // グラフの描画（既存の処理）
   if(charts.eatType) charts.eatType.destroy(); if(charts.weather) charts.weather.destroy(); if(charts.time) charts.time.destroy();
 
   charts.eatType = new Chart(document.getElementById('chartEatType').getContext('2d'), { type: 'doughnut', data: { labels: ['☕️ 店内', '🥡 テイクアウト'], datasets: [{ data: [eatin, takeout], backgroundColor: ['#3498db', '#e67e22'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });

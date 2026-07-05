@@ -59,3 +59,30 @@ button { width: 100%; padding: 15px; background-color: #e74c3c; color: white; bo
 .stat-label { font-size: 0.8rem; color: #7f8c8d; }
 .chart-container { position: relative; width: 100%; }
 .hide-pins-btn { position: absolute; top: 10px; right: 10px; z-index: 1000; padding: 8px 12px; background: rgba(255,255,255,0.9); border: 2px solid #ccc; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); font-weight: bold; font-size: 0.85rem; color: #333; cursor: pointer; }
+/* 🏆 バッジ機能用スタイル */
+.badge-item {
+  border-radius: 50%;
+  width: 75px;
+  height: 75px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  text-align: center;
+  transition: transform 0.2s;
+  cursor: pointer;
+}
+.badge-item:hover { transform: scale(1.1); }
+.badge-icon { font-size: 1.8rem; line-height: 1; margin-bottom: 3px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2)); }
+.badge-title { font-size: 0.6rem; font-weight: bold; line-height: 1.1; padding: 0 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+
+.badge-locked {
+  background: #ecf0f1 !important;
+  color: #bdc3c7;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+  border: 2px dashed #bdc3c7;
+}
+.badge-locked .badge-icon { filter: none; opacity: 0.5; }
+.badge-locked .badge-title { text-shadow: none; }
