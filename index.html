@@ -639,8 +639,11 @@
         let weatherStr = (!isBookmark && diary.weather_icon && diary.weather_icon !== "❓") ? `${diary.weather_icon} ${tempStr}` : '';
         const safeDiary = encodeURIComponent(JSON.stringify(diary));
 
+        // ★ Googleマップ公式のルート案内URLに修正
         let mapLinkBtn = "";
-        if (diary.latitude && diary.longitude) mapLinkBtn = `<a href="https://www.google.com/maps/dir/?api=1&destination=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none; margin-right:5px;">🗺️ 行き方</a>`;
+        if (diary.latitude && diary.longitude) {
+          mapLinkBtn = `<a href="https://www.google.com/maps/search/?api=1&query=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none; margin-right:5px;">🗺️ 行き方</a>`;
+        }
 
         html += `
           <div class="card" style="${cardBg}">
@@ -764,7 +767,15 @@
       charts.weather = new Chart(document.getElementById('chartWeather').getContext('2d'), { type: 'bar', data: { labels: ['☀️ 晴れ', '☁️ 曇り', '☔️ 雨', '❄️ 雪'], datasets: [{ label: '記録数', data: [weatherCounts['☀️'], weatherCounts['☁️'], weatherCounts['☔️'], weatherCounts['❄️']], backgroundColor: ['#f1c40f', '#95a5a6', '#3498db', '#ecf0f1'], borderColor: '#bdc3c7', borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
       charts.time = new Chart(document.getElementById('chartTime').getContext('2d'), { type: 'line', data: { labels: Object.keys(timeCounts), datasets: [{ label: '訪問回数', data: Object.values(timeCounts), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
     }
-    function escapeHTML(str) { return str ? str.replace(/[&<>'"]/g, tag => ({'&': '&', '<': '<', '>': '>', "'": ''', '"': '"'}[tag])) : ""; }
+    function escapeHTML(str) { 
+      return str ? str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', 
+        '<': '&lt;', 
+        '>': '&gt;', 
+        "'": '&#39;', 
+        '"': '&quot;'
+      }[tag])) : ""; 
+    }
   </script>
 </body>
 </html>
