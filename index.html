@@ -111,10 +111,23 @@
       <div id="step2" style="display: none;">
         <img id="previewImg" src="">
         
+        <!-- 利用タイプの選択 -->
         <div class="type-selector">
-          <label><input type="radio" name="eatType" value="eat-in" checked>☕️ 店内</label>
-          <label><input type="radio" name="eatType" value="takeout">🥡 テイクアウト</label>
+          <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
+          <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイクアウト</label>
+          <label><input type="radio" name="eatType" value="🛍️豆・グッズ購入">🛍️ 豆・グッズ</label>
         </div>
+
+        <!-- ★追加：業種タイプの選択 -->
+        <p style="margin: 0 0 5px 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">お店のタイプは？</p>
+        <select id="shopCategorySelect" style="margin-bottom: 15px; padding: 10px; font-weight: bold; color: #2c3e50;">
+          <option value="🏢喫茶・カフェ">🏢 喫茶・カフェ (自家焙煎含む)</option>
+          <option value="🔥ロースター">🔥 ロースター (豆売りメイン)</option>
+          <option value="🎪無店舗・間借り">🎪 無店舗ロースター・間借り喫茶</option>
+          <option value="🍸カフェバー">🍸 カフェバー</option>
+          <option value="🍰お菓子屋の喫茶室">🍰 お菓子屋 (喫茶室)</option>
+          <option value="🍵和風喫茶">🍵 和風喫茶 (お茶系)</option>
+        </select>
 
         <div id="weatherSelectorDiv">
           <p style="margin: 0 0 5px 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">空模様は？</p>
