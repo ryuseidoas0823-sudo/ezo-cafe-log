@@ -93,11 +93,19 @@
     <div id="record" class="content active">
       <div id="step1">
         <h3 style="text-align: center; color: #2c3e50;">どうやって記録しますか？</h3>
-        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" onchange="handleImageSelect(event, 'gps')">
-        <button class="btn-camera" onclick="checkSettingsAndClick('cameraInput')">📸 写真を撮って位置を記録<br><span style="font-size: 0.8rem; font-weight: normal;">(今いる場所 / 天気・気温自動取得)</span></button>
         
+        <!-- ① 写真付きで記録 -->
         <input type="file" id="galleryInput" accept="image/*" style="display: none;" onchange="handleImageSelect(event, 'manual')">
-        <button class="btn-gallery" onclick="checkSettingsAndClick('galleryInput')">🖼️ 写真を選んで位置を記録<br><span style="font-size: 0.8rem; font-weight: normal;">(過去の写真 / 天気は手動選択)</span></button>
+        <button class="btn-gallery" onclick="checkSettingsAndClick('galleryInput')">
+          🖼️ 写真付きで記録<br>
+          <span style="font-size: 0.8rem; font-weight: normal;">(スマホのアルバムから選ぶ)</span>
+        </button>
+
+        <!-- ② 写真無しで記録（新設） -->
+        <button class="btn-camera" onclick="startNoPhotoRecord()" style="background-color: #3498db;">
+          📝 写真無しで記録<br>
+          <span style="font-size: 0.8rem; font-weight: normal;">(撮影禁止のお店やテイクアウトなど)</span>
+        </button>
       </div>
 
       <div id="step2" style="display: none;">
@@ -375,6 +383,74 @@
       reader.readAsDataURL(file);
     }
 
+    function startNoPhotoRecord() {
+      // 1. アナリティクス設定の確認
+      if (!localStorage.getItem('ezo_gender') || !localStorage.getItem('ezo_age')) {
+        alert("📊 アナリティクス機能を利用するため、先に「設定」タブで性別と年代を登録してください。");
+        switchTab('settings');
+        return;
+      }
+      
+      // 2. 記録モードの初期化
+      currentRecordMode = 'manual'; 
+      selectedDatetime = null;
+      selectedImageBase64 = null;
+
+      // 3. 画面の切り替え
+      document.getElementById('previewImg').style.display = "none"; // 写真プレビューは隠す
+      document.getElementById('step1').style.display = "none";
+      document.getElementById('step2').style.display = "block";
+      
+      // 4. マップを表示し、天気を不明にセット
+      document.getElementById('manualMapArea').style.display = "block";
+      initPickerMap();
+      document.querySelector('input[name="weatherType"][value="❓"]').checked = true;
+    }function startNoPhotoRecord() {
+      // 1. アナリティクス設定の確認
+      if (!localStorage.getItem('ezo_gender') || !localStorage.getItem('ezo_age')) {
+        alert("📊 アナリティクス機能を利用するため、先に「設定」タブで性別と年代を登録してください。");
+        switchTab('settings');
+        return;
+      }
+      
+      // 2. 記録モードの初期化
+      currentRecordMode = 'manual'; 
+      selectedDatetime = null;
+      selectedImageBase64 = null;
+
+      // 3. 画面の切り替え
+      document.getElementById('previewImg').style.display = "none"; // 写真プレビューは隠す
+      document.getElementById('step1').style.display = "none";
+      document.getElementById('step2').style.display = "block";
+      
+      // 4. マップを表示し、天気を不明にセット
+      document.getElementById('manualMapArea').style.display = "block";
+      initPickerMap();
+      document.querySelector('input[name="weatherType"][value="❓"]').checked = true;
+    }function startNoPhotoRecord() {
+      // 1. アナリティクス設定の確認
+      if (!localStorage.getItem('ezo_gender') || !localStorage.getItem('ezo_age')) {
+        alert("📊 アナリティクス機能を利用するため、先に「設定」タブで性別と年代を登録してください。");
+        switchTab('settings');
+        return;
+      }
+      
+      // 2. 記録モードの初期化
+      currentRecordMode = 'manual'; 
+      selectedDatetime = null;
+      selectedImageBase64 = null;
+
+      // 3. 画面の切り替え
+      document.getElementById('previewImg').style.display = "none"; // 写真プレビューは隠す
+      document.getElementById('step1').style.display = "none";
+      document.getElementById('step2').style.display = "block";
+      
+      // 4. マップを表示し、天気を不明にセット
+      document.getElementById('manualMapArea').style.display = "block";
+      initPickerMap();
+      document.querySelector('input[name="weatherType"][value="❓"]').checked = true;
+    }
+    
     // ★ 飲み込まれていた関数を分離・修正
     function resetRecordTab() {
       document.getElementById('step1').style.display = "block";
