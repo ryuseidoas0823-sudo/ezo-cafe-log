@@ -14,11 +14,26 @@ export default {
     if (request.method === "POST") {
       try {
         const json = await request.json();
-        // 🌟 shopId を追加で受け取る
-        const { shopId, shopName, comment, latitude, longitude, imageBase64, tags, weatherIcon, temperature, userGender, userAge, visitedAt } = json;
+        
+        // 🌟 修正ポイント1: constではなく、後でIDを書き換えられるように let で受け取る
+        let { shopId, shopName, comment, latitude, longitude, imageBase64, tags, weatherIcon, temperature, userGender, userAge, visitedAt } = json;
+        
         const nowJst = new Date(Date.now() + (9 * 60 * 60 * 1000)).toISOString().replace('T', ' ').substring(0, 19);
         const finalCreatedAt = visitedAt ? visitedAt : nowJst;
 
+        // 🌟 修正ポイント2: 新規店舗（shopIdが空っぽ）の場合、先にマスタへ登録する
+        if (!shopId) {
+          // INSERTすると同時に、新しく発行された shop_id を取得 (RETURNING句)
+          const newShop = await env.DB.prepare(
+            "INSERT INTO shops_master (shop_name, latitude, longitude) VALUES (?, ?, ?) RETURNING shop_id"
+          ).bind(shopName, latitude, longitude).first();
+          
+          if (newShop && newShop.shop_id) {
+            shopId = newShop.shop_id; // 発行された新しいIDをセットしてあげる
+          }
+        }
+
+        // あとは通常通り日記を保存
         await env.DB.prepare(
           `INSERT INTO diaries 
           (shop_id, shop_name, comment, latitude, longitude, image_base64, created_at, tags, weather_icon, temperature, user_gender, user_age) 
@@ -74,7 +89,6 @@ export default {
         const action = url.searchParams.get("action");
         const query = url.searchParams.get("query") || "";
 
-        // 🌟 新機能: マスタ検索アクション
         if (action === "search_master") {
           const result = await env.DB.prepare(
             "SELECT * FROM shops_master WHERE shop_name LIKE ? LIMIT 10"
@@ -82,7 +96,6 @@ export default {
           return new Response(JSON.stringify({ success: true, data: result.results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // 従来の日記取得アクション
         let result;
         if (query === "") {
           result = await env.DB.prepare("SELECT * FROM diaries ORDER BY created_at DESC").all();
