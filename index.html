@@ -232,15 +232,32 @@
     <div class="modal-content">
       <h3>✏️ 記録の編集</h3>
       <input type="hidden" id="editId">
-      <input type="text" id="editShopName">
+      <input type="text" id="editShopName" placeholder="店名">
+      
+      <div class="type-selector" style="margin-bottom: 15px;">
+        <label><input type="radio" name="editEatType" value="☕️店内">☕️ 店内</label>
+        <label><input type="radio" name="editEatType" value="🥡テイクアウト">🥡 テイクアウト</label>
+        <label><input type="radio" name="editEatType" value="🛍️豆・グッズ購入">🛍️ 豆・グッズ</label>
+      </div>
+
+      <select id="editShopCategorySelect" style="margin-bottom: 15px; padding: 10px; font-weight: bold; color: #2c3e50; width:100%;">
+        <option value="🏢喫茶・カフェ">🏢 喫茶・カフェ (自家焙煎含む)</option>
+        <option value="🔥ロースター">🔥 ロースター (豆売りメイン)</option>
+        <option value="🎪無店舗・間借り">🎪 無店舗ロースター・間借り喫茶</option>
+        <option value="🍸カフェバー">🍸 カフェバー</option>
+        <option value="🍰お菓子屋の喫茶室">🍰 お菓子屋 (喫茶室)</option>
+        <option value="🍵和風喫茶">🍵 和風喫茶 (お茶系)</option>
+      </select>
+
       <div class="weather-selector" style="margin-bottom: 15px;">
         <label><input type="radio" name="editWeather" value="☀️">☀️</label>
         <label><input type="radio" name="editWeather" value="☁️">☁️</label>
         <label><input type="radio" name="editWeather" value="☔️">☔️</label>
         <label><input type="radio" name="editWeather" value="❄️">❄️</label>
         <label><input type="radio" name="editWeather" value="❓">❓</label>
+        <label style="display:none;"><input type="radio" name="editWeather" value="💭">💭</label>
       </div>
-      <input type="text" id="editTags" placeholder="タグ (カンマ区切り)">
+      <input type="text" id="editTags" placeholder="タグ (システムタグ以外をカンマ区切りで入力)">
       <textarea id="editComment" style="height: 100px;"></textarea>
       <button onclick="saveEditDiary()">💾 保存</button>
       <button class="btn-cancel" onclick="document.getElementById('editModal').style.display='none'">キャンセル</button>
@@ -675,9 +692,31 @@
       const diary = JSON.parse(decodeURIComponent(safeDiary));
       document.getElementById('editId').value = diary.id;
       document.getElementById('editShopName').value = diary.shop_name;
-      document.getElementById('editTags').value = diary.tags || "";
       document.getElementById('editComment').value = diary.comment || "";
       
+      const currentTags = parseTags(diary.tags);
+      
+      // 1. 利用タイプの復元
+      const eatTypes = ['☕️店内', '🥡テイクアウト', '🛍️豆・グッズ購入'];
+      let foundEatType = '☕️店内';
+      eatTypes.forEach(t => {
+        if (currentTags.includes(t)) foundEatType = t;
+      });
+      document.querySelector(`input[name="editEatType"][value="${foundEatType}"]`).checked = true;
+
+      // 2. 業種タイプの復元
+      const categories = ['🏢喫茶・カフェ', '🔥ロースター', '🎪無店舗・間借り', '🍸カフェバー', '🍰お菓子屋の喫茶室', '🍵和風喫茶'];
+      let foundCategory = '🏢喫茶・カフェ';
+      categories.forEach(c => {
+        if (currentTags.includes(c)) foundCategory = c;
+      });
+      document.getElementById('editShopCategorySelect').value = foundCategory;
+
+      // 3. ユーザーの手入力タグだけをテキストボックスに戻す
+      const filteredTags = currentTags.filter(t => !eatTypes.includes(t) && !categories.includes(t));
+      document.getElementById('editTags').value = filteredTags.join(', ');
+
+      // 4. 天気の復元
       const wRadios = document.getElementsByName('editWeather');
       for(let r of wRadios) { if(r.value === diary.weather_icon) r.checked = true; }
 
@@ -689,14 +728,27 @@
       const shopName = document.getElementById('editShopName').value;
       const weather = document.querySelector('input[name="editWeather"]:checked').value;
       
+      const eatType = document.querySelector('input[name="editEatType"]:checked').value;
+      const shopCategory = document.getElementById('editShopCategorySelect').value;
+      const userTags = document.getElementById('editTags').value;
+      
+      // システムタグとユーザー入力タグを再合体
+      const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
+
       fetch(CLOUDFLARE_WORKER_URL, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: id, shopName: shopName, tags: document.getElementById('editTags').value, comment: document.getElementById('editComment').value, weatherIcon: weather })
+        body: JSON.stringify({ 
+          id: id, 
+          shopName: shopName, 
+          tags: parseTags(combinedTags).join(', '), 
+          comment: document.getElementById('editComment').value, 
+          weatherIcon: weather 
+        })
       }).then(res => res.json()).then(data => {
         if(data.success) { document.getElementById('editModal').style.display = "none"; fetchAndStoreAllDiaries(); }
       });
     };
-
+    
     function initViewMap() {
       if (!viewMap) { 
         viewMap = L.map('mapView').setView([43.064, 141.35], 13);
