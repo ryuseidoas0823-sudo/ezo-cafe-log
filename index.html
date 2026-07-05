@@ -470,8 +470,11 @@
     }
 
     // 未整理から本記録への昇格セットアップ
-    window.upgradeDraftToRecord = function(safeDiary) {
-       const diary = JSON.parse(decodeURIComponent(safeDiary));
+    window.upgradeDraftToRecord = function(id) {
+       // ★ 巨大な文字列を受け取るのをやめ、IDからデータを安全に探し出す
+       const diary = globalDiaries.find(d => d.id === id);
+       if (!diary) return;
+
        switchTab('record');
        
        currentRecordMode = 'manual';
@@ -479,8 +482,11 @@
        selectedImageBase64 = diary.image_base64; 
        draftIdToUpgrade = diary.id; 
 
-       document.getElementById('previewImg').src = selectedImageBase64;
-       document.getElementById('previewImg').style.display = "block";
+       if (selectedImageBase64) {
+         document.getElementById('previewImg').src = selectedImageBase64;
+         document.getElementById('previewImg').style.display = "block";
+       }
+       
        document.getElementById('step1').style.display = "none";
        document.getElementById('step2').style.display = "block";
        document.getElementById('weatherSelectorDiv').style.display = "block";
@@ -732,24 +738,24 @@
         const cardBg = isDraft ? "background: #f4f6f7; border: 2px dashed #7f8c8d;" : (isBookmark ? "background: #fdf2e9; border: 2px dashed #e67e22;" : "background: white;");
         let tempStr = diary.temperature ? `${diary.temperature}℃` : '';
         let weatherStr = (!isBookmark && !isDraft && diary.weather_icon && diary.weather_icon !== "❓") ? `${diary.weather_icon} ${tempStr}` : '';
-        const safeDiary = encodeURIComponent(JSON.stringify(diary));
 
+        // ★ Googleマップの公式ルート案内URLに修正
         let mapLinkBtn = "";
         if (diary.latitude && diary.longitude && !isDraft) {
-          mapLinkBtn = `<a href="https://www.google.com/maps/search/?api=1&query=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none; margin-right:5px;">🗺️ 行き方</a>`;
+          mapLinkBtn = `<a href="https://www.google.com/maps?q=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none; margin-right:5px;">🗺️ 行き方</a>`;
         }
 
         html += `
           <div class="card" style="${cardBg}">
             <div class="card-actions">
               ${mapLinkBtn}
-              ${isDraft ? `<button class="action-btn" onclick="upgradeDraftToRecord('${safeDiary}')" style="background:#3498db; color:white;">✏️ 記録を完成させる</button>` : ''}
+              ${isDraft ? `<button class="action-btn" onclick="upgradeDraftToRecord(${diary.id})" style="background:#3498db; color:white;">✏️ 記録を完成させる</button>` : ''}
               ${isBookmark ? `<button class="action-btn" onclick="upgradeToFootprint('${escapeHTML(diary.shop_name)}')">👣 足跡にする</button>` : ''}
-              <button class="action-btn" onclick="openEditModal('${safeDiary}')" style="background:none;">✏️</button>
+              <button class="action-btn" onclick="openEditModal(${diary.id})" style="background:none;">✏️</button>
               <button class="action-btn" onclick="deleteDiary(${diary.id})" style="background:none;">🗑️</button>
             </div>
             <div class="card-title">${isDraft ? '📦 ' : (isBookmark ? '💭 ' : '')}${escapeHTML(diary.shop_name)}</div>
-            <div class="card-meta">🕒 ${diary.created_at}   ${weatherStr}</div>
+            <div class="card-meta">🕒 ${diary.created_at} &nbsp; ${weatherStr}</div>
             <div style="margin-bottom:10px;">${tagsHTML}</div>
             ${diary.image_base64 ? `<img src="${diary.image_base64}">` : ''}
             <div class="card-comment">${escapeHTML(diary.comment || "")}</div>
@@ -763,16 +769,23 @@
       fetch(`${CLOUDFLARE_WORKER_URL}?id=${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => { if (data.success) fetchAndStoreAllDiaries(); });
     };
 
-    window.openEditModal = function(safeDiary) {
-      const diary = JSON.parse(decodeURIComponent(safeDiary));
-      document.getElementById('editId').value = diary.id; document.getElementById('editShopName').value = diary.shop_name; document.getElementById('editComment').value = diary.comment || "";
+    window.openEditModal = function(id) {
+      const diary = globalDiaries.find(d => d.id === id);
+      if (!diary) return;
+
+      document.getElementById('editId').value = diary.id; 
+      document.getElementById('editShopName').value = diary.shop_name; 
+      document.getElementById('editComment').value = diary.comment || "";
       
       const currentTags = parseTags(diary.tags);
-      const eatTypes = ['☕️店内', '🥡テイクアウト', '🛍️豆・グッズ購入']; let foundEatType = '☕️店内';
+      const eatTypes = ['☕️店内', '🥡テイクアウト', '🛍️豆・グッズ購入']; 
+      let foundEatType = '☕️店内';
       eatTypes.forEach(t => { if (currentTags.includes(t)) foundEatType = t; });
-      document.querySelector(`input[name="editEatType"][value="${foundEatType}"]`).checked = true;
+      const eatTypeRadio = document.querySelector(`input[name="editEatType"][value="${foundEatType}"]`);
+      if (eatTypeRadio) eatTypeRadio.checked = true;
 
-      const categories = ['🏢喫茶・カフェ', '🔥ロースター', '🎪無店舗・間借り', '🍸カフェバー', '🍰お菓子屋の喫茶室', '🍵和風喫茶']; let foundCategory = '🏢喫茶・カフェ';
+      const categories = ['🏢喫茶・カフェ', '🔥ロースター', '🎪無店舗・間借り', '🍸カフェバー', '🍰お菓子屋の喫茶室', '🍵和風喫茶']; 
+      let foundCategory = '🏢喫茶・カフェ';
       categories.forEach(c => { if (currentTags.includes(c)) foundCategory = c; });
       document.getElementById('editShopCategorySelect').value = foundCategory;
 
@@ -783,7 +796,7 @@
 
       document.getElementById('editModal').style.display = "flex";
     };
-
+    
     window.saveEditDiary = function() {
       const eatType = document.querySelector('input[name="editEatType"]:checked').value;
       const shopCategory = document.getElementById('editShopCategorySelect').value;
