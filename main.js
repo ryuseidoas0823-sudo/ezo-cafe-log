@@ -446,14 +446,21 @@ function renderCalendar() {
   const totalDays = new Date(currentCalYear, currentCalMonth, 0).getDate();
   const todayStr = new Date().toISOString().split('T')[0];
 
+  // ★ 追加：プルダウンの選択状態を取得する（デフォルトは撮影日）
+  const dateModeSelect = document.getElementById('calendarDateMode');
+  const dateMode = dateModeSelect ? dateModeSelect.value : 'visited';
+
   for (let i = 0; i < firstDayIndex; i++) { grid.innerHTML += `<div class="calendar-day-cell calendar-day-empty"></div>`; }
 
   for (let day = 1; day <= totalDays; day++) {
     const currentFullDate = `${currentCalYear}-${String(currentCalMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    
     const dayDiaries = globalDiaries.filter(d => {
-      const dStr = d.visited_at || d.created_at || "";
-      return dStr.startsWith(currentFullDate) && d.weather_icon !== "📦" && d.weather_icon !== "💭";
+      // ★ 追加：選択されたモードによって参照する日付（カラム）を切り替える
+      const targetDateStr = dateMode === 'visited' ? (d.visited_at || d.created_at || "") : (d.created_at || "");
+      return targetDateStr.startsWith(currentFullDate) && d.weather_icon !== "📦" && d.weather_icon !== "💭";
     });
+    
     const isToday = currentFullDate === todayStr ? 'calendar-day-today' : '';
     const hasVisit = dayDiaries.length > 0 ? 'calendar-day-has-visit' : '';
     const cafeEmoji = dayDiaries.length > 0 ? `<div class="calendar-cafe-dot">☕️</div>` : '';
@@ -468,7 +475,15 @@ function renderCalendar() {
 }
 
 window.showCalendarDayDiaries = function(dateStr) {
-  const dayDiaries = globalDiaries.filter(d => (d.visited_at || d.created_at || "").startsWith(dateStr));
+  // ★ 追加：日記を下に引き出す時も、プルダウンの状態に合わせて抽出する
+  const dateModeSelect = document.getElementById('calendarDateMode');
+  const dateMode = dateModeSelect ? dateModeSelect.value : 'visited';
+
+  const dayDiaries = globalDiaries.filter(d => {
+    const targetDateStr = dateMode === 'visited' ? (d.visited_at || d.created_at || "") : (d.created_at || "");
+    return targetDateStr.startsWith(dateStr);
+  });
+
   const resultDiv = document.getElementById('calendarSelectionResult');
   if (dayDiaries.length === 0) {
     resultDiv.innerHTML = `<p style="text-align:center; color:#7f8c8d; margin-top:15px;">📅 ${dateStr} の記録はありません</p>`; return;
