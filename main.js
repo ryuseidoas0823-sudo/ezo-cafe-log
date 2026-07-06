@@ -257,11 +257,11 @@ window.saveEditDiary = function() {
   const userTags = document.getElementById('editTags').value;
   const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
 
-  // ★ 追加：動かしたピンの新しい座標を取得
+  // ★ 修正：動かしたピンの新しい座標を取得（変数名を leafletEditMarker に変更）
   let updatedLat = null;
   let updatedLng = null;
-  if (!document.getElementById('editNoLocationCheck').checked && window.editMarker) {
-     const pos = window.editMarker.getLatLng();
+  if (!document.getElementById('editNoLocationCheck').checked && window.leafletEditMarker) {
+     const pos = window.leafletEditMarker.getLatLng();
      updatedLat = pos.lat;
      updatedLng = pos.lng;
   }

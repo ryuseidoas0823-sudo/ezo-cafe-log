@@ -40,6 +40,9 @@ function initViewMap() {
   setTimeout(() => { viewMap.invalidateSize(); }, 100); 
 }
 
+// ==========================================
+// マップ画面のピン描画（メニュー表示機能の復活）
+// ==========================================
 function updateViewMarkers(filteredDiaries = globalDiaries) {
   if (!viewMap) return;
   viewMap.eachLayer((layer) => { if (layer instanceof L.Marker) viewMap.removeLayer(layer); });
@@ -51,7 +54,6 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
       const s = diary.shop_name; 
       const isBookmark = diary.weather_icon === "💭";
       const isDraft = diary.weather_icon === "📦";
-      
       const uniqueKey = isDraft ? `draft_${diary.id}` : s;
 
       if (!uniqueShops[uniqueKey]) {
@@ -62,7 +64,8 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
           mainTag: parseTags(diary.tags)[2]||"", 
           visitCount: (isBookmark || isDraft) ? 0 : 1, 
           isBookmarkOnly: isBookmark,
-          isDraftOnly: isDraft
+          isDraftOnly: isDraft,
+          latestId: diary.id // ★ 編集用に最新のIDを保存
         };
       } else {
         if (!isBookmark && !isDraft) { uniqueShops[uniqueKey].visitCount++; uniqueShops[uniqueKey].isBookmarkOnly = false; }
@@ -76,26 +79,40 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
     
     const badgeHtml = shop.visitCount > 0 ? `<div style="position:absolute; bottom:-5px; right:-5px; background:#e74c3c; color:white; border-radius:50%; width:18px; height:18px; font-size:11px; font-weight:bold; line-height:18px; text-align:center;">${shop.visitCount}</div>` : '';
     const customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: ${bgColor}; position:relative;">${emoji}${badgeHtml}</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
-    L.marker([shop.lat, shop.lng], {icon: customIcon}).addTo(viewMap).bindTooltip(escapeHTML(shop.shopName), { permanent: true, direction: 'right', className: 'map-label', offset: [15, 0] });
+    
+    const marker = L.marker([shop.lat, shop.lng], {icon: customIcon}).addTo(viewMap);
+    
+    // ★ マップピンのタップ（クリック）でメニュー（ポップアップ）を表示
+    const popupHtml = `
+      <div style="text-align:center; min-width: 150px;">
+        <p style="margin: 0 0 10px; font-weight:bold; font-size:1rem; color:#2c3e50;">${escapeHTML(shop.shopName)}</p>
+        <button onclick="openEditModal('${shop.latestId}')" style="background:#3498db; color:white; border:none; padding:8px 15px; border-radius:4px; font-weight:bold; cursor:pointer; width: 100%;">📍 情報を編集する</button>
+      </div>
+    `;
+    marker.bindPopup(popupHtml);
+    marker.bindTooltip(escapeHTML(shop.shopName), { permanent: true, direction: 'right', className: 'map-label', offset: [15, 0] });
+    
     bounds.extend([shop.lat, shop.lng]);
   });
   if (Object.keys(uniqueShops).length > 0) viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
 }
 
+// ==========================================
 // ✏️ 編集モーダル用のマップ初期化
+// ==========================================
 function initEditMap(lat, lng) {
   const defaultLat = lat || 43.0686;
   const defaultLng = lng || 141.3508;
 
-  if (!window.editMap) {
-    window.editMap = L.map('editMap', { doubleClickZoom: false }).setView([defaultLat, defaultLng], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(window.editMap);
-    window.editMarker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(window.editMap);
+  // エラー原因：HTMLの id="editMap" と変数名が衝突していたため、leafletEditMap に変更
+  if (!window.leafletEditMap) {
+    window.leafletEditMap = L.map('editMap', { doubleClickZoom: false }).setView([defaultLat, defaultLng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(window.leafletEditMap);
+    window.leafletEditMarker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(window.leafletEditMap);
   } else {
-    window.editMap.setView([defaultLat, defaultLng], 15);
-    window.editMarker.setLatLng([defaultLat, defaultLng]);
+    window.leafletEditMap.setView([defaultLat, defaultLng], 15);
+    window.leafletEditMarker.setLatLng([defaultLat, defaultLng]);
   }
 
-  // 0.2秒遅らせてマップのサイズを再計算（モーダル内で地図がバグらないようにする魔法）
-  setTimeout(() => { window.editMap.invalidateSize(); }, 200);
+  setTimeout(() => { window.leafletEditMap.invalidateSize(); }, 200);
 }
