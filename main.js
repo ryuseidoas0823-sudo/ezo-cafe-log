@@ -1,3 +1,6 @@
+// ==========================================
+// 1. 初期設定・グローバル変数
+// ==========================================
 // ★ Cloudflare WorkerのURLを貼り直してください！
 const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; 
 const HOME_LAT = 43.0620958;
@@ -9,6 +12,7 @@ let viewMap;
 let pickerMap;      
 let pickerMarker;   
 let selectedImageBase64 = null; 
+let selectedImageUrl = null; // ★ConoHa連携時のURL保管用
 let selectedDatetime = null;
 let currentRecordMode = 'manual';
 let selectedMasterShop = null; 
@@ -23,6 +27,9 @@ window.onload = function() {
   setupHidePinsButtons();
 }
 
+// ==========================================
+// 2. UI・タブ制御・設定関連
+// ==========================================
 function setupHidePinsButtons() {
   const hideFunc = (mapObj) => { if(mapObj) mapObj.eachLayer(l => { if(l instanceof L.Marker && l.setOpacity) l.setOpacity(0); }); };
   const showFunc = (mapObj) => { if(mapObj) mapObj.eachLayer(l => { if(l instanceof L.Marker && l.setOpacity) l.setOpacity(1); }); };
@@ -82,51 +89,14 @@ function switchTab(tabId) {
   if(tabId === 'settings') loadSettings(); 
 }
 
-function getColorFromTag(tag) {
-  if (!tag) return "#34495e";
-  let hash = 0; for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-  return `hsl(${Math.abs(hash) % 360}, 70%, 45%)`; 
-}
-function parseTags(tagsString) {
-  if (!tagsString) return [];
-  return tagsString.split(',').map(t => t.trim()).filter(t => t !== "");
-}
-
-function checkSmartSuggest(lat, lng) {
-  const areaDiv = document.getElementById('smartSuggestArea');
-  areaDiv.style.display = "none";
-  areaDiv.innerHTML = "";
-
-  const nearbyShops = new Set();
-  globalDiaries.forEach(d => {
-    if (d.latitude && d.longitude && d.weather_icon !== "📦") {
-      const dist = getDistanceFromLatLonInM(lat, lng, d.latitude, d.longitude);
-      if (dist <= 50) nearbyShops.add(d.shop_name);
-    }
-  });
-
-  const shopsArray = Array.from(nearbyShops);
-  if (shopsArray.length > 0 && shopsArray.length <= 2) {
-     let html = `<p style="font-size: 0.85rem; color: #e67e22; margin: 0 0 5px; font-weight: bold;">📍 もしかして？</p><div style="display: flex; gap: 8px; flex-wrap: wrap;">`;
-     shopsArray.forEach(shop => {
-       html += `<button type="button" style="background: #fdf2e9; border: 1px solid #e67e22; color: #d35400; padding: 8px 12px; border-radius: 20px; font-size: 0.9rem; width: auto; margin: 0;" onclick="applySmartSuggest('${escapeHTML(shop)}')">💡 ${escapeHTML(shop)}</button>`;
-     });
-     html += `</div>`;
-     areaDiv.innerHTML = html;
-     areaDiv.style.display = "block";
-  }
-}
-
-window.applySmartSuggest = function(shopName) {
-   document.getElementById('shopNameInput').value = shopName;
-   searchMasterShop();
-};
-
+// ==========================================
+// 3. データ記録・未整理ボックス処理
+// ==========================================
 function startNoPhotoRecord() {
   if (!localStorage.getItem('ezo_gender') || !localStorage.getItem('ezo_age')) {
     alert("📊 先に「設定」タブで登録してください。"); switchTab('settings'); return;
   }
-  currentRecordMode = 'manual'; selectedDatetime = null; selectedImageBase64 = null; draftIdToUpgrade = null;
+  currentRecordMode = 'manual'; selectedDatetime = null; selectedImageBase64 = null; selectedImageUrl = null; draftIdToUpgrade = null;
   document.getElementById('previewImg').style.display = "none";
   document.getElementById('step1').style.display = "none";
   document.getElementById('step2').style.display = "block";
@@ -149,7 +119,7 @@ window.upgradeToFootprint = function(shopName) {
   alert(`「${shopName}」の訪問記録をつけます！\n（※写真がある場合は一度『やり直す』を押して写真を選んでください）`);
 };
 
-// 📦 未整理ボックス：一括画像セレクト
+// 📦 一括画像セレクト
 async function handleBulkImagesSelect(event) {
   const files = event.target.files;
   if (!files || files.length === 0) return;
@@ -195,17 +165,17 @@ async function processAndUploadDraft(file) {
            method: "POST", headers: { "Content-Type": "application/json" },
            body: JSON.stringify({
               shopId: null, shopName: "未整理の写真", comment: "", latitude: lat, longitude: lng, 
-              imageBase64: base64, tags: "📦未整理", weatherIcon: "📦", 
+              imageBase64: base64, imageUrl: null, tags: "📦未整理", weatherIcon: "📦", 
               temperature: null, userGender: "未設定", userAge: "未設定", visitedAt: datetime
            })
         }).then(() => resolve()).catch(() => resolve());
      };
-     img.onerror = () => resolve(); // エラー時も進める
+     img.onerror = () => resolve(); 
      img.src = URL.createObjectURL(file);
   });
 }
 
-// 📦 未整理から本記録への昇格処理
+// 📦 昇格処理（URL対応版）
 window.upgradeDraftToRecord = function(id) {
    const diary = globalDiaries.find(d => String(d.id) === String(id));
    if (!diary) return;
@@ -215,10 +185,12 @@ window.upgradeDraftToRecord = function(id) {
    currentRecordMode = 'manual';
    selectedDatetime = diary.created_at; 
    selectedImageBase64 = diary.image_base64; 
+   selectedImageUrl = diary.image_url;
    draftIdToUpgrade = diary.id; 
 
-   if (selectedImageBase64) {
-     document.getElementById('previewImg').src = selectedImageBase64;
+   const previewSrc = diary.image_url || diary.image_base64;
+   if (previewSrc) {
+     document.getElementById('previewImg').src = previewSrc;
      document.getElementById('previewImg').style.display = "block";
    }
    
@@ -242,7 +214,7 @@ window.upgradeDraftToRecord = function(id) {
 async function handleImageSelect(event, mode) {
   const file = event.target.files[0];
   if (!file) return;
-  currentRecordMode = mode; selectedDatetime = null; draftIdToUpgrade = null;
+  currentRecordMode = mode; selectedDatetime = null; draftIdToUpgrade = null; selectedImageUrl = null;
   
   try {
     const exifData = await exifr.parse(file, ['DateTimeOriginal', 'latitude', 'longitude']);
@@ -291,54 +263,15 @@ function resetRecordTab() {
   document.getElementById('shopNameInput').value = ""; document.getElementById('commentInput').value = "";
   document.getElementById('tagsInput').value = ""; document.getElementById('noLocationCheck').checked = false;
   document.getElementById('status').innerText = "";
-  selectedImageBase64 = null; selectedDatetime = null; draftIdToUpgrade = null; document.getElementById('submitBtn').disabled = false;
+  
+  // 状態の完全リセット
+  selectedImageBase64 = null; selectedImageUrl = null; selectedDatetime = null; draftIdToUpgrade = null; 
+  document.getElementById('submitBtn').disabled = false;
 }
 
-function searchMasterShop() {
-  const q = document.getElementById('shopNameInput').value;
-  const list = document.getElementById('autocompleteList');
-  selectedMasterShop = null; 
-  if (q.length < 1) { list.style.display = "none"; return; }
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    fetch(`${CLOUDFLARE_WORKER_URL}?action=search_master&query=${encodeURIComponent(q)}`)
-      .then(res => res.json()).then(data => {
-        list.innerHTML = "";
-        if (data.success && data.data.length > 0) {
-          data.data.forEach(shop => {
-            const li = document.createElement('li');
-            li.innerHTML = `<span class="badge-master">公式</span>${escapeHTML(shop.shop_name)}`;
-            li.onclick = () => {
-              document.getElementById('shopNameInput').value = shop.shop_name;
-              selectedMasterShop = shop; list.style.display = "none";
-              if(pickerMap && pickerMarker && shop.latitude) {
-                pickerMap.setView([shop.latitude, shop.longitude], 16);
-                pickerMarker.setLatLng([shop.latitude, shop.longitude]);
-              }
-            };
-            list.appendChild(li);
-          });
-        }
-        const newLi = document.createElement('li');
-        newLi.innerHTML = `<span class="badge-new">新規</span>「${escapeHTML(q)}」を手動で登録する`;
-        newLi.onclick = () => { selectedMasterShop = null; list.style.display = "none"; };
-        list.appendChild(newLi);
-        list.style.display = "block";
-      });
-  }, 300);
-}
-
-function initPickerMap() {
-  if (!pickerMap) {
-    pickerMap = L.map('pickerMap', { doubleClickZoom: false }).setView([43.0686, 141.3508], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(pickerMap);
-    pickerMarker = L.marker([43.0686, 141.3508], { draggable: true }).addTo(pickerMap);
-    pickerMap.on('dblclick', function(e) { pickerMarker.setLatLng(e.latlng); checkSmartSuggest(e.latlng.lat, e.latlng.lng); });
-    pickerMarker.on('dragend', function(e) { const pos = pickerMarker.getLatLng(); checkSmartSuggest(pos.lat, pos.lng); });
-  }
-  setTimeout(() => pickerMap.invalidateSize(), 100);
-}
-
+// ==========================================
+// 4. API通信・保存処理
+// ==========================================
 async function fetchTemperature(lat, lng) {
   try {
     const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);
@@ -388,7 +321,9 @@ function sendDataToCloudflare(shopId, shopName, lat, lng, weather, temp, gender,
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ 
       shopId: shopId, shopName: shopName, comment: document.getElementById('commentInput').value, 
-      latitude: lat, longitude: lng, imageBase64: selectedImageBase64, tags: parseTags(tagsString).join(','),
+      latitude: lat, longitude: lng, 
+      imageBase64: selectedImageBase64, imageUrl: selectedImageUrl, // ★URLデータも送信
+      tags: parseTags(tagsString).join(','),
       weatherIcon: weather, temperature: temp, userGender: gender, userAge: age, visitedAt: selectedDatetime 
     })
   }).then(res => res.json()).then(data => {
@@ -396,23 +331,21 @@ function sendDataToCloudflare(shopId, shopName, lat, lng, weather, temp, gender,
     
     if (draftIdToUpgrade) {
        fetch(`${CLOUDFLARE_WORKER_URL}?id=${draftIdToUpgrade}`, { method: 'DELETE' }).then(() => {
-          draftIdToUpgrade = null;
+          draftIdToUpgrade = null; selectedImageUrl = null;
           alert("✨ 未整理データを正式な足跡に昇格しました！"); 
           resetRecordTab(); fetchAndStoreAllDiaries();
        });
     } else {
+       selectedImageUrl = null;
        alert("✨ 記録が完了しました！"); 
        resetRecordTab(); fetchAndStoreAllDiaries();
     }
   }).catch(err => { document.getElementById('status').innerText = `❌ エラー: ${err.message}`; btnElement.disabled = false; });
 }
 
-function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-}
-
+// ==========================================
+// 5. データ取得・リスト表示
+// ==========================================
 function fetchAndStoreAllDiaries() {
   fetch(`${CLOUDFLARE_WORKER_URL}?query=`).then(res => res.json()).then(data => {
     if (data.success) {
@@ -443,19 +376,7 @@ function applyFilters() {
   renderTagClouds(); renderDiariesList(filtered); updateViewMarkers(filtered);
 }
 
-window.toggleTagFilter = function(tag) { activeTagFilter = (activeTagFilter === tag) ? "" : tag; applyFilters(); };
-
-function renderTagClouds() {
-  const allTags = new Set(); globalDiaries.forEach(d => { parseTags(d.tags).forEach(t => allTags.add(t)); });
-  let html = "";
-  if (allTags.size > 0) {
-    html += `<span class="tag-btn ${activeTagFilter === '' ? 'active' : ''}" onclick="toggleTagFilter('')">すべて</span>`;
-    allTags.forEach(tag => { html += `<span class="tag-btn ${activeTagFilter === tag ? 'active' : ''}" onclick="toggleTagFilter('${escapeHTML(tag)}')">${escapeHTML(tag)}</span>`; });
-  }
-  if(document.getElementById('tagCloudView')) document.getElementById('tagCloudView').innerHTML = html;
-  if(document.getElementById('tagCloudMap')) document.getElementById('tagCloudMap').innerHTML = html;
-}
-
+// Lazy Loading & フッターボタン対応
 function renderDiariesList(diaries) {
   const listDiv = document.getElementById('diaryList');
   if (!listDiv) return;
@@ -474,23 +395,30 @@ function renderDiariesList(diaries) {
 
     let mapLinkBtn = "";
     if (diary.latitude && diary.longitude && !isDraft) {
-      mapLinkBtn = `<a href="http://googleusercontent.com/maps.google.com/?q=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none; margin-right:5px;">🗺️ 行き方</a>`;
+      mapLinkBtn = `<a href="http://googleusercontent.com/maps.google.com/?q=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none;">🗺️ 行き方</a>`;
+    }
+
+    let imageTag = '';
+    if (diary.image_url) {
+      imageTag = `<img src="${diary.image_url}" loading="lazy" alt="カフェ写真">`;
+    } else if (diary.image_base64) {
+      imageTag = `<img src="${diary.image_base64}" loading="lazy" alt="カフェ写真">`;
     }
 
     html += `
       <div class="card" style="${cardBg}">
+        <div class="card-title">${isDraft ? '📦 ' : (isBookmark ? '💭 ' : '')}${escapeHTML(diary.shop_name)}</div>
+        <div class="card-meta">🕒 ${diary.created_at}   ${weatherStr}</div>
+        <div style="margin-bottom:10px;">${tagsHTML}</div>
+        ${imageTag}
+        <div class="card-comment">${escapeHTML(diary.comment || "")}</div>
         <div class="card-actions">
           ${mapLinkBtn}
           ${isDraft ? `<button class="action-btn" onclick="upgradeDraftToRecord('${diary.id}')" style="background:#3498db; color:white;">✏️ 記録を完成させる</button>` : ''}
           ${isBookmark ? `<button class="action-btn" onclick="upgradeToFootprint('${escapeHTML(diary.shop_name)}')">👣 足跡にする</button>` : ''}
-          <button class="action-btn" onclick="openEditModal('${diary.id}')" style="background:none;">✏️</button>
-          <button class="action-btn" onclick="deleteDiary('${diary.id}')" style="background:none;">🗑️</button>
+          <button class="action-btn" onclick="openEditModal('${diary.id}')">✏️ 編集</button>
+          <button class="action-btn" onclick="deleteDiary('${diary.id}')">🗑️ 削除</button>
         </div>
-        <div class="card-title">${isDraft ? '📦 ' : (isBookmark ? '💭 ' : '')}${escapeHTML(diary.shop_name)}</div>
-        <div class="card-meta">🕒 ${diary.created_at}   ${weatherStr}</div>
-        <div style="margin-bottom:10px;">${tagsHTML}</div>
-        ${diary.image_base64 ? `<img src="${diary.image_base64}">` : ''}
-        <div class="card-comment">${escapeHTML(diary.comment || "")}</div>
       </div>`;
   });
   listDiv.innerHTML = html;
@@ -501,6 +429,9 @@ window.deleteDiary = function(id) {
   fetch(`${CLOUDFLARE_WORKER_URL}?id=${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => { if (data.success) fetchAndStoreAllDiaries(); });
 };
 
+// ==========================================
+// 6. 編集・サジェスト・その他UIヘルパー
+// ==========================================
 window.openEditModal = function(id) {
   const diary = globalDiaries.find(d => String(d.id) === String(id));
   if (!diary) return;
@@ -544,6 +475,82 @@ window.saveEditDiary = function() {
     })
   }).then(res => res.json()).then(data => { if(data.success) { document.getElementById('editModal').style.display = "none"; fetchAndStoreAllDiaries(); } });
 };
+
+function checkSmartSuggest(lat, lng) {
+  const areaDiv = document.getElementById('smartSuggestArea');
+  areaDiv.style.display = "none";
+  areaDiv.innerHTML = "";
+
+  const nearbyShops = new Set();
+  globalDiaries.forEach(d => {
+    if (d.latitude && d.longitude && d.weather_icon !== "📦") {
+      const dist = getDistanceFromLatLonInM(lat, lng, d.latitude, d.longitude);
+      if (dist <= 50) nearbyShops.add(d.shop_name);
+    }
+  });
+
+  const shopsArray = Array.from(nearbyShops);
+  if (shopsArray.length > 0 && shopsArray.length <= 2) {
+     let html = `<p style="font-size: 0.85rem; color: #e67e22; margin: 0 0 5px; font-weight: bold;">📍 もしかして？</p><div style="display: flex; gap: 8px; flex-wrap: wrap;">`;
+     shopsArray.forEach(shop => {
+       html += `<button type="button" style="background: #fdf2e9; border: 1px solid #e67e22; color: #d35400; padding: 8px 12px; border-radius: 20px; font-size: 0.9rem; width: auto; margin: 0;" onclick="applySmartSuggest('${escapeHTML(shop)}')">💡 ${escapeHTML(shop)}</button>`;
+     });
+     html += `</div>`;
+     areaDiv.innerHTML = html;
+     areaDiv.style.display = "block";
+  }
+}
+
+window.applySmartSuggest = function(shopName) { document.getElementById('shopNameInput').value = shopName; searchMasterShop(); };
+function toggleTagFilter(tag) { activeTagFilter = (activeTagFilter === tag) ? "" : tag; applyFilters(); };
+
+function searchMasterShop() {
+  const q = document.getElementById('shopNameInput').value;
+  const list = document.getElementById('autocompleteList');
+  selectedMasterShop = null; 
+  if (q.length < 1) { list.style.display = "none"; return; }
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    fetch(`${CLOUDFLARE_WORKER_URL}?action=search_master&query=${encodeURIComponent(q)}`)
+      .then(res => res.json()).then(data => {
+        list.innerHTML = "";
+        if (data.success && data.data.length > 0) {
+          data.data.forEach(shop => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="badge-master">公式</span>${escapeHTML(shop.shop_name)}`;
+            li.onclick = () => {
+              document.getElementById('shopNameInput').value = shop.shop_name;
+              selectedMasterShop = shop; list.style.display = "none";
+              if(pickerMap && pickerMarker && shop.latitude) {
+                pickerMap.setView([shop.latitude, shop.longitude], 16);
+                pickerMarker.setLatLng([shop.latitude, shop.longitude]);
+              }
+            };
+            list.appendChild(li);
+          });
+        }
+        const newLi = document.createElement('li');
+        newLi.innerHTML = `<span class="badge-new">新規</span>「${escapeHTML(q)}」を手動で登録する`;
+        newLi.onclick = () => { selectedMasterShop = null; list.style.display = "none"; };
+        list.appendChild(newLi);
+        list.style.display = "block";
+      });
+  }, 300);
+}
+
+// ==========================================
+// 7. マップ・ロケーション関数
+// ==========================================
+function initPickerMap() {
+  if (!pickerMap) {
+    pickerMap = L.map('pickerMap', { doubleClickZoom: false }).setView([43.0686, 141.3508], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(pickerMap);
+    pickerMarker = L.marker([43.0686, 141.3508], { draggable: true }).addTo(pickerMap);
+    pickerMap.on('dblclick', function(e) { pickerMarker.setLatLng(e.latlng); checkSmartSuggest(e.latlng.lat, e.latlng.lng); });
+    pickerMarker.on('dragend', function(e) { const pos = pickerMarker.getLatLng(); checkSmartSuggest(pos.lat, pos.lng); });
+  }
+  setTimeout(() => pickerMap.invalidateSize(), 100);
+}
 
 function initViewMap() {
   if (!viewMap) { 
@@ -595,6 +602,41 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
   if (Object.keys(uniqueShops).length > 0) viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
 }
 
+function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+// ==========================================
+// 8. ユーティリティ・アナリティクス
+// ==========================================
+function renderTagClouds() {
+  const allTags = new Set(); globalDiaries.forEach(d => { parseTags(d.tags).forEach(t => allTags.add(t)); });
+  let html = "";
+  if (allTags.size > 0) {
+    html += `<span class="tag-btn ${activeTagFilter === '' ? 'active' : ''}" onclick="toggleTagFilter('')">すべて</span>`;
+    allTags.forEach(tag => { html += `<span class="tag-btn ${activeTagFilter === tag ? 'active' : ''}" onclick="toggleTagFilter('${escapeHTML(tag)}')">${escapeHTML(tag)}</span>`; });
+  }
+  if(document.getElementById('tagCloudView')) document.getElementById('tagCloudView').innerHTML = html;
+  if(document.getElementById('tagCloudMap')) document.getElementById('tagCloudMap').innerHTML = html;
+}
+
+function getColorFromTag(tag) {
+  if (!tag) return "#34495e";
+  let hash = 0; for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+  return `hsl(${Math.abs(hash) % 360}, 70%, 45%)`; 
+}
+function parseTags(tagsString) { return (!tagsString) ? [] : tagsString.split(',').map(t => t.trim()).filter(t => t !== ""); }
+
+// 🔒 安全なエスケープ処理（文字化け・バグ防止版）
+function escapeHTML(str) {
+  if (!str) return "";
+  const escapeMap = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" };
+  return str.replace(/[&<>'"]/g, match => escapeMap[match] || match);
+}
+
+// 📊 アナリティクスとバッジ判定
 function renderAnalytics() {
   if (!globalDiaries || globalDiaries.length === 0) return;
   const actualVisits = globalDiaries.filter(d => d.weather_icon !== "💭" && d.weather_icon !== "📦");
@@ -620,7 +662,6 @@ function renderAnalytics() {
     }
   });
 
-  // 🏆 称号バッジのマスターデータと獲得条件
   const badges = [
     { id: 'first_step', icon: '🔰', name: '初めの一歩', condition: actualVisits.length >= 1, color: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' },
     { id: 'traveler', icon: '🥉', name: 'トラベラー', condition: actualVisits.length >= 10, color: 'linear-gradient(135deg, #d4a373 0%, #faedcd 100%)' },
@@ -631,7 +672,6 @@ function renderAnalytics() {
     { id: 'bookmark_craft', icon: '💭', name: '行きたい職人', condition: bookmarks.length >= 5, color: 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)' }
   ];
 
-  // バッジHTMLの生成
   let badgeHtml = '';
   badges.forEach(b => {
     if (b.condition) {
@@ -642,22 +682,9 @@ function renderAnalytics() {
   });
   document.getElementById('badgeContainer').innerHTML = badgeHtml;
 
-  // グラフの描画（既存の処理）
   if(charts.eatType) charts.eatType.destroy(); if(charts.weather) charts.weather.destroy(); if(charts.time) charts.time.destroy();
 
   charts.eatType = new Chart(document.getElementById('chartEatType').getContext('2d'), { type: 'doughnut', data: { labels: ['☕️ 店内', '🥡 テイクアウト'], datasets: [{ data: [eatin, takeout], backgroundColor: ['#3498db', '#e67e22'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
   charts.weather = new Chart(document.getElementById('chartWeather').getContext('2d'), { type: 'bar', data: { labels: ['☀️ 晴れ', '☁️ 曇り', '☔️ 雨', '❄️ 雪'], datasets: [{ label: '記録数', data: [weatherCounts['☀️'], weatherCounts['☁️'], weatherCounts['☔️'], weatherCounts['❄️']], backgroundColor: ['#f1c40f', '#95a5a6', '#3498db', '#ecf0f1'], borderColor: '#bdc3c7', borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
   charts.time = new Chart(document.getElementById('chartTime').getContext('2d'), { type: 'line', data: { labels: Object.keys(timeCounts), datasets: [{ label: '訪問回数', data: Object.values(timeCounts), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
-}
-
-function escapeHTML(str) {
-  if (!str) return "";
-  const escapeMap = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "'": "&#39;",
-    '"': "&quot;"
-  };
-  return str.replace(/[&<>'"]/g, match => escapeMap[match] || match);
 }
