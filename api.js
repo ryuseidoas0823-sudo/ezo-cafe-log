@@ -16,24 +16,14 @@ function fetchAndStoreAllDiaries() {
   fetch(`${CLOUDFLARE_WORKER_URL}?query=`).then(res => res.json()).then(data => {
     if (data.success) {
       globalDiaries = data.data.map(diary => {
-        let name = diary.shop_name || ""; 
         let currentTags = parseTags(diary.tags);
         
-        if (name.includes('[店内]')) { 
-          name = name.replace('[店内]', '').trim(); 
-          if (!currentTags.includes('☕️店内')) currentTags.unshift('☕️店内'); 
-        }
-        if (name.includes('[持帰]')) { 
-          name = name.replace('[持帰]', '').trim(); 
-          if (!currentTags.includes('🥡テイクアウト')) currentTags.unshift('🥡テイクアウト'); 
-        }
-        
+        // ※カテゴリ（業態）タグが存在しない大昔のデータに対する救済措置だけは残す
         const hasCategory = currentTags.some(t => t.includes('🏢') || t.includes('🔥') || t.includes('🎪') || t.includes('🍸') || t.includes('🍰') || t.includes('🍵'));
         if (!hasCategory && !currentTags.includes('💭') && !currentTags.includes('📦未整理')) {
           currentTags.splice(1, 0, '🏢喫茶・カフェ'); 
         }
 
-        diary.shop_name = name; 
         diary.tags = currentTags.join(', ');
         return diary;
       });
