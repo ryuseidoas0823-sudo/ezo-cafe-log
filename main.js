@@ -244,6 +244,10 @@ window.openEditModal = function(id) {
   const wRadios = document.getElementsByName('editWeather');
   for(let r of wRadios) { if(r.value === diary.weather_icon) r.checked = true; }
 
+  // ★ 追加：位置情報の編集準備
+  document.getElementById('editNoLocationCheck').checked = (!diary.latitude || !diary.longitude);
+  initEditMap(diary.latitude, diary.longitude);
+
   document.getElementById('editModal').style.display = "flex";
 };
 
@@ -253,12 +257,22 @@ window.saveEditDiary = function() {
   const userTags = document.getElementById('editTags').value;
   const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
 
+  // ★ 追加：動かしたピンの新しい座標を取得
+  let updatedLat = null;
+  let updatedLng = null;
+  if (!document.getElementById('editNoLocationCheck').checked && window.editMarker) {
+     const pos = window.editMarker.getLatLng();
+     updatedLat = pos.lat;
+     updatedLng = pos.lng;
+  }
+
   fetch(CLOUDFLARE_WORKER_URL, {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ 
       id: document.getElementById('editId').value, shopName: document.getElementById('editShopName').value, 
       tags: parseTags(combinedTags).join(', '), comment: document.getElementById('editComment').value, 
-      weatherIcon: document.querySelector('input[name="editWeather"]:checked').value 
+      weatherIcon: document.querySelector('input[name="editWeather"]:checked').value,
+      latitude: updatedLat, longitude: updatedLng // ★ 新しい座標を送信
     })
   }).then(res => res.json()).then(data => { if(data.success) { document.getElementById('editModal').style.display = "none"; fetchAndStoreAllDiaries(); } });
 };

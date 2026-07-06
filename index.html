@@ -240,6 +240,14 @@
         <label style="display:none;"><input type="radio" name="editWeather" value="📦">📦</label>
       </div>
       <input type="text" id="editTags" placeholder="タグ (システムタグ以外をカンマ区切りで入力)">
+      <div id="editMapArea" style="margin-bottom: 15px; border: 2px solid #3498db; padding: 10px; border-radius: 8px;">
+        <p style="font-size: 0.85rem; color: #2980b9; font-weight: bold; margin-top: 0; text-align: center;">📍 ピンをドラッグして位置を修正</p>
+        <div id="editMap" style="width: 100%; height: 200px; border-radius: 8px;"></div>
+        <label style="display: flex; align-items: center; justify-content: center; margin-top: 10px; font-size: 0.9rem;">
+          <input type="checkbox" id="editNoLocationCheck" style="margin-right: 5px; width: 16px; height: 16px;">
+          位置情報を削除する（テイクアウト等）
+        </label>
+      </div>
       <textarea id="editComment" style="height: 100px;"></textarea>
       <button onclick="saveEditDiary()">💾 保存</button>
       <button class="btn-cancel" onclick="document.getElementById('editModal').style.display='none'">キャンセル</button>

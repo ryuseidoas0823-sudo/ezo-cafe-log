@@ -92,16 +92,12 @@ export default {
       // --------------------------------------------------------
       if (request.method === "PUT") {
         const data = await request.json();
-        await env.DB.prepare(
-          "UPDATE diaries SET shop_name = ?, tags = ?, comment = ?, weather_icon = ? WHERE id = ?"
-        ).bind(
-          data.shopName,
-          data.tags,
-          data.comment,
-          data.weatherIcon,
-          data.id
-        ).run();
-
+        // ★ 緯度・経度の更新データを受け取るように追加
+        const lat = data.latitude !== undefined ? data.latitude : null;
+        const lng = data.longitude !== undefined ? data.longitude : null;
+        
+        await env.DB.prepare("UPDATE diaries SET shop_name = ?, tags = ?, comment = ?, weather_icon = ?, latitude = ?, longitude = ? WHERE id = ?")
+          .bind(data.shopName, data.tags, data.comment, data.weatherIcon, lat, lng, data.id).run();
         return new Response(JSON.stringify({ success: true }), { headers });
       }
 

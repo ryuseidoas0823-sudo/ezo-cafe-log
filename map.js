@@ -81,3 +81,21 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
   });
   if (Object.keys(uniqueShops).length > 0) viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
 }
+
+// ✏️ 編集モーダル用のマップ初期化
+function initEditMap(lat, lng) {
+  const defaultLat = lat || 43.0686;
+  const defaultLng = lng || 141.3508;
+
+  if (!window.editMap) {
+    window.editMap = L.map('editMap', { doubleClickZoom: false }).setView([defaultLat, defaultLng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(window.editMap);
+    window.editMarker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(window.editMap);
+  } else {
+    window.editMap.setView([defaultLat, defaultLng], 15);
+    window.editMarker.setLatLng([defaultLat, defaultLng]);
+  }
+
+  // 0.2秒遅らせてマップのサイズを再計算（モーダル内で地図がバグらないようにする魔法）
+  setTimeout(() => { window.editMap.invalidateSize(); }, 200);
+}
