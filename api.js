@@ -13,23 +13,25 @@ async function fetchTemperature(lat, lng) {
 
 // 全ての日記データをWorkerから取得して整頓する
 function fetchAndStoreAllDiaries() {
-  fetch(`${CLOUDFLARE_WORKER_URL}?query=`).then(res => res.json()).then(data => {
-    if (data.success) {
-      globalDiaries = data.data.map(diary => {
-        let currentTags = parseTags(diary.tags);
-        
-        // ※カテゴリ（業態）タグが存在しない大昔のデータに対する救済措置だけは残す
-        const hasCategory = currentTags.some(t => t.includes('🏢') || t.includes('🔥') || t.includes('🎪') || t.includes('🍸') || t.includes('🍰') || t.includes('🍵'));
-        if (!hasCategory && !currentTags.includes('💭') && !currentTags.includes('📦未整理')) {
-          currentTags.splice(1, 0, '🏢喫茶・カフェ'); 
-        }
+  // ★ URLの末尾に `&_t=${Date.now()}` を追加して、強制的に最新データを取得させる！
+  fetch(`${CLOUDFLARE_WORKER_URL}?query=&_t=${Date.now()}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        globalDiaries = data.data.map(diary => {
+          let currentTags = parseTags(diary.tags);
+          
+          const hasCategory = currentTags.some(t => t.includes('🏢') || t.includes('🔥') || t.includes('🎪') || t.includes('🍸') || t.includes('🍰') || t.includes('🍵'));
+          if (!hasCategory && !currentTags.includes('💭') && !currentTags.includes('📦未整理')) {
+            currentTags.splice(1, 0, '🏢喫茶・カフェ'); 
+          }
 
-        diary.tags = currentTags.join(', ');
-        return diary;
-      });
-      applyFilters();
-    }
-  });
+          diary.tags = currentTags.join(', ');
+          return diary;
+        });
+        applyFilters();
+      }
+    });
 }
 
 // データをCloudflare Workerへ送信して保存する
