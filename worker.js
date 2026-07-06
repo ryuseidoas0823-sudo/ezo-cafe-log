@@ -57,38 +57,36 @@ export default {
       if (request.method === "POST") {
         const data = await request.json();
         
-        // データの足取りをログに出力（デバッグ用）
-        console.log("保存要求を受信:", data.shopName, "天気:", data.weatherIcon);
+        let targetImageUrl = data.imageUrl || null;
+        let targetBase64 = data.imageBase64 || null;
 
-        // 位置情報や気温が送られてこない（null）場合でも、エラーにせずデータベースに流し込む
+        if (targetBase64 && targetBase64.startsWith("data:image")) {
+          targetImageUrl = await uploadToConoHa(targetBase64, env);
+          targetBase64 = null;
+        }
+
         const lat = data.latitude !== undefined ? data.latitude : null;
         const lng = data.longitude !== undefined ? data.longitude : null;
         const temp = data.temperature !== undefined ? data.temperature : null;
         
-        // 写真の撮影日時（visitedAt）があればそれを使う。なければ現在のシステム時刻
-        const createdAt = data.visitedAt || new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+        // ★ 役割を明確に分離
+        const now = new Date();
+        const createdSystemAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        const visitedAt = data.visitedAt || createdSystemAt; // 訪問日（指定がなければ現在時刻）
 
         const info = await env.DB.prepare(
-          `INSERT INTO diaries (shop_id, shop_name, comment, latitude, longitude, image_base64, tags, weather_icon, temperature, user_gender, user_age, created_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO diaries (shop_id, shop_name, comment, latitude, longitude, image_base64, image_url, tags, weather_icon, temperature, user_gender, user_age, visited_at, created_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).bind(
-          data.shopId || null,
-          data.shopName || "名前なしの店舗",
-          data.comment || "",
-          lat,
-          lng,
-          data.imageBase64 || null,
-          data.tags || "",
-          data.weatherIcon || "❓",
-          temp,
-          data.userGender || "未設定",
-          data.userAge || "未設定",
-          createdAt
+          data.shopId || null, data.shopName || "名前なしの店舗", data.comment || "", lat, lng,
+          targetBase64, targetImageUrl, 
+          data.tags || "", data.weatherIcon || "❓", temp, data.userGender || "未設定", data.userAge || "未設定", 
+          visitedAt, createdSystemAt // ★ カラムへの紐付け
         ).run();
 
         return new Response(JSON.stringify({ success: true, id: info.meta.last_row_id }), { headers });
       }
-
+      
       // --------------------------------------------------------
       // ✏️ 【PUT】既存データの編集・上書き
       // --------------------------------------------------------

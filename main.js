@@ -688,3 +688,168 @@ function renderAnalytics() {
   charts.weather = new Chart(document.getElementById('chartWeather').getContext('2d'), { type: 'bar', data: { labels: ['☀️ 晴れ', '☁️ 曇り', '☔️ 雨', '❄️ 雪'], datasets: [{ label: '記録数', data: [weatherCounts['☀️'], weatherCounts['☁️'], weatherCounts['☔️'], weatherCounts['❄️']], backgroundColor: ['#f1c40f', '#95a5a6', '#3498db', '#ecf0f1'], borderColor: '#bdc3c7', borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
   charts.time = new Chart(document.getElementById('chartTime').getContext('2d'), { type: 'line', data: { labels: Object.keys(timeCounts), datasets: [{ label: '訪問回数', data: Object.values(timeCounts), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
 }
+
+// ==========================================
+// 🚀 新設：サブタブ制御 ＆ 年月アーカイブ ＆ 自作カレンダーロジック
+// ==========================================
+let currentCalYear = new Date().getFullYear();
+let currentCalMonth = new Date().getMonth() + 1; 
+let activeSubTab = 'list';
+
+window.switchSubTab = function(subTabId) {
+  activeSubTab = subTabId;
+  const listBtn = document.getElementById('subTabListBtn');
+  const calBtn = document.getElementById('subTabCalendarBtn');
+  const listView = document.getElementById('subViewList');
+  const calView = document.getElementById('subViewCalendar');
+  
+  if (subTabId === 'list') {
+    listBtn.style.background = "#2c3e50"; listBtn.style.color = "white";
+    calBtn.style.background = "none"; calBtn.style.color = "#7f8c8d";
+    listView.style.display = "block"; calView.style.display = "none";
+    applyFilters();
+  } else {
+    calBtn.style.background = "#2c3e50"; calBtn.style.color = "white";
+    listBtn.style.background = "none"; listBtn.style.color = "#7f8c8d";
+    listView.style.display = "none"; calView.style.display = "block";
+    renderCalendar();
+  }
+};
+
+// 重複のない「年月一覧」を抽出してプルダウンを自動生成する魔法の関数
+function updateArchiveMonthDropdown() {
+  const select = document.getElementById('archiveMonthSelect');
+  if (!select) return;
+  const currentSelection = select.value;
+  select.innerHTML = '<option value="">⏳ 全ての月</option>';
+
+  const months = new Set();
+  globalDiaries.forEach(d => {
+    const dateStr = d.visited_at || d.created_at;
+    if (dateStr && dateStr.length >= 7) {
+      months.add(dateStr.substring(0, 7)); // "2026-07" の形式で抽出
+    }
+  });
+
+  // 新しい順にソートしてセレクトボックスに突っ込む
+  Array.from(months).sort().reverse().forEach(m => {
+    const [y, mm] = m.split('-');
+    select.innerHTML += `<option value="${m}">${y}年${mm}月</option>`;
+  });
+  select.value = currentSelection;
+}
+
+// 履歴リストのフィルタリングを「アーカイブ月」対応に強化
+const originalApplyFilters = applyFilters;
+applyFilters = function() {
+  const query = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase() : "";
+  const archiveMonth = document.getElementById('archiveMonthSelect') ? document.getElementById('archiveMonthSelect').value : "";
+  
+  const filtered = globalDiaries.filter(diary => {
+    const safeShopName = diary.shop_name || ""; 
+    const matchSearch = safeShopName.toLowerCase().includes(query) || (diary.comment && diary.comment.toLowerCase().includes(query));
+    const matchTag = activeTagFilter === "" ? true : (diary.tags && diary.tags.includes(activeTagFilter));
+    
+    // アーカイブ選択時の日付判定（visited_atを優先）
+    const targetDate = diary.visited_at || diary.created_at || "";
+    const matchArchive = archiveMonth === "" ? true : targetDate.startsWith(archiveMonth);
+
+    return matchSearch && matchTag && matchArchive;
+  });
+  
+  updateArchiveMonthDropdown();
+  renderTagClouds(); 
+  renderDiariesList(filtered); 
+  updateViewMarkers(filtered);
+};
+
+// カレンダーの月切り替え
+window.changeCalendarMonth = function(offset) {
+  currentCalMonth += offset;
+  if (currentCalMonth > 12) { currentCalMonth = 1; currentCalYear++; }
+  if (currentCalMonth < 1) { currentCalMonth = 12; currentCalYear--; }
+  renderCalendar();
+};
+
+// 超軽量カレンダーレンダラー
+function renderCalendar() {
+  document.getElementById('calendarMonthTitle').innerText = `${currentCalYear}年 ${currentCalMonth}月`;
+  const grid = document.getElementById('calendarGrid');
+  grid.innerHTML = "";
+
+  // 曜日ヘッダー
+  const weeks = ['日', '月', '火', '水', '木', '金', '土'];
+  weeks.forEach(w => { grid.innerHTML += `<div class="calendar-header-cell">${w}</div>`; });
+
+  const firstDayIndex = new Date(currentCalYear, currentCalMonth - 1, 1).getDay();
+  const totalDays = new Date(currentCalYear, currentCalMonth, 0).getDate();
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // 1日までの空白を埋める
+  for (let i = 0; i < firstDayIndex; i++) { grid.innerHTML += `<div class="calendar-day-cell calendar-day-empty"></div>`; }
+
+  // 日付マスを1個ずつ生成
+  for (let day = 1; day <= totalDays; day++) {
+    const currentFullDate = `${currentCalYear}-${String(currentCalMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    
+    // その日に該当する日記（訪問日）を探す（未整理・ブックマークは除外）
+    const dayDiaries = globalDiaries.filter(d => {
+      const dStr = d.visited_at || d.created_at || "";
+      return dStr.startsWith(currentFullDate) && d.weather_icon !== "📦" && d.weather_icon !== "💭";
+    });
+
+    const isToday = currentFullDate === todayStr ? 'calendar-day-today' : '';
+    const hasVisit = dayDiaries.length > 0 ? 'calendar-day-has-visit' : '';
+    const cafeEmoji = dayDiaries.length > 0 ? `<div class="calendar-cafe-dot">☕️</div>` : '';
+
+    grid.innerHTML += `
+      <div class="calendar-day-cell ${isToday} ${hasVisit}" onclick="showCalendarDayDiaries('${currentFullDate}')">
+        <div class="calendar-day-num">${day}</div>
+        ${cafeEmoji}
+      </div>`;
+  }
+  document.getElementById('calendarSelectionResult').innerHTML = "";
+}
+
+// カレンダーの日付タップ時に、その日の日記リストをサッと下に引き出す処理
+window.showCalendarDayDiaries = function(dateStr) {
+  const dayDiaries = globalDiaries.filter(d => {
+    const dStr = d.visited_at || d.created_at || "";
+    return dStr.startsWith(dateStr);
+  });
+
+  const resultDiv = document.getElementById('calendarSelectionResult');
+  if (dayDiaries.length === 0) {
+    resultDiv.innerHTML = `<p style="text-align:center; color:#7f8c8d; margin-top:15px;">📅 ${dateStr} の記録はありません</p>`;
+    return;
+  }
+
+  // リスト描画ロジックを流用して、選んだ日のカードを表示
+  let html = `<h4 style="color:#2c3e50; margin: 15px 0 10px; border-left: 4px solid #e74c3c; padding-left: 8px;">📋 ${dateStr} の記録 (${dayDiaries.length}件)</h4>`;
+  
+  // renderDiariesListの文字列組み立てロジックを一時流用
+  dayDiaries.forEach(diary => {
+    let tagsHTML = "";
+    parseTags(diary.tags).forEach(tag => { tagsHTML += `<span class="tag-badge" style="background-color: ${getColorFromTag(tag)};">${escapeHTML(tag)}</span>`; });
+    const isBookmark = diary.weather_icon === "💭"; const isDraft = diary.weather_icon === "📦"; 
+    const cardBg = isDraft ? "background: #f4f6f7; border: 2px dashed #7f8c8d;" : (isBookmark ? "background: #fdf2e9; border: 2px dashed #e67e22;" : "background: white;");
+    let weatherStr = (!isBookmark && !isDraft && diary.weather_icon && diary.weather_icon !== "❓") ? `${diary.weather_icon} ${diary.temperature ? diary.temperature+'℃' : ''}` : '';
+    let mapLinkBtn = (diary.latitude && diary.longitude && !isDraft) ? `<a href="http://googleusercontent.com/maps.google.com/?q=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none;">🗺️ 行き方</a>` : "";
+    let imageTag = diary.image_url ? `<img src="${diary.image_url}" loading="lazy" alt="写真">` : (diary.image_base64 ? `<img src="${diary.image_base64}" loading="lazy" alt="写真">` : '');
+
+    html += `
+      <div class="card" style="${cardBg}">
+        <div class="card-title">${isDraft ? '📦 ' : (isBookmark ? '💭 ' : '')}${escapeHTML(diary.shop_name)}</div>
+        <div class="card-meta">🕒 ${diary.created_at}   ${weatherStr}</div>
+        <div style="margin-bottom:10px;">${tagsHTML}</div>
+        ${imageTag}
+        <div class="card-comment">${escapeHTML(diary.comment || "")}</div>
+        <div class="card-actions">
+          ${mapLinkBtn}
+          <button class="action-btn" onclick="openEditModal('${diary.id}')">✏️ 編集</button>
+          <button class="action-btn" onclick="deleteDiary('${diary.id}')">🗑️ 削除</button>
+        </div>
+      </div>`;
+  });
+  resultDiv.innerHTML = html;
+};

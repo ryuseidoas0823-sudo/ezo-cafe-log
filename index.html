@@ -114,9 +114,33 @@
     </div>
 
     <div id="view" class="content">
-      <input type="text" id="searchInput" placeholder="店名や感想で検索..." oninput="applyFilters()">
-      <div id="tagCloudView" class="tag-cloud"></div>
-      <div id="diaryList"></div>
+      <div style="display: flex; margin-bottom: 15px; background: #e2e8f0; padding: 4px; border-radius: 8px;">
+        <button id="subTabListBtn" onclick="switchSubTab('list')" style="flex:1; margin-bottom:0; padding: 10px; font-size: 0.9rem; background: #2c3e50; color: white;">📋 最新の記録 (リスト)</button>
+        <button id="subTabCalendarBtn" onclick="switchSubTab('calendar')" style="flex:1; margin-bottom:0; padding: 10px; font-size: 0.9rem; background: none; color: #7f8c8d;">📅 過去の記録 (カレンダー)</button>
+      </div>
+
+      <div id="subViewList">
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+          <input type="text" id="searchInput" placeholder="店名や感想で検索..." oninput="applyFilters()" style="margin-bottom:0; flex: 2;">
+          <select id="archiveMonthSelect" onchange="applyFilters()" style="margin-bottom:0; flex: 1; padding: 10px; font-weight: bold; color: #2c3e50; border-radius: 8px;">
+            <option value="">⏳ 全ての月</option>
+          </select>
+        </div>
+        <div id="tagCloudView" class="tag-cloud"></div>
+        <div id="diaryList"></div>
+      </div>
+
+      <div id="subViewCalendar" style="display: none;">
+        <div class="dashboard-card" style="padding: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <button onclick="changeCalendarMonth(-1)" style="width: auto; padding: 8px 15px; margin-bottom: 0; background: #7f8c8d;">◀</button>
+            <h3 id="calendarMonthTitle" style="margin: 0; border: none; padding: 0;">2026年 72月</h3>
+            <button onclick="changeCalendarMonth(1)" style="width: auto; padding: 8px 15px; margin-bottom: 0; background: #7f8c8d;">▶</button>
+          </div>
+          <div id="calendarGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center;"></div>
+        </div>
+        <div id="calendarSelectionResult"></div>
+      </div>
     </div>
 
     <div id="mapTab" class="content">
