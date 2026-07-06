@@ -2,27 +2,28 @@
 // 🧠 main.js (全体の司令塔・UI制御・描画処理)
 // ==========================================
 
-const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; // ★ あなたのWorker URLをここに！
+const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; // ←ここはそのまま！
 const HOME_LAT = 43.0620958;
 const HOME_LNG = 141.3543763;
 const SAFE_DISTANCE_METERS = 20;
 
-let activeTagFilter = ""; 
-let viewMap;                  
-let pickerMap;      
-let pickerMarker;   
-let selectedImageBase64 = null; 
-let selectedImageUrl = null; 
-let selectedDatetime = null;
-let currentRecordMode = 'manual';
-let selectedMasterShop = null; 
-let searchTimeout = null;      
-let globalDiaries = []; 
-let charts = {};        
-let draftIdToUpgrade = null; 
-let currentCalYear = new Date().getFullYear();
-let currentCalMonth = new Date().getMonth() + 1; 
-let activeSubTab = 'list';
+// ★ ここから下の let をすべて var に変更して、ファイル間の壁をなくします
+var activeTagFilter = ""; 
+var viewMap;                  
+var pickerMap;      
+var pickerMarker;   
+var selectedImageBase64 = null; 
+var selectedImageUrl = null; 
+var selectedDatetime = null;
+var currentRecordMode = 'manual';
+var selectedMasterShop = null; 
+var searchTimeout = null;      
+var globalDiaries = []; 
+var charts = {};        
+var draftIdToUpgrade = null; 
+var currentCalYear = new Date().getFullYear();
+var currentCalMonth = new Date().getMonth() + 1; 
+var activeSubTab = 'list';
 
 window.onload = function() {
   loadSettings();
