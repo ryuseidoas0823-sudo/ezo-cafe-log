@@ -2,8 +2,7 @@
 // 🧠 main.js (全体の司令塔・UI制御・描画処理)
 // ==========================================
 
-// 1. 初期設定・グローバル変数（すべてのファイルからアクセス可能）
-const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; // ★ あなたのWorker URLをここに！
+const CLOUDFLARE_WORKER_URL = ""; // ★ あなたのWorker URLをここに！
 const HOME_LAT = 43.0620958;
 const HOME_LNG = 141.3543763;
 const SAFE_DISTANCE_METERS = 20;
@@ -25,16 +24,12 @@ let currentCalYear = new Date().getFullYear();
 let currentCalMonth = new Date().getMonth() + 1; 
 let activeSubTab = 'list';
 
-// アプリ起動時の初期化
 window.onload = function() {
   loadSettings();
   fetchAndStoreAllDiaries();
   setupHidePinsButtons();
 };
 
-// ==========================================
-// タブ・UI切り替え制御
-// ==========================================
 function switchTab(tabId) {
   document.querySelectorAll('.content, .tab').forEach(el => el.classList.remove('active'));
   document.getElementById(tabId).classList.add('active');
@@ -68,9 +63,6 @@ window.switchSubTab = function(subTabId) {
   }
 };
 
-// ==========================================
-// 写真選択・画像処理ロジック
-// ==========================================
 function startNoPhotoRecord() {
   if (!localStorage.getItem('ezo_gender') || !localStorage.getItem('ezo_age')) {
     alert("📊 先に「設定」タブで登録してください。"); switchTab('settings'); return;
@@ -188,9 +180,6 @@ async function processAndUploadDraft(file) {
   });
 }
 
-// ==========================================
-// 記録の保存・編集・削除トリガー
-// ==========================================
 async function submitDiary() {
   let finalShopName = document.getElementById('shopNameInput').value;
   if (!finalShopName) { alert("店名を入力してください！"); return; }
@@ -277,7 +266,12 @@ window.upgradeDraftToRecord = function(id) {
    const diary = globalDiaries.find(d => String(d.id) === String(id));
    if (!diary) return;
    switchTab('record');
-   currentRecordMode = 'manual'; selectedDatetime = diary.created_at; selectedImageBase64 = diary.image_base64; selectedImageUrl = diary.image_url; draftIdToUpgrade = diary.id; 
+   
+   currentRecordMode = 'manual'; 
+   selectedDatetime = diary.visited_at || diary.created_at; // ★ 未整理からの昇格時にも撮影日を引き継ぐ
+   selectedImageBase64 = diary.image_base64; 
+   selectedImageUrl = diary.image_url; 
+   draftIdToUpgrade = diary.id; 
 
    const previewSrc = diary.image_url || diary.image_base64;
    if (previewSrc) {
@@ -329,6 +323,7 @@ function checkSmartSuggest(lat, lng) {
 
 window.applySmartSuggest = function(shopName) { document.getElementById('shopNameInput').value = shopName; searchMasterShop(); };
 function toggleTagFilter(tag) { activeTagFilter = (activeTagFilter === tag) ? "" : tag; applyFilters(); }
+
 function resetRecordTab() {
   document.getElementById('step1').style.display = "block"; document.getElementById('step2').style.display = "none";
   document.getElementById('previewImg').style.display = "none"; document.getElementById('smartSuggestArea').style.display = "none";
@@ -340,9 +335,6 @@ function resetRecordTab() {
   document.getElementById('submitBtn').disabled = false;
 }
 
-// ==========================================
-// フィルタリング・画面レンダリング処理
-// ==========================================
 function applyFilters() {
   const query = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase() : "";
   const archiveMonth = document.getElementById('archiveMonthSelect') ? document.getElementById('archiveMonthSelect').value : "";
@@ -380,10 +372,13 @@ function renderDiariesList(diaries) {
     let mapLinkBtn = (diary.latitude && diary.longitude && !isDraft) ? `<a href="http://googleusercontent.com/maps.google.com/?q=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none;">🗺️ 行き方</a>` : "";
     let imageTag = diary.image_url ? `<img src="${diary.image_url}" loading="lazy" alt="写真">` : (diary.image_base64 ? `<img src="${diary.image_base64}" loading="lazy" alt="写真">` : '');
 
+    // ★ 修正：画面上に表示するテキストを「撮影日」優先に変更
+    const displayDate = diary.visited_at || diary.created_at || "不明";
+
     html += `
       <div class="card" style="${cardBg}">
         <div class="card-title">${isDraft ? '📦 ' : (isBookmark ? '💭 ' : '')}${escapeHTML(diary.shop_name)}</div>
-        <div class="card-meta">🕒 ${diary.created_at}   ${weatherStr}</div>
+        <div class="card-meta">🕒 ${displayDate}   ${weatherStr}</div>
         <div style="margin-bottom:10px;">${tagsHTML}</div>
         ${imageTag}
         <div class="card-comment">${escapeHTML(diary.comment || "")}</div>
@@ -426,9 +421,6 @@ function updateArchiveMonthDropdown() {
   select.value = currentSelection;
 }
 
-// ==========================================
-// カレンダー＆アナリティクス描画
-// ==========================================
 window.changeCalendarMonth = function(offset) {
   currentCalMonth += offset;
   if (currentCalMonth > 12) { currentCalMonth = 1; currentCalYear++; }
@@ -446,7 +438,6 @@ function renderCalendar() {
   const totalDays = new Date(currentCalYear, currentCalMonth, 0).getDate();
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // ★ 追加：プルダウンの選択状態を取得する（デフォルトは撮影日）
   const dateModeSelect = document.getElementById('calendarDateMode');
   const dateMode = dateModeSelect ? dateModeSelect.value : 'visited';
 
@@ -456,7 +447,6 @@ function renderCalendar() {
     const currentFullDate = `${currentCalYear}-${String(currentCalMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
     const dayDiaries = globalDiaries.filter(d => {
-      // ★ 追加：選択されたモードによって参照する日付（カラム）を切り替える
       const targetDateStr = dateMode === 'visited' ? (d.visited_at || d.created_at || "") : (d.created_at || "");
       return targetDateStr.startsWith(currentFullDate) && d.weather_icon !== "📦" && d.weather_icon !== "💭";
     });
@@ -475,7 +465,6 @@ function renderCalendar() {
 }
 
 window.showCalendarDayDiaries = function(dateStr) {
-  // ★ 追加：日記を下に引き出す時も、プルダウンの状態に合わせて抽出する
   const dateModeSelect = document.getElementById('calendarDateMode');
   const dateMode = dateModeSelect ? dateModeSelect.value : 'visited';
 
@@ -497,10 +486,13 @@ window.showCalendarDayDiaries = function(dateStr) {
     let mapLinkBtn = (diary.latitude && diary.longitude && !isDraft) ? `<a href="http://googleusercontent.com/maps.google.com/?q=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none;">🗺️ 行き方</a>` : "";
     let imageTag = diary.image_url ? `<img src="${diary.image_url}" loading="lazy" alt="写真">` : (diary.image_base64 ? `<img src="${diary.image_base64}" loading="lazy" alt="写真">` : '');
 
+    // ★ 修正：カレンダー下の展開リストでも「撮影日」優先で表示
+    const displayDate = diary.visited_at || diary.created_at || "不明";
+
     html += `
       <div class="card" style="${cardBg}">
         <div class="card-title">${isDraft ? '📦 ' : (isBookmark ? '💭 ' : '')}${escapeHTML(diary.shop_name)}</div>
-        <div class="card-meta">🕒 ${diary.created_at}   ${weatherStr}</div>
+        <div class="card-meta">🕒 ${displayDate}   ${weatherStr}</div>
         <div style="margin-bottom:10px;">${tagsHTML}</div>
         ${imageTag}
         <div class="card-comment">${escapeHTML(diary.comment || "")}</div>
@@ -562,9 +554,6 @@ function renderAnalytics() {
   charts.time = new Chart(document.getElementById('chartTime').getContext('2d'), { type: 'line', data: { labels: Object.keys(timeCounts), datasets: [{ label: '訪問回数', data: Object.values(timeCounts), borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
 }
 
-// ==========================================
-// アカウント設定・ローカルストレージ
-// ==========================================
 function loadSettings() {
   const g = localStorage.getItem('ezo_gender'); const a = localStorage.getItem('ezo_age');
   if (g) document.getElementById('settingGender').value = g;

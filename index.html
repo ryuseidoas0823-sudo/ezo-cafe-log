@@ -135,7 +135,6 @@
 
       <div id="subViewCalendar" style="display: none;">
         <div class="dashboard-card" style="padding: 10px;">
-          
           <div style="text-align: center; margin-bottom: 15px; background: #fdfefe; padding: 8px; border-radius: 8px; border: 1px dashed #bdc3c7;">
             <span style="font-size: 0.85rem; font-weight: bold; color: #7f8c8d; margin-right: 5px;">🔍 基準日:</span>
             <select id="calendarDateMode" onchange="renderCalendar()" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #bdc3c7; background: white; font-weight: bold; color: #2c3e50; width: auto; font-size: 0.9rem;">
@@ -143,16 +142,16 @@
               <option value="created">📝 アプリ記録日で探す</option>
             </select>
           </div>
-
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <button onclick="changeCalendarMonth(-1)" style="width: auto; padding: 8px 15px; margin-bottom: 0; background: #7f8c8d;">◀</button>
-            <h3 id="calendarMonthTitle" style="margin: 0; border: none; padding: 0;">2026年 7月</h3>
+            <h3 id="calendarMonthTitle" style="margin: 0; border: none; padding: 0;"></h3>
             <button onclick="changeCalendarMonth(1)" style="width: auto; padding: 8px 15px; margin-bottom: 0; background: #7f8c8d;">▶</button>
           </div>
           <div id="calendarGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center;"></div>
         </div>
         <div id="calendarSelectionResult"></div>
       </div>
+    </div>
 
     <div id="mapTab" class="content">
       <div id="tagCloudMap" class="tag-cloud"></div>
@@ -167,9 +166,7 @@
       
       <div class="dashboard-card" style="background: linear-gradient(to bottom right, #ffffff, #fdfefe);">
         <h3 style="border-bottom: 2px solid #f1c40f;">🏆 獲得称号バッジ</h3>
-        <div id="badgeContainer" style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 10px 0;">
-          <p style="color: #7f8c8d; font-size: 0.9rem;">カフェを記録してバッジを集めよう！</p>
-        </div>
+        <div id="badgeContainer" style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 10px 0;"></div>
       </div>
 
       <div class="stat-grid">
