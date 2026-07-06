@@ -86,7 +86,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
     const popupHtml = `
       <div style="text-align:center; min-width: 150px;">
         <p style="margin: 0 0 10px; font-weight:bold; font-size:1rem; color:#2c3e50;">${escapeHTML(shop.shopName)}</p>
-        <button onclick="openEditModal('${shop.latestId}')" style="background:#3498db; color:white; border:none; padding:8px 15px; border-radius:4px; font-weight:bold; cursor:pointer; width: 100%;">📍 情報を編集する</button>
+        <button onclick="openEditModal('${shop.latestId}', 'location')" style="background:#3498db; color:white; border:none; padding:8px 15px; border-radius:4px; font-weight:bold; cursor:pointer; width: 100%;">📍 位置を修正する</button>
       </div>
     `;
     marker.bindPopup(popupHtml);

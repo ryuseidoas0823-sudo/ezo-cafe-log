@@ -220,7 +220,7 @@ window.deleteDiary = function(id) {
   fetch(`${CLOUDFLARE_WORKER_URL}?id=${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => { if (data.success) fetchAndStoreAllDiaries(); });
 };
 
-window.openEditModal = function(id) {
+window.openEditModal = function(id, mode = 'full') {
   const diary = globalDiaries.find(d => String(d.id) === String(id));
   if (!diary) return;
 
@@ -244,9 +244,17 @@ window.openEditModal = function(id) {
   const wRadios = document.getElementsByName('editWeather');
   for(let r of wRadios) { if(r.value === diary.weather_icon) r.checked = true; }
 
-  // ★ 追加：位置情報の編集準備
   document.getElementById('editNoLocationCheck').checked = (!diary.latitude || !diary.longitude);
   initEditMap(diary.latitude, diary.longitude);
+
+  // ★ 追加：モードによって表示を切り替える
+  if (mode === 'location') {
+    document.getElementById('editModalTitle').innerText = "📍 位置情報の修正";
+    document.getElementById('editDiaryFields').style.display = "none";
+  } else {
+    document.getElementById('editModalTitle').innerText = "✏️ 記録の編集";
+    document.getElementById('editDiaryFields').style.display = "block";
+  }
 
   document.getElementById('editModal').style.display = "flex";
 };

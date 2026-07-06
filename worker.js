@@ -1,112 +1,124 @@
+// ==========================================
+// ☁️ worker.js (Cloudflare Worker バックエンド)
+// ==========================================
+
 export default {
-  async fetch(request, env) {
-    // 1. スマホアプリ（フロントエンド）からの通信を許可する設定（CORS）
-    const headers = {
+  async fetch(request, env, ctx) {
+    // 🌐 CORS設定（どのURLからでもアクセスを許可する）
+    const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     };
 
-    // 事前通信（OPTIONS）への即座の応答
+    // ブラウザの事前確認（プリフライトリクエスト）への対応
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers });
+      return new Response(null, { headers: corsHeaders });
     }
 
     const url = new URL(request.url);
+    const action = url.searchParams.get("action");
+    const query = url.searchParams.get("query");
+    const id = url.searchParams.get("id");
 
     try {
-      // --------------------------------------------------------
-      // 💾 【DELETE】データの削除（未整理からの昇格時・通常削除時）
-      // --------------------------------------------------------
-      if (request.method === "DELETE") {
-        const id = url.searchParams.get("id");
-        if (!id) {
-          return new Response(JSON.stringify({ success: false, error: "IDが指定されていません" }), { headers, status: 400 });
-        }
-        
-        // D1データベースから該当のレコードを削除
-        await env.DB.prepare("DELETE FROM diaries WHERE id = ?").bind(id).run();
-        return new Response(JSON.stringify({ success: true }), { headers });
-      }
-
-      // --------------------------------------------------------
-      // 🔍 【GET】データの取得（履歴一覧・公式マスター検索）
-      // --------------------------------------------------------
+      // ==============================
+      // 🔍 GET: データの取得・マスター検索
+      // ==============================
       if (request.method === "GET") {
-        const action = url.searchParams.get("action");
-        
-        // 公式マスターデータの検索アクション
+        // ① カフェの公式名簿（サジェスト）を検索する処理
         if (action === "search_master") {
-          const query = url.searchParams.get("query") || "";
-          const result = await env.DB.prepare(
-            "SELECT * FROM shops_master WHERE shop_name LIKE ? LIMIT 5"
-          ).bind(`%${query}%`).all();
-          return new Response(JSON.stringify({ success: true, data: result.results }), { headers });
+          const q = `%${query}%`;
+          const { results } = await env.DB.prepare("SELECT * FROM shops_master WHERE shop_name LIKE ? LIMIT 5").bind(q).all();
+          return new Response(JSON.stringify({ success: true, data: results }), { headers: corsHeaders });
         }
 
-        // 通常の日記履歴の取得（新しい順）
-        const result = await env.DB.prepare(
-          "SELECT * FROM diaries ORDER BY created_at DESC"
-        ).all();
-        return new Response(JSON.stringify({ success: true, data: result.results }), { headers });
+        // ② 自分の過去の記録（日記）を全件取得する処理
+        const { results } = await env.DB.prepare("SELECT * FROM diaries ORDER BY created_at DESC").all();
+        return new Response(JSON.stringify({ success: true, data: results }), { headers: corsHeaders });
       }
 
-      // --------------------------------------------------------
-      // 🚀 【POST】新しく記録する（未整理ボックスの一括保存もここを通過）
-      // --------------------------------------------------------
+      // ==============================
+      // 📝 POST: 新しい記録の保存
+      // ==============================
       if (request.method === "POST") {
         const data = await request.json();
-        
+
         let targetImageUrl = data.imageUrl || null;
         let targetBase64 = data.imageBase64 || null;
 
-        if (targetBase64 && targetBase64.startsWith("data:image")) {
-          targetImageUrl = await uploadToConoHa(targetBase64, env);
-          targetBase64 = null;
-        }
+        // ※将来的にここにConoHa連携の関数を組み込みます
+        // if (targetBase64 && targetBase64.startsWith("data:image")) {
+        //   targetImageUrl = await uploadToConoHa(targetBase64, env);
+        //   targetBase64 = null;
+        // }
 
         const lat = data.latitude !== undefined ? data.latitude : null;
         const lng = data.longitude !== undefined ? data.longitude : null;
         const temp = data.temperature !== undefined ? data.temperature : null;
-        
-        // ★ 役割を明確に分離
-        const now = new Date();
-        const createdSystemAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-        const visitedAt = data.visitedAt || createdSystemAt; // 訪問日（指定がなければ現在時刻）
 
+        // 🕒 時間を確実に日本時間（JST）にする処理
+        const now = new Date(Date.now() + 9 * 60 * 60 * 1000); 
+        const createdSystemAt = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')} ${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')}`;
+        
+        // 訪問日の指定がなければ、システム登録日を訪問日とする
+        const visitedAt = data.visitedAt || createdSystemAt; 
+
+        // データベース（D1）に保存
         const info = await env.DB.prepare(
           `INSERT INTO diaries (shop_id, shop_name, comment, latitude, longitude, image_base64, image_url, tags, weather_icon, temperature, user_gender, user_age, visited_at, created_at) 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).bind(
-          data.shopId || null, data.shopName || "名前なしの店舗", data.comment || "", lat, lng,
+          data.shopId || null, 
+          data.shopName || "名前なしの店舗", 
+          data.comment || "", 
+          lat, lng,
           targetBase64, targetImageUrl, 
-          data.tags || "", data.weatherIcon || "❓", temp, data.userGender || "未設定", data.userAge || "未設定", 
-          visitedAt, createdSystemAt // ★ カラムへの紐付け
+          data.tags || "", 
+          data.weatherIcon || "❓", 
+          temp, 
+          data.userGender || "未設定", 
+          data.userAge || "未設定", 
+          visitedAt, 
+          createdSystemAt
         ).run();
 
-        return new Response(JSON.stringify({ success: true, id: info.meta.last_row_id }), { headers });
+        return new Response(JSON.stringify({ success: true, id: info.meta.last_row_id }), { headers: corsHeaders });
       }
-      
-      // --------------------------------------------------------
-      // ✏️ 【PUT】既存データの編集・上書き
-      // --------------------------------------------------------
+
+      // ==============================
+      // ✏️ PUT: 既存の記録の編集・更新
+      // ==============================
       if (request.method === "PUT") {
         const data = await request.json();
-        // ★ 緯度・経度の更新データを受け取るように追加
+        
+        // 緯度・経度の更新データを受け取る（マップからの修正機能）
         const lat = data.latitude !== undefined ? data.latitude : null;
         const lng = data.longitude !== undefined ? data.longitude : null;
         
         await env.DB.prepare("UPDATE diaries SET shop_name = ?, tags = ?, comment = ?, weather_icon = ?, latitude = ?, longitude = ? WHERE id = ?")
           .bind(data.shopName, data.tags, data.comment, data.weatherIcon, lat, lng, data.id).run();
-        return new Response(JSON.stringify({ success: true }), { headers });
+          
+        return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       }
 
-      return new Response(JSON.stringify({ success: false, error: "許可されていないメソッドです" }), { headers, status: 405 });
+      // ==============================
+      // 🗑️ DELETE: 記録の削除
+      // ==============================
+      if (request.method === "DELETE") {
+        await env.DB.prepare("DELETE FROM diaries WHERE id = ?").bind(id).run();
+        return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+      }
 
-    } catch (err) {
-      // 万が一バックエンドでエラーが起きた場合は、詳細をフロントに送り返す
-      console.error("システムエラー発生:", err.message);
-      return new Response(JSON.stringify({ success: false, error: err.message }), { headers, status: 500 });
+      // 上記以外のメソッド（PATCHなど）が来た場合のエラー処理
+      return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+
+    } catch (error) {
+      // データベースエラー等が起きた場合は詳細を返す
+      return new Response(JSON.stringify({ success: false, error: error.message }), {
+        status: 500,
+        headers: corsHeaders
+      });
     }
   }
 };
