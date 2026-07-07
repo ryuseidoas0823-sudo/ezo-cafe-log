@@ -601,3 +601,35 @@ function checkSettingsAndClick(inputId) {
   }
   document.getElementById(inputId).click();
 }
+
+// ==========================================
+// 👁️ マップのピン表示/非表示きりかえ機能
+// ==========================================
+window.setupHidePinsButtons = function() {
+  const togglePins = (btnId, mapContainerId) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.onclick = function(e) {
+      e.preventDefault();
+      // Leafletのピンやツールチップが入っている層（ペイン）を取得
+      const markerPane = document.querySelector(`#${mapContainerId} .leaflet-marker-pane`);
+      const tooltipPane = document.querySelector(`#${mapContainerId} .leaflet-tooltip-pane`);
+      const shadowPane = document.querySelector(`#${mapContainerId} .leaflet-shadow-pane`);
+      
+      if (markerPane) {
+        const isHidden = markerPane.style.display === 'none';
+        markerPane.style.display = isHidden ? 'block' : 'none';
+        if (tooltipPane) tooltipPane.style.display = isHidden ? 'block' : 'none';
+        if (shadowPane) shadowPane.style.display = isHidden ? 'block' : 'none';
+        
+        btn.innerText = isHidden ? '👁️ ピンを隠す' : '🙈 ピンを表示';
+        btn.style.backgroundColor = isHidden ? 'white' : '#e74c3c';
+        btn.style.color = isHidden ? '#2c3e50' : 'white';
+      }
+    };
+  };
+
+  // 記録画面のマップと、履歴画面のマップの両方に機能をセット
+  togglePins('hidePinsBtnPicker', 'pickerMap');
+  togglePins('hidePinsBtnView', 'mapView');
+};
