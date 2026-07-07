@@ -1,5 +1,5 @@
 // ==========================================
-// ☁️ worker.js (Cloudflare Worker バックエンド) - 強制同期版
+// ☁️ worker.js (Cloudflare Worker バックエンド) - 最終形態
 // ==========================================
 
 export default {
@@ -56,14 +56,22 @@ export default {
         const lat = data.latitude !== undefined ? data.latitude : null;
         const lng = data.longitude !== undefined ? data.longitude : null;
         
-        const currentDiary = await env.DB.prepare("SELECT shop_id, shop_name FROM diaries WHERE id = ?").bind(data.id).first();
+        // 🛡️ IDを強制的に「数字」に変換して、型違いの空振りを防ぐ！
+        const targetId = Number(data.id); 
+        
+        const currentDiary = await env.DB.prepare("SELECT shop_id, shop_name FROM diaries WHERE id = ?").bind(targetId).first();
         if (!currentDiary) return new Response(JSON.stringify({ success: false, error: "対象の記録が見つかりません" }), { headers: corsHeaders });
 
-        await env.DB.prepare("UPDATE diaries SET shop_name = ?, tags = ?, comment = ?, weather_icon = ?, latitude = ?, longitude = ? WHERE id = ?")
-          .bind(data.shopName, data.tags, data.comment, data.weatherIcon, lat, lng, data.id).run();
+        // 🛡️ 座標も含めたUPDATE文。info変数に「実際に更新された件数」が入る
+        const info = await env.DB.prepare("UPDATE diaries SET shop_name = ?, tags = ?, comment = ?, weather_icon = ?, latitude = ?, longitude = ? WHERE id = ?")
+          .bind(data.shopName, data.tags, data.comment, data.weatherIcon, lat, lng, targetId).run();
+          
+        // 🛡️ 嘘の「成功」を許さない。書き込みが0件ならエラーとして返す
+        if (info.meta.changes === 0) {
+           return new Response(JSON.stringify({ success: false, error: "データベースの書き込みが空振りしました（ID不一致）" }), { headers: corsHeaders });
+        }
           
         if (lat !== null && lng !== null) {
-          // ★修正ポイント：shop_idが明確に存在する場合以外は、すべて「店名」で強制的に一括同期する
           if (currentDiary.shop_id && currentDiary.shop_id !== "null" && currentDiary.shop_id !== "") {
             await env.DB.prepare("UPDATE diaries SET latitude = ?, longitude = ? WHERE shop_id = ?").bind(lat, lng, currentDiary.shop_id).run();
           } else {
