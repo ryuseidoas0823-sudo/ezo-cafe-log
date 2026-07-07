@@ -271,25 +271,47 @@ window.saveEditDiary = function() {
      updatedLng = pos.lng;
   }
 
-  // 🕵️‍♂️ 【特定用トラップ1】画面のマップから取得した座標を出力
-  console.log("🕵️‍♂️ [送信直前チェック] サーバーへ送る座標:", updatedLat, updatedLng);
+  const targetId = document.getElementById('editId').value;
+  const newShopName = document.getElementById('editShopName').value;
+  const newComment = document.getElementById('editComment').value;
 
   fetch(CLOUDFLARE_WORKER_URL, {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ 
-      id: document.getElementById('editId').value, shopName: document.getElementById('editShopName').value, 
-      tags: parseTags(combinedTags).join(', '), comment: document.getElementById('editComment').value, 
+      id: targetId, shopName: newShopName, 
+      tags: parseTags(combinedTags).join(', '), comment: newComment, 
       weatherIcon: document.querySelector('input[name="editWeather"]:checked').value,
       latitude: updatedLat, longitude: updatedLng 
     })
   }).then(res => res.json()).then(data => { 
     
-    // 🕵️‍♂️ 【特定用トラップ2】サーバーからの返事を出力
-    console.log("🕵️‍♂️ [サーバー応答]", data);
-    
     if(data.success) { 
+      // 🚀 【即時反映マジック】サーバーの遅延を無視して、手元のデータを書き換える！
+      const targetDiary = globalDiaries.find(d => String(d.id) === String(targetId));
+      if (targetDiary) {
+        targetDiary.latitude = updatedLat;
+        targetDiary.longitude = updatedLng;
+        targetDiary.shop_name = newShopName;
+        targetDiary.comment = newComment;
+      }
+
+      // 手元（メモリ上）でも、過去の同名店舗のピンを一括で同期させる
+      if (updatedLat !== null && updatedLng !== null) {
+        globalDiaries.forEach(d => {
+          if (d.shop_name === newShopName) {
+            d.latitude = updatedLat;
+            d.longitude = updatedLng;
+          }
+        });
+      }
+
+      // モーダルを閉じて、即座にマップとリストを再描画する
       document.getElementById('editModal').style.display = "none"; 
-      fetchAndStoreAllDiaries(); 
+      applyFilters(); 
+
+      // Cloudflareの共有（1〜2秒）が終わった頃に、裏でこっそり最新状態を取得し直す
+      setTimeout(() => { fetchAndStoreAllDiaries(); }, 2000);
+
     } else {
       alert("⚠️ サーバー側でエラーが発生しました。");
     }
