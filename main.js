@@ -2,7 +2,7 @@
 // 🧠 main.js (全体の司令塔・UI制御・描画処理)
 // ==========================================
 
-const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; // ★忘れずに！
+const CLOUDFLARE_WORKER_URL = "cafe-pipeline.ryusei-doas-0823.workers.dev"; // ★忘れずに！
 const HOME_LAT = 43.0620958;
 const HOME_LNG = 141.3543763;
 const SAFE_DISTANCE_METERS = 20;
