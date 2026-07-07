@@ -63,10 +63,13 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
     
     const marker = L.marker([shop.lat, shop.lng], {icon: customIcon}).addTo(viewMap);
     
+    // 変更前はここに <button onclick="openEditModal(...)"> がありましたが、削除して閲覧専用にします。
     const popupHtml = `
-      <div style="text-align:center; min-width: 150px;">
-        <p style="margin: 0 0 10px; font-weight:bold; font-size:1rem; color:#2c3e50;">${escapeHTML(shop.shopName)}</p>
-        <button onclick="openEditModal('${shop.latestId}', 'location')" style="background:#3498db; color:white; border:none; padding:8px 15px; border-radius:4px; font-weight:bold; cursor:pointer; width: 100%;">📍 位置を修正する</button>
+      <div style="text-align:center; min-width: 150px; padding: 5px;">
+        <p style="margin: 0; font-weight:bold; font-size:1rem; color:#2c3e50;">${escapeHTML(shop.shopName)}</p>
+        <p style="margin: 5px 0 0 0; font-size:0.85rem; color:#7f8c8d;">
+          ${shop.visitCount > 0 ? `👣 訪問回数: ${shop.visitCount}回` : '💭 行きたいお店'}
+        </p>
       </div>
     `;
     marker.bindPopup(popupHtml);

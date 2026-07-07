@@ -271,6 +271,9 @@ window.saveEditDiary = function() {
      updatedLng = pos.lng;
   }
 
+  // 🕵️‍♂️ 【特定用トラップ1】画面のマップから取得した座標を出力
+  console.log("🕵️‍♂️ [送信直前チェック] サーバーへ送る座標:", updatedLat, updatedLng);
+
   fetch(CLOUDFLARE_WORKER_URL, {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ 
@@ -280,12 +283,18 @@ window.saveEditDiary = function() {
       latitude: updatedLat, longitude: updatedLng 
     })
   }).then(res => res.json()).then(data => { 
+    
+    // 🕵️‍♂️ 【特定用トラップ2】サーバーからの返事を出力
+    console.log("🕵️‍♂️ [サーバー応答]", data);
+    
     if(data.success) { 
       document.getElementById('editModal').style.display = "none"; 
       fetchAndStoreAllDiaries(); 
     } else {
       alert("⚠️ サーバー側でエラーが発生しました。");
     }
+  }).catch(err => {
+    console.error("🕵️‍♂️ [通信エラー]", err);
   });
 };
 
