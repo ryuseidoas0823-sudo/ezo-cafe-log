@@ -77,6 +77,9 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
   if (Object.keys(uniqueShops).length > 0) viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
 }
 
+// ==========================================
+// ✏️ 編集モーダル用のマップ初期化（タップ移動対応版）
+// ==========================================
 function initEditMap(lat, lng) {
   const defaultLat = lat || 43.0686;
   const defaultLng = lng || 141.3508;
@@ -85,6 +88,14 @@ function initEditMap(lat, lng) {
     window.leafletEditMap = L.map('editMap', { doubleClickZoom: false }).setView([defaultLat, defaultLng], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(window.leafletEditMap);
     window.leafletEditMarker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(window.leafletEditMap);
+    
+    // ★ 追加：マップをタップ、またはダブルクリックした場所にピンをワープさせる！
+    window.leafletEditMap.on('click', function(e) {
+      window.leafletEditMarker.setLatLng(e.latlng);
+    });
+    window.leafletEditMap.on('dblclick', function(e) {
+      window.leafletEditMarker.setLatLng(e.latlng);
+    });
   } else {
     window.leafletEditMap.setView([defaultLat, defaultLng], 15);
     window.leafletEditMarker.setLatLng([defaultLat, defaultLng]);
