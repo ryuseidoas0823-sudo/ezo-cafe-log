@@ -1,5 +1,5 @@
 // ==========================================
-// ☁️ worker.js (Cloudflare Worker バックエンド)
+// ☁️ worker.js (Cloudflare Worker バックエンド) - 修正版
 // ==========================================
 
 export default {
@@ -59,7 +59,7 @@ export default {
 
         // 🕒 タイムゾーンを日本時間（JST）に固定
         const now = new Date(Date.now() + 9 * 60 * 60 * 1000); 
-        const createdSystemAt = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate').padStart(2, '0')} ${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')}`;
+        const createdSystemAt = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')} ${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')}`;
         
         // 撮影日等の指定がなければシステム登録日時を使用
         const visitedAt = data.visitedAt || createdSystemAt; 
