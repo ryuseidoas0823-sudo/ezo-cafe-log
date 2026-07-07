@@ -1,48 +1,29 @@
 // ==========================================
-// 🗺️ map.js (地図・位置情報に関する処理まとめ)
+// 🗺️ map.js (地図関係の処理まとめ)
 // ==========================================
-
-function setupHidePinsButtons() {
-  const hideFunc = (mapObj) => { if(mapObj) mapObj.eachLayer(l => { if(l instanceof L.Marker && l.setOpacity) l.setOpacity(0); }); };
-  const showFunc = (mapObj) => { if(mapObj) mapObj.eachLayer(l => { if(l instanceof L.Marker && l.setOpacity) l.setOpacity(1); }); };
-
-  const btnPicker = document.getElementById('hidePinsBtnPicker');
-  if(btnPicker) {
-    btnPicker.addEventListener('mousedown', () => hideFunc(pickerMap));
-    btnPicker.addEventListener('touchstart', () => hideFunc(pickerMap), {passive: true});
-    ['mouseup','mouseleave','touchend'].forEach(e => btnPicker.addEventListener(e, () => showFunc(pickerMap)));
-  }
-
-  const btnView = document.getElementById('hidePinsBtnView');
-  if(btnView) {
-    btnView.addEventListener('mousedown', () => hideFunc(viewMap));
-    btnView.addEventListener('touchstart', () => hideFunc(viewMap), {passive: true});
-    ['mouseup','mouseleave','touchend'].forEach(e => btnView.addEventListener(e, () => showFunc(viewMap)));
-  }
-}
 
 function initPickerMap() {
   if (!pickerMap) {
-    pickerMap = L.map('pickerMap', { doubleClickZoom: false }).setView([43.0686, 141.3508], 15);
+    pickerMap = L.map('pickerMap', { doubleClickZoom: false }).setView([HOME_LAT, HOME_LNG], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(pickerMap);
-    pickerMarker = L.marker([43.0686, 141.3508], { draggable: true }).addTo(pickerMap);
-    pickerMap.on('dblclick', function(e) { pickerMarker.setLatLng(e.latlng); checkSmartSuggest(e.latlng.lat, e.latlng.lng); });
-    pickerMarker.on('dragend', function(e) { const pos = pickerMarker.getLatLng(); checkSmartSuggest(pos.lat, pos.lng); });
+    pickerMarker = L.marker([HOME_LAT, HOME_LNG]).addTo(pickerMap);
+    
+    pickerMap.on('dblclick', function(e) {
+      pickerMarker.setLatLng(e.latlng);
+      checkSmartSuggest(e.latlng.lat, e.latlng.lng);
+    });
   }
-  setTimeout(() => pickerMap.invalidateSize(), 100);
+  setTimeout(() => { pickerMap.invalidateSize(); }, 200);
 }
 
 function initViewMap() {
-  if (!viewMap) { 
-    viewMap = L.map('mapView').setView([43.064, 141.35], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(viewMap);
+  if (!viewMap) {
+    viewMap = L.map('mapView').setView([HOME_LAT, HOME_LNG], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(viewMap);
   }
-  setTimeout(() => { viewMap.invalidateSize(); }, 100); 
+  setTimeout(() => { viewMap.invalidateSize(); }, 200);
 }
 
-// ==========================================
-// マップ画面のピン描画（メニュー表示機能の復活）
-// ==========================================
 function updateViewMarkers(filteredDiaries = globalDiaries) {
   if (!viewMap) return;
   viewMap.eachLayer((layer) => { if (layer instanceof L.Marker) viewMap.removeLayer(layer); });
@@ -65,7 +46,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
           visitCount: (isBookmark || isDraft) ? 0 : 1, 
           isBookmarkOnly: isBookmark,
           isDraftOnly: isDraft,
-          latestId: diary.id // ★ 編集用に最新のIDを保存
+          latestId: diary.id
         };
       } else {
         if (!isBookmark && !isDraft) { uniqueShops[uniqueKey].visitCount++; uniqueShops[uniqueKey].isBookmarkOnly = false; }
@@ -82,7 +63,6 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
     
     const marker = L.marker([shop.lat, shop.lng], {icon: customIcon}).addTo(viewMap);
     
-    // ★ マップピンのタップ（クリック）でメニュー（ポップアップ）を表示
     const popupHtml = `
       <div style="text-align:center; min-width: 150px;">
         <p style="margin: 0 0 10px; font-weight:bold; font-size:1rem; color:#2c3e50;">${escapeHTML(shop.shopName)}</p>
@@ -97,14 +77,10 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
   if (Object.keys(uniqueShops).length > 0) viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
 }
 
-// ==========================================
-// ✏️ 編集モーダル用のマップ初期化
-// ==========================================
 function initEditMap(lat, lng) {
   const defaultLat = lat || 43.0686;
   const defaultLng = lng || 141.3508;
 
-  // エラー原因：HTMLの id="editMap" と変数名が衝突していたため、leafletEditMap に変更
   if (!window.leafletEditMap) {
     window.leafletEditMap = L.map('editMap', { doubleClickZoom: false }).setView([defaultLat, defaultLng], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(window.leafletEditMap);

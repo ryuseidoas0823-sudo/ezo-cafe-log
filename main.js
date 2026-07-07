@@ -2,12 +2,11 @@
 // 🧠 main.js (全体の司令塔・UI制御・描画処理)
 // ==========================================
 
-const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; // ←ここはそのまま！
+const CLOUDFLARE_WORKER_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; // ★忘れずに！
 const HOME_LAT = 43.0620958;
 const HOME_LNG = 141.3543763;
 const SAFE_DISTANCE_METERS = 20;
 
-// ★ ここから下の let をすべて var に変更して、ファイル間の壁をなくします
 var activeTagFilter = ""; 
 var viewMap;                  
 var pickerMap;      
@@ -247,7 +246,6 @@ window.openEditModal = function(id, mode = 'full') {
   document.getElementById('editNoLocationCheck').checked = (!diary.latitude || !diary.longitude);
   initEditMap(diary.latitude, diary.longitude);
 
-  // ★ 追加：モードによって表示を切り替える
   if (mode === 'location') {
     document.getElementById('editModalTitle').innerText = "📍 位置情報の修正";
     document.getElementById('editDiaryFields').style.display = "none";
@@ -265,7 +263,6 @@ window.saveEditDiary = function() {
   const userTags = document.getElementById('editTags').value;
   const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
 
-  // ★ 修正：動かしたピンの新しい座標を取得（変数名を leafletEditMarker に変更）
   let updatedLat = null;
   let updatedLng = null;
   if (!document.getElementById('editNoLocationCheck').checked && window.leafletEditMarker) {
@@ -280,9 +277,16 @@ window.saveEditDiary = function() {
       id: document.getElementById('editId').value, shopName: document.getElementById('editShopName').value, 
       tags: parseTags(combinedTags).join(', '), comment: document.getElementById('editComment').value, 
       weatherIcon: document.querySelector('input[name="editWeather"]:checked').value,
-      latitude: updatedLat, longitude: updatedLng // ★ 新しい座標を送信
+      latitude: updatedLat, longitude: updatedLng 
     })
-  }).then(res => res.json()).then(data => { if(data.success) { document.getElementById('editModal').style.display = "none"; fetchAndStoreAllDiaries(); } });
+  }).then(res => res.json()).then(data => { 
+    if(data.success) { 
+      document.getElementById('editModal').style.display = "none"; 
+      fetchAndStoreAllDiaries(); 
+    } else {
+      alert("⚠️ サーバー側でエラーが発生しました。");
+    }
+  });
 };
 
 window.upgradeDraftToRecord = function(id) {
@@ -291,7 +295,7 @@ window.upgradeDraftToRecord = function(id) {
    switchTab('record');
    
    currentRecordMode = 'manual'; 
-   selectedDatetime = diary.visited_at || diary.created_at; // ★ 未整理からの昇格時にも撮影日を引き継ぐ
+   selectedDatetime = diary.visited_at || diary.created_at; 
    selectedImageBase64 = diary.image_base64; 
    selectedImageUrl = diary.image_url; 
    draftIdToUpgrade = diary.id; 
@@ -395,7 +399,6 @@ function renderDiariesList(diaries) {
     let mapLinkBtn = (diary.latitude && diary.longitude && !isDraft) ? `<a href="http://googleusercontent.com/maps.google.com/?q=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none;">🗺️ 行き方</a>` : "";
     let imageTag = diary.image_url ? `<img src="${diary.image_url}" loading="lazy" alt="写真">` : (diary.image_base64 ? `<img src="${diary.image_base64}" loading="lazy" alt="写真">` : '');
 
-    // ★ 修正：画面上に表示するテキストを「撮影日」優先に変更
     const displayDate = diary.visited_at || diary.created_at || "不明";
 
     html += `
@@ -509,7 +512,6 @@ window.showCalendarDayDiaries = function(dateStr) {
     let mapLinkBtn = (diary.latitude && diary.longitude && !isDraft) ? `<a href="http://googleusercontent.com/maps.google.com/?q=${diary.latitude},${diary.longitude}" target="_blank" class="action-btn" style="text-decoration:none;">🗺️ 行き方</a>` : "";
     let imageTag = diary.image_url ? `<img src="${diary.image_url}" loading="lazy" alt="写真">` : (diary.image_base64 ? `<img src="${diary.image_base64}" loading="lazy" alt="写真">` : '');
 
-    // ★ 修正：カレンダー下の展開リストでも「撮影日」優先で表示
     const displayDate = diary.visited_at || diary.created_at || "不明";
 
     html += `
