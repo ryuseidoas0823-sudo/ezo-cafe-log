@@ -1,0 +1,13 @@
+name = "cafe-pipeline"
+main = "worker.js"
+compatibility_date = "2026-07-09"
+
+# D1データベースとの紐付け
+[[d1_databases]]
+binding = "DB"
+database_name = "cafe-db" # ← Cloudflareのダッシュボード上で決めたDB名に変更してください
+database_id = "b4ab1090-8997-4831-874a-53fdcda65eeb" # ← CloudflareのD1ダッシュボードに記載されているIDに変更してください
+
+# AI機能の解放
+[ai]
+binding = "AI"

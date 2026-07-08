@@ -188,7 +188,8 @@ async function submitDiary() {
   const eatType = document.querySelector('input[name="eatType"]:checked').value;
   const shopCategory = document.getElementById('shopCategorySelect').value;
   const weatherIcon = document.querySelector('input[name="weatherType"]:checked').value;
-  const submitBtn = document.getElementById('submitBtn'); submitBtn.disabled = true;
+  const submitBtn = document.getElementById('submitBtn'); 
+  submitBtn.disabled = true;
 
   const userTags = document.getElementById('tagsInput').value;
   const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
@@ -196,13 +197,22 @@ async function submitDiary() {
   const userGender = localStorage.getItem('ezo_gender') || "未設定";
   const userAge = localStorage.getItem('ezo_age') || "未設定";
 
+  // ★ AIが処理していることをユーザーに伝え、期待感を高めるマイクロコピー
+  const statusEl = document.getElementById('status');
+  const commentLength = document.getElementById('commentInput').value.length;
+  if (commentLength > 5) {
+    statusEl.innerHTML = "<span style='color: #8e44ad;'>🤖 AIが日記からタグを抽出・記録中...</span>";
+  } else {
+    statusEl.innerText = "🚀 記録中...";
+  }
+
   if (document.getElementById('noLocationCheck').checked) {
     sendDataToCloudflare(selectedMasterShop ? selectedMasterShop.shop_id : null, finalShopName, null, null, weatherIcon, null, userGender, userAge, combinedTags, submitBtn);
     return;
   }
 
   if (selectedMasterShop) {
-    document.getElementById('status').innerText = "📍 公式座標を使用して天気を取得中...";
+    statusEl.innerHTML = "📍 座標を使用して天気とAIタグを取得中...";
     let temperature = await fetchTemperature(selectedMasterShop.latitude, selectedMasterShop.longitude);
     sendDataToCloudflare(selectedMasterShop.shop_id, finalShopName, selectedMasterShop.latitude, selectedMasterShop.longitude, weatherIcon, temperature, userGender, userAge, combinedTags, submitBtn);
     return;
@@ -210,7 +220,10 @@ async function submitDiary() {
 
   const pos = pickerMarker.getLatLng();
   if (getDistanceFromLatLonInM(pos.lat, pos.lng, HOME_LAT, HOME_LNG) < SAFE_DISTANCE_METERS) {
-    alert(`🚨【自宅ガード発動】自宅周辺です。新規店舗の場合は「位置情報を送らない」をお使いください。`); submitBtn.disabled = false; return;
+    alert(`🚨【自宅ガード発動】自宅周辺です。新規店舗の場合は「位置情報を送らない」をお使いください。`); 
+    submitBtn.disabled = false; 
+    statusEl.innerText = "";
+    return;
   }
   sendDataToCloudflare(null, finalShopName, pos.lat, pos.lng, weatherIcon, null, userGender, userAge, combinedTags, submitBtn);
 }
