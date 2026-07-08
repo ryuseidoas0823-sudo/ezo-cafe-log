@@ -31,12 +31,16 @@ window.onload = function() {
 };
 
 function switchTab(tabId) {
-  document.querySelectorAll('.content, .tab').forEach(el => el.classList.remove('active'));
+  // コンテンツの切り替え
+  document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
   document.getElementById(tabId).classList.add('active');
   
-  const tabs = document.querySelectorAll('.tab');
-  for(let t of tabs){ if(t.getAttribute('onclick').includes(tabId)) t.classList.add('active'); }
+  // ナビゲーション（ボトムナビ）のハイライト切り替え
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const activeNav = document.getElementById('nav-' + tabId);
+  if(activeNav) activeNav.classList.add('active');
   
+  // 各タブ固有の描画・更新処理
   if(tabId === 'view' || tabId === 'mapTab') applyFilters(); 
   if(tabId === 'mapTab') { initViewMap(); updateViewMarkers(); }
   if(tabId === 'analytics') renderAnalytics(); 
@@ -286,7 +290,6 @@ window.saveEditDiary = function() {
   }).then(res => res.json()).then(data => { 
     
     if(data.success) { 
-      // 🚀 【即時反映マジック】サーバーの遅延を無視して、手元のデータを書き換える！
       const targetDiary = globalDiaries.find(d => String(d.id) === String(targetId));
       if (targetDiary) {
         targetDiary.latitude = updatedLat;
@@ -295,7 +298,6 @@ window.saveEditDiary = function() {
         targetDiary.comment = newComment;
       }
 
-      // 手元（メモリ上）でも、過去の同名店舗のピンを一括で同期させる
       if (updatedLat !== null && updatedLng !== null) {
         globalDiaries.forEach(d => {
           if (d.shop_name === newShopName) {
@@ -305,11 +307,9 @@ window.saveEditDiary = function() {
         });
       }
 
-      // モーダルを閉じて、即座にマップとリストを再描画する
       document.getElementById('editModal').style.display = "none"; 
       applyFilters(); 
 
-      // Cloudflareの共有（1〜2秒）が終わった頃に、裏でこっそり最新状態を取得し直す
       setTimeout(() => { fetchAndStoreAllDiaries(); }, 2000);
 
     } else {
@@ -642,7 +642,6 @@ window.setupHidePinsButtons = function() {
     if (!btn) return;
     btn.onclick = function(e) {
       e.preventDefault();
-      // Leafletのピンやツールチップが入っている層（ペイン）を取得
       const markerPane = document.querySelector(`#${mapContainerId} .leaflet-marker-pane`);
       const tooltipPane = document.querySelector(`#${mapContainerId} .leaflet-tooltip-pane`);
       const shadowPane = document.querySelector(`#${mapContainerId} .leaflet-shadow-pane`);
@@ -660,7 +659,6 @@ window.setupHidePinsButtons = function() {
     };
   };
 
-  // 記録画面のマップと、履歴画面のマップの両方に機能をセット
   togglePins('hidePinsBtnPicker', 'pickerMap');
   togglePins('hidePinsBtnView', 'mapView');
 };

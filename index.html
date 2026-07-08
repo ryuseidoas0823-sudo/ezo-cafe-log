@@ -11,200 +11,213 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
 
-  <link rel="stylesheet" href="style.css?v=3" />
-  <script src="utils.js?v=3" defer></script>
-  <script src="map.js?v=3" defer></script>
-  <script src="api.js?v=3" defer></script>
-  <script src="main.js?v=3" defer></script>
+  <link rel="stylesheet" href="style.css?v=4" />
+  <script src="utils.js?v=4" defer></script>
+  <script src="map.js?v=4" defer></script>
+  <script src="api.js?v=4" defer></script>
+  <script src="main.js?v=4" defer></script>
 </head>
 <body>
 
   <div class="header">☕️ EzoCafe Log</div>
   
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('record')">📝 記録</div>
-    <div class="tab" onclick="switchTab('view')">🔍 履歴</div>
-    <div class="tab" onclick="switchTab('mapTab')">🗺️ マップ</div>
-    <div class="tab" onclick="switchTab('analytics')">📊 分析</div>
-    <div class="tab" onclick="switchTab('settings')">⚙️ 設定</div>
-  </div>
+  <div id="app-container" class="container">
+    <main id="main-content">
+      
+      <div id="record" class="content active">
+        <div id="step1" class="record-actions">
+          <p style="text-align: center; color: #2c3e50; font-weight: bold; margin-bottom: 15px;">どうやって記録しますか？</p>
+          
+          <input type="file" id="galleryInput" accept="image/*" style="display: none;" onchange="handleImageSelect(event, 'manual')">
+          <button class="btn btn-primary" onclick="checkSettingsAndClick('galleryInput')">
+            🖼️ 写真付きで記録<br><span style="font-size: 0.8rem; font-weight: normal;">(スマホのアルバムから選ぶ)</span>
+          </button>
 
-  <div class="container">
-    
-    <div id="record" class="content active">
-      <div id="step1">
-        <h3 style="text-align: center; color: #2c3e50;">どうやって記録しますか？</h3>
-        
-        <input type="file" id="galleryInput" accept="image/*" style="display: none;" onchange="handleImageSelect(event, 'manual')">
-        <button class="btn-gallery" onclick="checkSettingsAndClick('galleryInput')">
-          🖼️ 写真付きで記録<br><span style="font-size: 0.8rem; font-weight: normal;">(スマホのアルバムから選ぶ)</span>
-        </button>
+          <button class="btn btn-secondary" onclick="startNoPhotoRecord()">
+            📝 写真無しで記録<br><span style="font-size: 0.8rem; font-weight: normal;">(撮影禁止のお店やテイクアウトなど)</span>
+          </button>
 
-        <button class="btn-camera" onclick="startNoPhotoRecord()" style="background-color: #3498db;">
-          📝 写真無しで記録<br><span style="font-size: 0.8rem; font-weight: normal;">(撮影禁止のお店やテイクアウトなど)</span>
-        </button>
+          <button class="btn btn-secondary" onclick="startBookmarkRecord()" style="border-color: #9b59b6; color: #9b59b6;">
+            💭 行きたいお店をメモ
+          </button>
 
-        <button class="btn-camera" onclick="startBookmarkRecord()" style="background-color: #9b59b6;">
-          💭 行きたいお店をメモ<br><span style="font-size: 0.8rem; font-weight: normal;">(地図にピンだけ刺しておく)</span>
-        </button>
-
-        <input type="file" id="bulkGalleryInput" accept="image/*" multiple style="display: none;" onchange="handleBulkImagesSelect(event)">
-        <button class="btn-gallery" onclick="checkSettingsAndClick('bulkGalleryInput')" style="background-color: #95a5a6; color: white;">
-          📦 未整理ボックスに一括保存<br><span style="font-size: 0.8rem; font-weight: normal;">(複数枚選んで後から記録する)</span>
-        </button>
-      </div>
-
-      <div id="step2" style="display: none;">
-        <img id="previewImg" src="">
-        
-        <div class="type-selector">
-          <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
-          <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイクアウト</label>
-          <label><input type="radio" name="eatType" value="🛍️豆・グッズ購入">🛍️ 豆・グッズ</label>
+          <input type="file" id="bulkGalleryInput" accept="image/*" multiple style="display: none;" onchange="handleBulkImagesSelect(event)">
+          <button class="btn btn-secondary" onclick="checkSettingsAndClick('bulkGalleryInput')" style="border-color: #95a5a6; color: #95a5a6;">
+            📦 未整理ボックスに一括保存
+          </button>
         </div>
 
-        <p style="margin: 0 0 5px 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">お店のタイプは？</p>
-        <select id="shopCategorySelect" style="margin-bottom: 15px; padding: 10px; font-weight: bold; color: #2c3e50;">
-          <option value="🏢喫茶・カフェ">🏢 喫茶・カフェ (自家焙煎含む)</option>
-          <option value="🔥ロースター">🔥 ロースター (豆売りメイン)</option>
-          <option value="🎪無店舗・間借り">🎪 無店舗ロースター・間借り喫茶</option>
-          <option value="🍸カフェバー">🍸 カフェバー</option>
-          <option value="🍰お菓子屋の喫茶室">🍰 お菓子屋 (喫茶室)</option>
-          <option value="🍵和風喫茶">🍵 和風喫茶 (お茶系)</option>
-        </select>
-
-        <div id="weatherSelectorDiv">
-          <p style="margin: 0 0 5px 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">空模様は？</p>
-          <div class="weather-selector">
-            <label><input type="radio" name="weatherType" value="☀️">☀️</label>
-            <label><input type="radio" name="weatherType" value="☁️">☁️</label>
-            <label><input type="radio" name="weatherType" value="☔️">☔️</label>
-            <label><input type="radio" name="weatherType" value="❄️">❄️</label>
-            <label><input type="radio" name="weatherType" value="❓" checked>❓不明</label>
-            <label style="display:none;"><input type="radio" name="weatherType" value="💭">💭</label>
-            <label style="display:none;"><input type="radio" name="weatherType" value="📦">📦</label>
+        <div id="step2" style="display: none;">
+          <img id="previewImg" src="">
+          
+          <div class="type-selector">
+            <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
+            <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイクアウト</label>
+            <label><input type="radio" name="eatType" value="🛍️豆・グッズ購入">🛍️ 豆・グッズ</label>
           </div>
-        </div>
 
-        <div id="smartSuggestArea" style="display: none; margin-bottom: 15px;"></div>
-
-        <div class="autocomplete-container">
-         <input type="text" id="shopNameInput" placeholder="店名を入力して検索..." autocomplete="off" oninput="searchMasterShop()">
-         <ul id="autocompleteList" class="autocomplete-list"></ul>
-        </div>
-        
-        <input type="text" id="tagsInput" placeholder="タグ (カンマ区切り。例: 作業用, 静か)">
-        <textarea id="commentInput" placeholder="感想やメモ"></textarea>
-        
-        <div id="manualMapArea">
-          <p style="font-size: 0.9rem; color: #d35400; font-weight: bold; text-align: center; margin-top: 0; margin-bottom: 10px;">📍 ダブルタップで場所を合わせる</p>
-          <div style="position: relative;">
-            <button id="hidePinsBtnPicker" class="hide-pins-btn">👁️ ピンを隠す</button>
-            <div id="pickerMap"></div>
-          </div>
-        </div>
-        
-        <label style="display: flex; align-items: center; justify-content: center; margin-bottom: 15px; font-weight: bold; color: #2c3e50; background: #ecf0f1; padding: 10px; border-radius: 8px;">
-          <input type="checkbox" id="noLocationCheck" style="width: 20px; height: 20px; margin-right: 10px;">
-          🏠 自宅・テイクアウト (位置情報を送らない)
-        </label>
-
-        <button id="submitBtn" onclick="submitDiary()">🚀 記録する</button>
-        <button class="btn-cancel" onclick="resetRecordTab()">やり直す</button>
-        <div id="status" style="text-align: center; margin-top: 10px; font-weight: bold; color: #3498db;"></div>
-      </div>
-      <canvas id="canvas" style="display:none;"></canvas>
-    </div>
-
-    <div id="view" class="content">
-      <div style="display: flex; margin-bottom: 15px; background: #e2e8f0; padding: 4px; border-radius: 8px;">
-        <button id="subTabListBtn" onclick="switchSubTab('list')" style="flex:1; margin-bottom:0; padding: 10px; font-size: 0.9rem; background: #2c3e50; color: white;">📋 最新の記録 (リスト)</button>
-        <button id="subTabCalendarBtn" onclick="switchSubTab('calendar')" style="flex:1; margin-bottom:0; padding: 10px; font-size: 0.9rem; background: none; color: #7f8c8d;">📅 過去の記録 (カレンダー)</button>
-      </div>
-
-      <div id="subViewList">
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-          <input type="text" id="searchInput" placeholder="店名や感想で検索..." oninput="applyFilters()" style="margin-bottom:0; flex: 2;">
-          <select id="archiveMonthSelect" onchange="applyFilters()" style="margin-bottom:0; flex: 1; padding: 10px; font-weight: bold; color: #2c3e50; border-radius: 8px;">
-            <option value="">⏳ 全ての月</option>
+          <p style="margin: 0 0 5px 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">お店のタイプは？</p>
+          <select id="shopCategorySelect" style="margin-bottom: 15px; padding: 10px; font-weight: bold; color: #2c3e50;">
+            <option value="🏢喫茶・カフェ">🏢 喫茶・カフェ (自家焙煎含む)</option>
+            <option value="🔥ロースター">🔥 ロースター (豆売りメイン)</option>
+            <option value="🎪無店舗・間借り">🎪 無店舗ロースター・間借り喫茶</option>
+            <option value="🍸カフェバー">🍸 カフェバー</option>
+            <option value="🍰お菓子屋の喫茶室">🍰 お菓子屋 (喫茶室)</option>
+            <option value="🍵和風喫茶">🍵 和風喫茶 (お茶系)</option>
           </select>
+
+          <div id="weatherSelectorDiv">
+            <p style="margin: 0 0 5px 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">空模様は？</p>
+            <div class="weather-selector">
+              <label><input type="radio" name="weatherType" value="☀️">☀️</label>
+              <label><input type="radio" name="weatherType" value="☁️">☁️</label>
+              <label><input type="radio" name="weatherType" value="☔️">☔️</label>
+              <label><input type="radio" name="weatherType" value="❄️">❄️</label>
+              <label><input type="radio" name="weatherType" value="❓" checked>❓不明</label>
+              <label style="display:none;"><input type="radio" name="weatherType" value="💭">💭</label>
+              <label style="display:none;"><input type="radio" name="weatherType" value="📦">📦</label>
+            </div>
+          </div>
+
+          <div id="smartSuggestArea" style="display: none; margin-bottom: 15px;"></div>
+
+          <div class="autocomplete-container">
+           <input type="text" id="shopNameInput" placeholder="店名を入力して検索..." autocomplete="off" oninput="searchMasterShop()">
+           <ul id="autocompleteList" class="autocomplete-list"></ul>
+          </div>
+          
+          <input type="text" id="tagsInput" placeholder="タグ (カンマ区切り。例: 作業用, 静か)">
+          <textarea id="commentInput" placeholder="感想やメモ"></textarea>
+          
+          <div id="manualMapArea">
+            <p style="font-size: 0.9rem; color: #d35400; font-weight: bold; text-align: center; margin-top: 0; margin-bottom: 10px;">📍 ダブルタップで場所を合わせる</p>
+            <div style="position: relative;">
+              <button id="hidePinsBtnPicker" class="hide-pins-btn">👁️ ピンを隠す</button>
+              <div id="pickerMap"></div>
+            </div>
+          </div>
+          
+          <label style="display: flex; align-items: center; justify-content: center; margin-bottom: 15px; font-weight: bold; color: #2c3e50; background: #ecf0f1; padding: 10px; border-radius: 8px;">
+            <input type="checkbox" id="noLocationCheck" style="width: 20px; height: 20px; margin-right: 10px;">
+            🏠 自宅・テイクアウト (位置情報を送らない)
+          </label>
+
+          <button id="submitBtn" onclick="submitDiary()">🚀 記録する</button>
+          <button class="btn-cancel" onclick="resetRecordTab()">やり直す</button>
+          <div id="status" style="text-align: center; margin-top: 10px; font-weight: bold; color: #3498db;"></div>
         </div>
-        <div id="tagCloudView" class="tag-cloud"></div>
-        <div id="diaryList"></div>
+        <canvas id="canvas" style="display:none;"></canvas>
       </div>
 
-      <div id="subViewCalendar" style="display: none;">
-        <div class="dashboard-card" style="padding: 10px;">
-          <div style="text-align: center; margin-bottom: 15px; background: #fdfefe; padding: 8px; border-radius: 8px; border: 1px dashed #bdc3c7;">
-            <span style="font-size: 0.85rem; font-weight: bold; color: #7f8c8d; margin-right: 5px;">🔍 基準日:</span>
-            <select id="calendarDateMode" onchange="renderCalendar()" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #bdc3c7; background: white; font-weight: bold; color: #2c3e50; width: auto; font-size: 0.9rem;">
-              <option value="visited">📷 撮影・訪問日で探す</option>
-              <option value="created">📝 アプリ記録日で探す</option>
+      <div id="view" class="content">
+        <div style="display: flex; margin-bottom: 15px; background: #e2e8f0; padding: 4px; border-radius: 8px;">
+          <button id="subTabListBtn" onclick="switchSubTab('list')" style="flex:1; margin-bottom:0; padding: 10px; font-size: 0.9rem; background: #2c3e50; color: white;">📋 最新の記録 (リスト)</button>
+          <button id="subTabCalendarBtn" onclick="switchSubTab('calendar')" style="flex:1; margin-bottom:0; padding: 10px; font-size: 0.9rem; background: none; color: #7f8c8d;">📅 過去の記録 (カレンダー)</button>
+        </div>
+
+        <div id="subViewList">
+          <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="searchInput" placeholder="店名や感想で検索..." oninput="applyFilters()" style="margin-bottom:0; flex: 2;">
+            <select id="archiveMonthSelect" onchange="applyFilters()" style="margin-bottom:0; flex: 1; padding: 10px; font-weight: bold; color: #2c3e50; border-radius: 8px;">
+              <option value="">⏳ 全ての月</option>
             </select>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <button onclick="changeCalendarMonth(-1)" style="width: auto; padding: 8px 15px; margin-bottom: 0; background: #7f8c8d;">◀</button>
-            <h3 id="calendarMonthTitle" style="margin: 0; border: none; padding: 0;"></h3>
-            <button onclick="changeCalendarMonth(1)" style="width: auto; padding: 8px 15px; margin-bottom: 0; background: #7f8c8d;">▶</button>
+          <div id="tagCloudView" class="tag-cloud"></div>
+          <div id="diaryList"></div>
+        </div>
+
+        <div id="subViewCalendar" style="display: none;">
+          <div class="dashboard-card" style="padding: 10px;">
+            <div style="text-align: center; margin-bottom: 15px; background: #fdfefe; padding: 8px; border-radius: 8px; border: 1px dashed #bdc3c7;">
+              <span style="font-size: 0.85rem; font-weight: bold; color: #7f8c8d; margin-right: 5px;">🔍 基準日:</span>
+              <select id="calendarDateMode" onchange="renderCalendar()" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #bdc3c7; background: white; font-weight: bold; color: #2c3e50; width: auto; font-size: 0.9rem;">
+                <option value="visited">📷 撮影・訪問日で探す</option>
+                <option value="created">📝 アプリ記録日で探す</option>
+              </select>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <button onclick="changeCalendarMonth(-1)" style="width: auto; padding: 8px 15px; margin-bottom: 0; background: #7f8c8d;">◀</button>
+              <h3 id="calendarMonthTitle" style="margin: 0; border: none; padding: 0;"></h3>
+              <button onclick="changeCalendarMonth(1)" style="width: auto; padding: 8px 15px; margin-bottom: 0; background: #7f8c8d;">▶</button>
+            </div>
+            <div id="calendarGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center;"></div>
           </div>
-          <div id="calendarGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center;"></div>
+          <div id="calendarSelectionResult"></div>
         </div>
-        <div id="calendarSelectionResult"></div>
       </div>
-    </div>
 
-    <div id="mapTab" class="content">
-      <div id="tagCloudMap" class="tag-cloud"></div>
-      <div style="position: relative;">
-        <button id="hidePinsBtnView" class="hide-pins-btn">👁️ ピンを隠す</button>
-        <div id="mapView"></div>
-      </div>
-    </div>
-
-    <div id="analytics" class="content">
-      <h2 style="color: #2c3e50; margin-top: 0;">📊 My アナリティクス</h2>
-      <div class="dashboard-card" style="background: linear-gradient(to bottom right, #ffffff, #fdfefe);">
-        <h3 style="border-bottom: 2px solid #f1c40f;">🏆 獲得称号バッジ</h3>
-        <div id="badgeContainer" style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 10px 0;"></div>
-      </div>
-      <div class="stat-grid">
-        <div class="stat-box"><div class="stat-value" id="statTotal">0</div><div class="stat-label">総カフェ記録数</div></div>
-        <div class="stat-box"><div class="stat-value" id="statUnique">0</div><div class="stat-label">開拓した店舗数</div></div>
-      </div>
-      <div class="dashboard-card">
-        <h3>☕️ 店内 vs 🥡 テイクアウト</h3>
-        <div class="chart-container" style="height: 150px;"><canvas id="chartEatType"></canvas></div>
-      </div>
-      <div class="dashboard-card">
-        <h3>⛅️ 天候別のカフェ利用傾向</h3>
-        <div class="chart-container" style="height: 200px;"><canvas id="chartWeather"></canvas></div>
-      </div>
-      <div class="dashboard-card">
-        <h3>🕒 訪問時間帯の傾向</h3>
-        <div class="chart-container" style="height: 200px;"><canvas id="chartTime"></canvas></div>
-      </div>
-    </div>
-
-    <div id="settings" class="content">
-      <div class="dashboard-card">
-        <h3>👤 アナリティクス用属性設定</h3>
-        <div id="currentSettingsDisplay" style="background: #e8f8f5; padding: 10px; border-radius: 8px; margin-bottom: 15px; color: #16a085; font-weight: bold; text-align: center;">
-          現在の設定: <span id="displayGender">未設定</span> / <span id="displayAge">未設定</span>
+      <div id="mapTab" class="content">
+        <div id="tagCloudMap" class="tag-cloud"></div>
+        <div style="position: relative;">
+          <button id="hidePinsBtnView" class="hide-pins-btn">👁️ ピンを隠す</button>
+          <div id="mapView"></div>
         </div>
-        <p style="margin: 10px 0 5px; font-weight: bold;">性別</p>
-        <select id="settingGender">
-          <option value="">選択してください</option>
-          <option value="男性">男性</option><option value="女性">女性</option><option value="その他">その他</option><option value="回答しない">回答しない</option>
-        </select>
-        <p style="margin: 10px 0 5px; font-weight: bold;">年代</p>
-        <select id="settingAge">
-          <option value="">選択してください</option>
-          <option value="10代">10代</option><option value="20代">20代</option><option value="30代">30代</option><option value="40代">40代</option><option value="50代">50代</option><option value="60代以上">60代以上</option>
-        </select>
-        <button onclick="saveSettings()" style="background-color: #3498db; margin-top: 15px;">💾 設定をスマホに保存</button>
       </div>
-    </div>
+
+      <div id="analytics" class="content">
+        <h2 style="color: #2c3e50; margin-top: 0;">📊 My アナリティクス</h2>
+        <div class="dashboard-card" style="background: linear-gradient(to bottom right, #ffffff, #fdfefe);">
+          <h3 style="border-bottom: 2px solid #f1c40f;">🏆 獲得称号バッジ</h3>
+          <div id="badgeContainer" style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 10px 0;"></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="stat-value" id="statTotal">0</div><div class="stat-label">総カフェ記録数</div></div>
+          <div class="stat-box"><div class="stat-value" id="statUnique">0</div><div class="stat-label">開拓した店舗数</div></div>
+        </div>
+        <div class="dashboard-card">
+          <h3>☕️ 店内 vs 🥡 テイクアウト</h3>
+          <div class="chart-container" style="height: 150px;"><canvas id="chartEatType"></canvas></div>
+        </div>
+        <div class="dashboard-card">
+          <h3>⛅️ 天候別のカフェ利用傾向</h3>
+          <div class="chart-container" style="height: 200px;"><canvas id="chartWeather"></canvas></div>
+        </div>
+        <div class="dashboard-card">
+          <h3>🕒 訪問時間帯の傾向</h3>
+          <div class="chart-container" style="height: 200px;"><canvas id="chartTime"></canvas></div>
+        </div>
+      </div>
+
+      <div id="settings" class="content">
+        <div class="dashboard-card">
+          <h3>👤 アナリティクス用属性設定</h3>
+          <div id="currentSettingsDisplay" style="background: #e8f8f5; padding: 10px; border-radius: 8px; margin-bottom: 15px; color: #16a085; font-weight: bold; text-align: center;">
+            現在の設定: <span id="displayGender">未設定</span> / <span id="displayAge">未設定</span>
+          </div>
+          <p style="margin: 10px 0 5px; font-weight: bold;">性別</p>
+          <select id="settingGender">
+            <option value="">選択してください</option>
+            <option value="男性">男性</option><option value="女性">女性</option><option value="その他">その他</option><option value="回答しない">回答しない</option>
+          </select>
+          <p style="margin: 10px 0 5px; font-weight: bold;">年代</p>
+          <select id="settingAge">
+            <option value="">選択してください</option>
+            <option value="10代">10代</option><option value="20代">20代</option><option value="30代">30代</option><option value="40代">40代</option><option value="50代">50代</option><option value="60代以上">60代以上</option>
+          </select>
+          <button onclick="saveSettings()" style="background-color: #3498db; margin-top: 15px;">💾 設定をスマホに保存</button>
+        </div>
+      </div>
+      
+    </main>
   </div>
+
+  <nav class="bottom-nav">
+    <a href="javascript:void(0)" onclick="switchTab('record')" class="nav-item active" id="nav-record">
+      <span class="nav-icon">📝</span><span class="nav-label">記録</span>
+    </a>
+    <a href="javascript:void(0)" onclick="switchTab('view')" class="nav-item" id="nav-view">
+      <span class="nav-icon">📚</span><span class="nav-label">履歴</span>
+    </a>
+    <a href="javascript:void(0)" onclick="switchTab('mapTab')" class="nav-item" id="nav-mapTab">
+      <span class="nav-icon">🗺️</span><span class="nav-label">マップ</span>
+    </a>
+    <a href="javascript:void(0)" onclick="switchTab('analytics')" class="nav-item" id="nav-analytics">
+      <span class="nav-icon">📊</span><span class="nav-label">分析</span>
+    </a>
+    <a href="javascript:void(0)" onclick="switchTab('settings')" class="nav-item" id="nav-settings">
+      <span class="nav-icon">⚙️</span><span class="nav-label">設定</span>
+    </a>
+  </nav>
 
   <div id="editModal">
     <div class="modal-content">
