@@ -31,16 +31,13 @@ window.onload = function() {
 };
 
 function switchTab(tabId) {
-  // コンテンツの切り替え
   document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
   document.getElementById(tabId).classList.add('active');
   
-  // ナビゲーション（ボトムナビ）のハイライト切り替え
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const activeNav = document.getElementById('nav-' + tabId);
   if(activeNav) activeNav.classList.add('active');
   
-  // 各タブ固有の描画・更新処理
   if(tabId === 'view' || tabId === 'mapTab') applyFilters(); 
   if(tabId === 'mapTab') { initViewMap(); updateViewMarkers(); }
   if(tabId === 'analytics') renderAnalytics(); 
@@ -391,6 +388,9 @@ function resetRecordTab() {
   document.getElementById('status').innerText = "";
   selectedImageBase64 = null; selectedImageUrl = null; selectedDatetime = null; draftIdToUpgrade = null; 
   document.getElementById('submitBtn').disabled = false;
+  
+  // ★リセット時にマイクロコピーも消す
+  togglePrivacyMessage(); 
 }
 
 function applyFilters() {
@@ -633,9 +633,6 @@ function checkSettingsAndClick(inputId) {
   document.getElementById(inputId).click();
 }
 
-// ==========================================
-// 👁️ マップのピン表示/非表示きりかえ機能
-// ==========================================
 window.setupHidePinsButtons = function() {
   const togglePins = (btnId, mapContainerId) => {
     const btn = document.getElementById(btnId);
@@ -661,4 +658,28 @@ window.setupHidePinsButtons = function() {
 
   togglePins('hidePinsBtnPicker', 'pickerMap');
   togglePins('hidePinsBtnView', 'mapView');
+};
+
+// ==========================================
+// 🛡️ 自衛のDX：テイクアウト連動＆マイクロコピー制御
+// ==========================================
+window.handleEatTypeChange = function() {
+  const eatType = document.querySelector('input[name="eatType"]:checked').value;
+  const noLocCheck = document.getElementById('noLocationCheck');
+  
+  if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ購入') {
+    noLocCheck.checked = true;
+  } else {
+    noLocCheck.checked = false;
+  }
+  
+  togglePrivacyMessage();
+};
+
+window.togglePrivacyMessage = function() {
+  const isChecked = document.getElementById('noLocationCheck').checked;
+  const microcopy = document.getElementById('privacyMicrocopy');
+  if (microcopy) {
+    microcopy.style.display = isChecked ? 'block' : 'none';
+  }
 };

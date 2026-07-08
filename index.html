@@ -51,9 +51,9 @@
           <img id="previewImg" src="">
           
           <div class="type-selector">
-            <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
-            <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイクアウト</label>
-            <label><input type="radio" name="eatType" value="🛍️豆・グッズ購入">🛍️ 豆・グッズ</label>
+            <label><input type="radio" name="eatType" value="☕️店内" checked onchange="handleEatTypeChange()">☕️ 店内</label>
+            <label><input type="radio" name="eatType" value="🥡テイクアウト" onchange="handleEatTypeChange()">🥡 テイクアウト</label>
+            <label><input type="radio" name="eatType" value="🛍️豆・グッズ購入" onchange="handleEatTypeChange()">🛍️ 豆・グッズ</label>
           </div>
 
           <p style="margin: 0 0 5px 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">お店のタイプは？</p>
@@ -97,10 +97,13 @@
             </div>
           </div>
           
-          <label style="display: flex; align-items: center; justify-content: center; margin-bottom: 15px; font-weight: bold; color: #2c3e50; background: #ecf0f1; padding: 10px; border-radius: 8px;">
-            <input type="checkbox" id="noLocationCheck" style="width: 20px; height: 20px; margin-right: 10px;">
+          <label style="display: flex; align-items: center; justify-content: center; margin-bottom: 5px; font-weight: bold; color: #2c3e50; background: #ecf0f1; padding: 10px; border-radius: 8px;">
+            <input type="checkbox" id="noLocationCheck" onchange="togglePrivacyMessage()" style="width: 20px; height: 20px; margin-right: 10px;">
             🏠 自宅・テイクアウト (位置情報を送らない)
           </label>
+          <p id="privacyMicrocopy" style="display: none; font-size: 0.8rem; color: #27ae60; text-align: center; margin-top: 0; margin-bottom: 15px; font-weight: bold;">
+            🛡️ 現在地・店舗の座標はサーバーに送信されません。
+          </p>
 
           <button id="submitBtn" onclick="submitDiary()">🚀 記録する</button>
           <button class="btn-cancel" onclick="resetRecordTab()">やり直す</button>
