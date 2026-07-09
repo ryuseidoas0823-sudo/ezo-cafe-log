@@ -188,8 +188,7 @@ async function submitDiary() {
   const eatType = document.querySelector('input[name="eatType"]:checked').value;
   const shopCategory = document.getElementById('shopCategorySelect').value;
   const weatherIcon = document.querySelector('input[name="weatherType"]:checked').value;
-  const submitBtn = document.getElementById('submitBtn'); 
-  submitBtn.disabled = true;
+  const submitBtn = document.getElementById('submitBtn'); submitBtn.disabled = true;
 
   const userTags = document.getElementById('tagsInput').value;
   const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
@@ -197,7 +196,6 @@ async function submitDiary() {
   const userGender = localStorage.getItem('ezo_gender') || "未設定";
   const userAge = localStorage.getItem('ezo_age') || "未設定";
 
-  // ★ AIが処理していることをユーザーに伝え、期待感を高めるマイクロコピー
   const statusEl = document.getElementById('status');
   const commentLength = document.getElementById('commentInput').value.length;
   if (commentLength > 5) {
@@ -252,7 +250,8 @@ window.openEditModal = function(id, mode = 'full') {
   categories.forEach(c => { if (currentTags.includes(c)) foundCategory = c; });
   document.getElementById('editShopCategorySelect').value = foundCategory;
 
-  document.getElementById('editTags').value = currentTags.filter(t => !eatTypes.includes(t) && !categories.includes(t)).join(', ');
+  // ★ 編集画面の入力欄からもAIタグ(🤖)を隠す
+  document.getElementById('editTags').value = currentTags.filter(t => !eatTypes.includes(t) && !categories.includes(t) && !t.startsWith("🤖")).join(', ');
 
   const wRadios = document.getElementsByName('editWeather');
   for(let r of wRadios) { if(r.value === diary.weather_icon) r.checked = true; }
@@ -272,10 +271,22 @@ window.openEditModal = function(id, mode = 'full') {
 };
 
 window.saveEditDiary = function() {
+  const targetId = document.getElementById('editId').value;
+  const targetDiary = globalDiaries.find(d => String(d.id) === String(targetId));
+
   const eatType = document.querySelector('input[name="editEatType"]:checked').value;
   const shopCategory = document.getElementById('editShopCategorySelect').value;
   const userTags = document.getElementById('editTags').value;
-  const combinedTags = `${eatType}, ${shopCategory}` + (userTags ? `, ${userTags}` : "");
+
+  // ★ 消去されないように元のデータからAIタグ(🤖)だけを抽出して保護する
+  const originalTags = targetDiary ? parseTags(targetDiary.tags) : [];
+  const aiTags = originalTags.filter(t => t.startsWith("🤖"));
+  
+  // ユーザーが入力したタグと、保護したAIタグを裏側で再結合
+  let finalTags = [eatType, shopCategory];
+  if (userTags) finalTags = finalTags.concat(parseTags(userTags));
+  finalTags = finalTags.concat(aiTags); 
+  const combinedTags = finalTags.join(', ');
 
   let updatedLat = null;
   let updatedLng = null;
@@ -285,7 +296,6 @@ window.saveEditDiary = function() {
      updatedLng = pos.lng;
   }
 
-  const targetId = document.getElementById('editId').value;
   const newShopName = document.getElementById('editShopName').value;
   const newComment = document.getElementById('editComment').value;
 
@@ -293,19 +303,19 @@ window.saveEditDiary = function() {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ 
       id: targetId, shopName: newShopName, 
-      tags: parseTags(combinedTags).join(', '), comment: newComment, 
+      tags: combinedTags, comment: newComment, 
       weatherIcon: document.querySelector('input[name="editWeather"]:checked').value,
       latitude: updatedLat, longitude: updatedLng 
     })
   }).then(res => res.json()).then(data => { 
     
     if(data.success) { 
-      const targetDiary = globalDiaries.find(d => String(d.id) === String(targetId));
       if (targetDiary) {
         targetDiary.latitude = updatedLat;
         targetDiary.longitude = updatedLng;
         targetDiary.shop_name = newShopName;
         targetDiary.comment = newComment;
+        targetDiary.tags = combinedTags; // ★ メモリ上のデータも更新
       }
 
       if (updatedLat !== null && updatedLng !== null) {
@@ -402,7 +412,6 @@ function resetRecordTab() {
   selectedImageBase64 = null; selectedImageUrl = null; selectedDatetime = null; draftIdToUpgrade = null; 
   document.getElementById('submitBtn').disabled = false;
   
-  // ★リセット時にマイクロコピーも消す
   togglePrivacyMessage(); 
 }
 
@@ -435,7 +444,12 @@ function renderDiariesList(diaries) {
   let html = "";
   diaries.forEach((diary) => {
     let tagsHTML = "";
-    parseTags(diary.tags).forEach(tag => { tagsHTML += `<span class="tag-badge" style="background-color: ${getColorFromTag(tag)};">${escapeHTML(tag)}</span>`; });
+    parseTags(diary.tags).forEach(tag => { 
+      // ★ 画面にはAIタグ(🤖)を描画しない
+      if (!tag.startsWith("🤖")) {
+        tagsHTML += `<span class="tag-badge" style="background-color: ${getColorFromTag(tag)};">${escapeHTML(tag)}</span>`; 
+      }
+    });
     const isBookmark = diary.weather_icon === "💭"; const isDraft = diary.weather_icon === "📦"; 
     const cardBg = isDraft ? "background: #f4f6f7; border: 2px dashed #7f8c8d;" : (isBookmark ? "background: #fdf2e9; border: 2px dashed #e67e22;" : "background: white;");
     let weatherStr = (!isBookmark && !isDraft && diary.weather_icon && diary.weather_icon !== "❓") ? `${diary.weather_icon} ${diary.temperature ? diary.temperature+'℃' : ''}` : '';
@@ -465,7 +479,16 @@ function renderDiariesList(diaries) {
 }
 
 function renderTagClouds() {
-  const allTags = new Set(); globalDiaries.forEach(d => { parseTags(d.tags).forEach(t => allTags.add(t)); });
+  const allTags = new Set(); 
+  globalDiaries.forEach(d => { 
+    parseTags(d.tags).forEach(t => {
+      // ★ タグクラウドにもAIタグ(🤖)を出さない
+      if (!t.startsWith("🤖")) {
+        allTags.add(t);
+      }
+    }); 
+  });
+  
   let html = "";
   if (allTags.size > 0) {
     html += `<span class="tag-btn ${activeTagFilter === '' ? 'active' : ''}" onclick="toggleTagFilter('')">すべて</span>`;
@@ -549,7 +572,14 @@ window.showCalendarDayDiaries = function(dateStr) {
   }
   let html = `<h4 style="color:#2c3e50; margin: 15px 0 10px; border-left: 4px solid #e74c3c; padding-left: 8px;">📋 ${dateStr} の記録</h4>`;
   dayDiaries.forEach(diary => {
-    let tagsHTML = ""; parseTags(diary.tags).forEach(tag => { tagsHTML += `<span class="tag-badge" style="background-color: ${getColorFromTag(tag)};">${escapeHTML(tag)}</span>`; });
+    let tagsHTML = ""; 
+    parseTags(diary.tags).forEach(tag => { 
+      // ★ カレンダー詳細からもAIタグ(🤖)を隠す
+      if (!tag.startsWith("🤖")) {
+        tagsHTML += `<span class="tag-badge" style="background-color: ${getColorFromTag(tag)};">${escapeHTML(tag)}</span>`; 
+      }
+    });
+    
     const isBookmark = diary.weather_icon === "💭"; const isDraft = diary.weather_icon === "📦"; 
     const cardBg = isDraft ? "background: #f4f6f7; border: 2px dashed #7f8c8d;" : (isBookmark ? "background: #fdf2e9; border: 2px dashed #e67e22;" : "background: white;");
     let weatherStr = (!isBookmark && !isDraft && diary.weather_icon && diary.weather_icon !== "❓") ? `${diary.weather_icon} ${diary.temperature ? diary.temperature+'℃' : ''}` : '';
@@ -673,9 +703,6 @@ window.setupHidePinsButtons = function() {
   togglePins('hidePinsBtnView', 'mapView');
 };
 
-// ==========================================
-// 🛡️ 自衛のDX：テイクアウト連動＆マイクロコピー制御
-// ==========================================
 window.handleEatTypeChange = function() {
   const eatType = document.querySelector('input[name="eatType"]:checked').value;
   const noLocCheck = document.getElementById('noLocationCheck');
