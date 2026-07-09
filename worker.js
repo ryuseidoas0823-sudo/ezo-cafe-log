@@ -37,17 +37,27 @@ export default {
         const temp = data.temperature !== undefined ? data.temperature : null;
         const comment = data.comment || "";
 
-        // ==========================================
+       // ==========================================
         // 🤖 Cloudflare Workers AI による自動タグ抽出
         // ==========================================
         let aiExtractedTags = "";
-        if (env.AI && comment.length > 5) { // 5文字以上の感想がある場合のみAIを起動
+        if (env.AI && comment.length > 5) {
           try {
             const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
               messages: [
                 { 
                   role: "system", 
-                  content: "あなたは優秀なデータアナリストです。ユーザーの入力から、コーヒーの銘柄（コロンビア等）、特徴（デカフェ等）、滞在目的・感情（読書、静か等）を表す単語を抽出し、カンマ区切り（例: コロンビア,デカフェ,読書）でのみ出力してください。挨拶や説明は絶対に書かないでください。" 
+                  content: `あなたはカフェ・コーヒーに特化したデータ抽出AIです。ユーザーの文章から以下のカテゴリに該当する単語をすべて抽出し、カンマ区切りでのみ出力してください。
+
+【抽出対象と代表例】
+1. 生産国・地域・銘柄（例: コロンビア, エチオピア, ブルーマウンテン, ゲイシャ）
+2. 品種・精製・特徴（例: ブルボン, ティピカ, ウォッシュド, ナチュラル, デカフェ, 浅煎り）
+3. 農園・生産者（例: ロスノガレス農園, エルインヘルト。「〜農園」は確実に拾うこと）
+4. 席・空間（例: カウンター, 窓際, 2階席, 入り口近く, 奥の席, ソファ席）
+5. 設備・環境（例: トイレ, コンセント, Wi-Fi, 駐車場, 静か, 混雑）
+6. 目的・感情（例: 誕生日, プレゼント, 豆の購入, ギフト, 作業, 癒やし）
+
+ルール: 挨拶や説明文は一切不要。抽出した単語のみをカンマ区切りで出力すること。該当なしの場合は何も書かないでください。` 
                 },
                 { 
                   role: "user", 
@@ -57,13 +67,15 @@ export default {
             });
             
             if (aiResponse && aiResponse.response) {
-              // AIの返答から不要な改行や記号を掃除し、各タグの頭に「🤖」を付与
               const rawTags = aiResponse.response.trim().replace(/^"|"$/g, '').replace(/、/g, ',');
-              aiExtractedTags = rawTags.split(',').map(t => `🤖${t.trim()}`).filter(t => t !== "🤖").join(', ');
+              aiExtractedTags = rawTags.split(',')
+                .map(t => t.trim())
+                .filter(t => t !== "" && t !== "なし" && t !== "該当なし")
+                .map(t => `🤖${t}`)
+                .join(', ');
             }
           } catch (err) {
             console.log("AI Extraction Error:", err);
-            // エラー時は何もしない（通常の記録処理を続行させるため）
           }
         }
 
