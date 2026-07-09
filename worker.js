@@ -43,7 +43,7 @@ export default {
         let aiExtractedTags = "";
         if (env.AI && comment.length > 5) { // 5文字以上の感想がある場合のみAIを起動
           try {
-            const aiResponse = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+            const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
               messages: [
                 { 
                   role: "system", 
