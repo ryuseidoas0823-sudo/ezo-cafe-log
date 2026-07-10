@@ -71,3 +71,14 @@ button:disabled { background-color: #a1887f; cursor: not-allowed; }
 
 /* 🔍 検索バー下部固定 */
 .fixed-filter { position: fixed; bottom: calc(65px + env(safe-area-inset-bottom)); left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); padding: 10px 20px; box-shadow: 0 -4px 10px rgba(0,0,0,0.05); box-sizing: border-box; z-index: 999; backdrop-filter: blur(5px); border-top: 1px solid #f0f0f0; }
+
+/* =========================================
+   📊 アナリティクス・ダッシュボード関連
+========================================= */
+.dashboard-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+.dashboard-card h3 { margin-top: 0; color: #2c3e50; font-size: 1.1rem; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+.stat-box { background: #ecf0f1; padding: 15px; border-radius: 8px; text-align: center; }
+.stat-value { font-size: 1.5rem; font-weight: bold; color: #e74c3c; }
+.stat-label { font-size: 0.8rem; color: #7f8c8d; }
+.chart-container { position: relative; width: 100%; margin-top: 15px; }
