@@ -1,19 +1,13 @@
 // ==========================================
-// ⚙️ 初期設定・グローバル変数
+// 📱 main.js (UI制御・イベント管理)
 // ==========================================
-const API_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/";
-
-let allDiaries = [];
-let editingDiaryId = null; // ✏️ 編集中の日記IDを保持する変数
-
-const HOME_LAT = 43.0600;
-const HOME_LNG = 141.3500;
-let viewMap = null; 
-window.globalDiaries = []; 
+let globalDiaries = []; // api.js で取得したデータが入る
+let editingDiaryId = null;
+let currentBase64 = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   resetDateToToday();
-  fetchDiaries();
+  fetchDiaries(); // api.jsの関数を呼ぶ
   document.getElementById('tagFilter').addEventListener('change', filterDiaries);
 });
 
@@ -25,7 +19,7 @@ function resetDateToToday() {
   document.getElementById('visitedAt').value = `${yyyy}-${mm}-${dd}`;
 }
 
-let currentBase64 = null;
+// 📸 写真選択とExif取得
 document.getElementById('imageInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -48,9 +42,7 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
   } catch (err) { console.log("Exif error:", err); }
 });
 
-// ==========================================
-// 📤 データの送信 (POST/PUT リクエスト)
-// ==========================================
+// 📤 フォーム送信 (保存・更新)
 document.getElementById('recordForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const submitBtn = document.getElementById('submitBtn');
@@ -59,7 +51,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   submitBtn.innerHTML = "🤖 通信中...";
 
   const payload = {
-    id: editingDiaryId, // ✏️ 編集中の場合はIDを送信
+    id: editingDiaryId,
     shopName: document.getElementById('shopName').value,
     comment: document.getElementById('comment').value,
     visitedAt: document.getElementById('visitedAt').value,
@@ -67,49 +59,28 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     imageBase64: currentBase64,
   };
 
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      document.getElementById('recordForm').reset();
-      document.getElementById('imagePreview').style.display = 'none';
-      currentBase64 = null;
-      resetDateToToday();
-      
-      alert(editingDiaryId ? "✨ 記録を更新しました！" : "✨ 記録が完了しました！");
-      
-      editingDiaryId = null; // リセット
-      fetchDiaries();
-      switchTab('history', document.querySelector('.bottom-nav .nav-item:nth-child(2)'));
-    } else {
-      alert("エラー: " + result.error);
-    }
-  } catch (error) {
-    alert("通信に失敗しました。");
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = "🚀 記録する";
+  const result = await saveDiaryApi(payload); // api.jsの関数を呼ぶ
+  
+  if (result.success) {
+    document.getElementById('recordForm').reset();
+    document.getElementById('imagePreview').style.display = 'none';
+    currentBase64 = null;
+    resetDateToToday();
+    
+    alert(editingDiaryId ? "✨ 記録を更新しました！" : "✨ 記録が完了しました！");
+    editingDiaryId = null; 
+    
+    fetchDiaries();
+    switchTab('history', document.querySelector('.bottom-nav .nav-item:nth-child(2)'));
+  } else {
+    alert("エラー: " + result.error);
   }
+  
+  submitBtn.disabled = false;
+  submitBtn.innerHTML = originalBtnText;
 });
 
-// ==========================================
-// 📥 データの取得と描画
-// ==========================================
-async function fetchDiaries() {
-  try {
-    const response = await fetch(API_URL);
-    allDiaries = await response.json();
-    window.globalDiaries = allDiaries; 
-    renderDiariesList(allDiaries);
-    renderTagClouds(allDiaries);
-  } catch (error) { console.error("データ取得エラー:", error); }
-}
-
+// 🎨 リストの描画
 function renderDiariesList(diaries) {
   const container = document.getElementById('diariesList');
   if (!container) return;
@@ -129,7 +100,6 @@ function renderDiariesList(diaries) {
     let imageHTML = diary.image_base64 || diary.image_url ? `<img src="${diary.image_base64 || diary.image_url}" class="diary-image" alt="カフェの写真">` : "";
     const displayDate = diary.visited_at ? diary.visited_at.split(' ')[0] : '日付不明';
 
-    // ✏️ 編集・削除ボタンを追加
     card.innerHTML = `
       <div class="diary-header">
         <span class="diary-date">${escapeHTML(displayDate)}</span>
@@ -147,50 +117,39 @@ function renderDiariesList(diaries) {
   });
 }
 
-// ==========================================
-// ✏️ 編集 ＆ 🗑️ 削除機能
-// ==========================================
+// ✏️ 編集処理
 function editDiary(id) {
-    const diary = allDiaries.find(d => d.id === id);
+    const diary = globalDiaries.find(d => d.id === id);
     if (!diary) return;
 
-    // 「記録する」タブへ切り替え
     switchTab('record', document.querySelector('.bottom-nav .nav-item:nth-child(1)'));
-
-    // 既存データをフォームに流し込む
     document.getElementById('shopName').value = diary.shop_name || "";
     document.getElementById('visitedAt').value = diary.visited_at ? diary.visited_at.split(' ')[0] : "";
     document.getElementById('comment').value = diary.comment || "";
     
-    // AIタグを取り除いて純粋な手動タグだけを抽出して表示
     const manualTags = parseTags(diary.tags).filter(t => !t.startsWith("🤖") && !t.startsWith("🚨")).join(', ');
     document.getElementById('tags').value = manualTags;
-    
     document.getElementById('imagePreview').style.display = 'none';
-    currentBase64 = null; // 画像は新たに選択しない限り変更されない
+    currentBase64 = null; 
 
     editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";
-    window.scrollTo(0, 0); // 画面トップへ移動
+    window.scrollTo(0, 0); 
 }
 
+// 🗑️ 削除処理
 async function deleteDiary(id) {
     if (!confirm("本当にこの記録を削除しますか？\n(削除後は元に戻せません)")) return;
-    try {
-        const res = await fetch(`${API_URL}?id=${id}`, { method: 'DELETE' });
-        const result = await res.json();
-        if (result.success) {
-            alert("削除しました。");
-            fetchDiaries();
-        } else {
-            alert("エラー: " + result.error);
-        }
-    } catch (e) { alert("通信エラーが発生しました。"); }
+    const result = await deleteDiaryApi(id); // api.jsの関数を呼ぶ
+    if (result.success) {
+        alert("削除しました。");
+        fetchDiaries();
+    } else {
+        alert("エラー: " + result.error);
+    }
 }
 
-// ==========================================
-// 🔍 フィルター・タブ切替・補助ツール
-// ==========================================
+// 🔍 フィルタープルダウンの描画
 function renderTagClouds(diaries) {
   const select = document.getElementById('tagFilter');
   if (!select) return;
@@ -198,7 +157,7 @@ function renderTagClouds(diaries) {
   select.innerHTML = '<option value="">すべてのタグ（全件表示）</option>';
 
   const allTags = new Set();
-  allDiaries.forEach(d => parseTags(d.tags).forEach(t => {
+  globalDiaries.forEach(d => parseTags(d.tags).forEach(t => {
     if (!t.startsWith("🤖") && !t.startsWith("🚨")) allTags.add(t);
   }));
 
@@ -212,32 +171,22 @@ function renderTagClouds(diaries) {
 
 function filterDiaries() {
   const selectedTag = document.getElementById('tagFilter').value;
-  if (selectedTag === "") renderDiariesList(allDiaries);
-  else renderDiariesList(allDiaries.filter(diary => parseTags(diary.tags).includes(selectedTag)));
+  if (selectedTag === "") renderDiariesList(globalDiaries);
+  else renderDiariesList(globalDiaries.filter(diary => parseTags(diary.tags).includes(selectedTag)));
 }
 
-function parseTags(tagString) { return (!tagString) ? [] : tagString.split(',').map(t => t.trim()).filter(t => t); }
-function getColorFromTag(tag) {
-  let hash = 0;
-  for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-  const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-  return '#' + "00000".substring(0, 6 - c.length) + c;
-}
-function escapeHTML(str) {
-  if (!str) return "";
-  return str.replace(/[&<>'"]/g, tag => ({'&': '&amp;','<': '&lt;','>': '&gt;',"'": '&#39;','"': '&quot;'}[tag] || tag));
-}
-
+// 📱 タブ切り替え
 function switchTab(tabName, element) {
     document.getElementById('tab-record').classList.add('hidden');
     document.getElementById('tab-history').classList.add('hidden');
     document.getElementById('tab-map').classList.add('hidden');
     document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+    
     document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
     element.classList.add('active');
 
     if (tabName === 'history') fetchDiaries();
     if (tabName === 'map' && typeof initViewMap === 'function') {
-        initViewMap(); updateViewMarkers(allDiaries);
+        initViewMap(); updateViewMarkers(globalDiaries);
     }
 }

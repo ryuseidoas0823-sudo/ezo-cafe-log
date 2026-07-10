@@ -6,119 +6,10 @@
     <title>EzoCafe Log</title>
     
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
-    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <style>
-        :root {
-            --bg-color: #f8f5f2;
-            --text-color: #3e2723;
-            --accent-color: #5d4037;
-            --card-bg: #ffffff;
-        }
-
-        body {
-            font-family: "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-            line-height: 1.6;
-        }
-
-        .container { max-width: 600px; margin: 0 auto; }
-        
-        /* ボトムナビの裏に隠れないよう全体の下部余白を確保 */
-        #main-content { padding-bottom: 80px; }
-
-        h1 { text-align: center; color: var(--accent-color); font-size: 1.5em; margin-bottom: 25px; }
-
-        .form-card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-bottom: 30px; }
-        .form-group { margin-bottom: 18px; }
-        label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 0.9em; color: var(--accent-color); }
-        input[type="text"], input[type="date"], textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; background-color: #fafafa; }
-        textarea { resize: vertical; min-height: 100px; }
-        input[type="file"] { margin-top: 5px; font-size: 0.9em; }
-
-        #imagePreview { width: 100%; border-radius: 8px; margin-top: 10px; object-fit: cover; max-height: 250px; }
-
-        button { background-color: var(--accent-color); color: white; border: none; padding: 14px 20px; width: 100%; border-radius: 8px; font-size: 16px; cursor: pointer; transition: opacity 0.2s; font-weight: bold; margin-top: 10px; }
-        button:hover { opacity: 0.9; }
-        button:disabled { background-color: #a1887f; cursor: not-allowed; }
-
-        .diary-card { background: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
-        .diary-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 15px; }
-        .diary-date { font-size: 0.85em; color: #888; }
-        .diary-shop { margin: 0; font-size: 1.25em; color: var(--text-color); font-weight: bold; }
-
-        /* 🖼️ 写真全体を絶対に表示させるスタイル */
-        .diary-image { 
-            width: 100%; 
-            max-height: 400px; /* 大きくなりすぎるのを防ぐ */
-            object-fit: contain; /* cover（切り抜き）から contain（全体表示）に変更 */
-            background-color: #fafafa; /* 余白ができた場合の背景色 */
-            border-radius: 8px; 
-            margin-bottom: 15px; 
-        }
-
-        .diary-comment { font-size: 0.95em; margin-bottom: 15px; white-space: pre-wrap; color: #444; }
-        .diary-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-        .tag-badge { padding: 4px 10px; border-radius: 12px; color: white; font-size: 0.75em; font-weight: bold; }
-
-        /* 🗺️ 地図表示用のスタイル調整 */
-        #mapView { width: 100%; height: 65vh; border-radius: 12px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-        .emoji-pin { font-size: 20px; text-align: center; line-height: 36px; width: 36px; height: 36px; border-radius: 50%; box-shadow: 0 3px 6px rgba(0,0,0,0.4); border: 2px solid white; display: flex; align-items: center; justify-content: center; }
-        .map-label { background-color: rgba(255, 255, 255, 0.95); border: 1px solid #5d4037; border-radius: 4px; color: #3e2723; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-
-        /* 📱 ボトムナビゲーションの設定 */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0; left: 0; width: 100%; height: 65px;
-            background-color: #ffffff;
-            display: flex; justify-content: space-around; align-items: center;
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
-            z-index: 1000;
-            padding-bottom: env(safe-area-inset-bottom);
-        }
-        .nav-item {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            text-decoration: none; color: #cccccc; flex: 1; padding: 5px 0;
-            transition: color 0.2s;
-        }
-        .nav-item.active { color: var(--accent-color); }
-        .nav-icon { font-size: 24px; margin-bottom: 2px; }
-        .nav-label { font-size: 10px; font-weight: bold; }
-        
-        /* 非表示用クラス */
-        .hidden { display: none !important; }
-
-        /* 🔍 タグ検索バーの下部固定 */
-        .fixed-filter {
-            position: fixed;
-            /* ボトムナビの高さ(65px)分だけ上に浮かせ、iPhoneのセーフエリアも考慮 */
-            bottom: calc(65px + env(safe-area-inset-bottom)); 
-            left: 0;
-            width: 100%;
-            background: rgba(255, 255, 255, 0.95); /* 少し透ける背景 */
-            padding: 10px 20px;
-            box-shadow: 0 -4px 10px rgba(0,0,0,0.05);
-            box-sizing: border-box;
-            z-index: 999;
-            backdrop-filter: blur(5px);
-            border-top: 1px solid #f0f0f0;
-        }
-
-        .fixed-filter select {
-            width: 100%; 
-            padding: 10px; 
-            border: 1px solid #ddd; 
-            border-radius: 8px; 
-            font-size: 16px; 
-            background-color: #fafafa; 
-            color: var(--text-color);
-        }
-    </style>
+    
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container" id="main-content">
@@ -155,7 +46,6 @@
 
         <div id="tab-history" class="hidden">
             <div id="diariesList" style="padding-bottom: 70px;"></div>
-
             <div class="fixed-filter">
                 <select id="tagFilter">
                     <option value="">すべてのタグ（全件表示）</option>
@@ -184,6 +74,7 @@
     </div>
 
     <script src="utils.js"></script>
+    <script src="api.js"></script>
     <script src="map.js"></script>
     <script src="main.js"></script>
 </body>

@@ -1,243 +1,73 @@
-/* =========================================
-   1. ベース設定（全体）
-========================================= */
-body { 
-  font-family: 'Helvetica Neue', Arial, sans-serif; 
-  background-color: #f4f4f9; 
-  color: #333; 
-  margin: 0; 
-  padding: 0; 
-}
-.header { 
-  background-color: #2c3e50; 
-  color: white; 
-  padding: 15px; 
-  text-align: center; 
-  font-size: 1.2rem; 
-  font-weight: bold; 
+:root {
+    --bg-color: #f8f5f2;
+    --text-color: #3e2723;
+    --accent-color: #5d4037;
+    --card-bg: #ffffff;
 }
 
-/* アプリ全体のコンテナ設定 */
-.container { 
-  padding: 20px; 
-  max-width: 600px; 
-  margin: auto; 
+body {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 20px;
+    line-height: 1.6;
 }
 
-/* メインコンテンツがボトムナビの裏に隠れないよう下部に余白を確保 */
-#main-content {
-  padding-bottom: 80px; 
+.container { max-width: 600px; margin: 0 auto; }
+#main-content { padding-bottom: 80px; }
+
+h1 { text-align: center; color: var(--accent-color); font-size: 1.5em; margin-bottom: 25px; }
+
+.form-card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-bottom: 30px; }
+.form-group { margin-bottom: 18px; }
+label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 0.9em; color: var(--accent-color); }
+input[type="text"], input[type="date"], textarea, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; background-color: #fafafa; color: var(--text-color); }
+textarea { resize: vertical; min-height: 100px; }
+input[type="file"] { margin-top: 5px; font-size: 0.9em; }
+
+#imagePreview { width: 100%; border-radius: 8px; margin-top: 10px; object-fit: cover; max-height: 250px; }
+
+button { background-color: var(--accent-color); color: white; border: none; padding: 14px 20px; width: 100%; border-radius: 8px; font-size: 16px; cursor: pointer; transition: opacity 0.2s; font-weight: bold; margin-top: 10px; }
+button:hover { opacity: 0.9; }
+button:disabled { background-color: #a1887f; cursor: not-allowed; }
+
+.diary-card { background: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); position: relative;}
+.diary-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 15px; }
+.diary-date { font-size: 0.85em; color: #888; }
+.diary-shop { margin: 0; font-size: 1.25em; color: var(--text-color); font-weight: bold; }
+
+/* 🖼️ 見切れない画像 */
+.diary-image { 
+    width: 100%; 
+    max-height: 400px;
+    object-fit: contain; 
+    background-color: #fafafa;
+    border-radius: 8px; 
+    margin-bottom: 15px; 
 }
 
-.content { display: none; }
-.content.active { display: block; }
+.diary-comment { font-size: 0.95em; margin-bottom: 15px; white-space: pre-wrap; color: #444; }
+.diary-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-badge { padding: 4px 10px; border-radius: 12px; color: white; font-size: 0.75em; font-weight: bold; }
 
-/* =========================================
-   2. ボトムナビゲーション（スマホ特化UI）
-========================================= */
-.bottom-nav {
-  position: fixed;
-  bottom: 0; 
-  left: 0; 
-  width: 100%; 
-  height: 65px; 
-  background-color: #ffffff;
-  display: flex; 
-  justify-content: space-around; 
-  align-items: center;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
-  z-index: 1000;
-  /* iPhoneのホームバー（Safe Area）対応 */
-  padding-bottom: env(safe-area-inset-bottom);
-}
+/* ✏️ 編集・削除ボタン */
+.card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; padding-top: 12px; border-top: 1px dashed #eee; }
+.action-btn { background: #ecf0f1; border: none; font-size: 0.85rem; padding: 8px 12px; border-radius: 5px; cursor: pointer; width: auto; color: #2c3e50; font-weight: bold; margin: 0; }
 
-.nav-item {
-  display: flex; 
-  flex-direction: column; 
-  align-items: center;
-  justify-content: center;
-  text-decoration: none; 
-  color: #999999; 
-  flex: 1; 
-  padding: 5px 0;
-  transition: 0.2s;
-}
-
-.nav-item.active, .nav-item:hover { 
-  color: #d35400; 
-}
-
-.nav-icon { 
-  font-size: 24px; 
-  margin-bottom: 2px; 
-}
-
-.nav-label { 
-  font-size: 10px; 
-  font-weight: bold; 
-}
-
-/* =========================================
-   3. フォーム・汎用ボタン部品
-========================================= */
-input[type="text"], select, textarea { 
-  width: 100%; 
-  padding: 12px; 
-  margin-bottom: 15px; 
-  border: 1px solid #ccc; 
-  border-radius: 8px; 
-  box-sizing: border-box; 
-  font-size: 1rem; 
-}
-textarea { 
-  height: 100px; 
-  resize: none; 
-}
-
-/* 汎用ボタン（保存や確定アクション用） */
-button { 
-  width: 100%; 
-  padding: 15px; 
-  background-color: #e74c3c; 
-  color: white; 
-  border: none; 
-  border-radius: 8px; 
-  font-size: 1.1rem; 
-  font-weight: bold; 
-  cursor: pointer; 
-  margin-bottom: 10px; 
-  transition: 0.2s; 
-}
-.btn-cancel { 
-  background-color: #7f8c8d; 
-  padding: 12px; 
-  font-size: 1rem; 
-  margin-top: 10px; 
-}
-
-/* =========================================
-   3-2. 記録画面（Step1）の階層化ボタン
-========================================= */
-.record-actions { 
-  display: flex; 
-  flex-direction: column; 
-  gap: 12px; 
-}
-
-.btn { 
-  padding: 18px 20px; 
-  border-radius: 12px; 
-  font-size: 16px; 
-  font-weight: bold; 
-  border: none; 
-  cursor: pointer; 
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-  transition: transform 0.1s, box-shadow 0.1s;
-  width: 100%; /* 親要素に合わせる */
-}
-
-.btn:active {
-  transform: scale(0.98);
-  box-shadow: 0 2px 3px rgba(0,0,0,0.1);
-}
-
-.btn-primary { 
-  background-color: #d35400; 
-  color: #ffffff; 
-}
-
-.btn-secondary { 
-  background-color: #ffffff; 
-  color: #666666; 
-  border: 1px solid #cccccc; 
-}
-
-/* =========================================
-   3-3. ラジオボタンのカスタマイズ（タグ風）
-========================================= */
-.type-selector, .weather-selector { display: flex; gap: 8px; margin-bottom: 15px; }
-.type-selector label, .weather-selector label { flex: 1; padding: 10px 5px; background: white; border: 2px solid #ddd; border-radius: 8px; text-align: center; cursor: pointer; font-weight: bold; font-size: 0.9rem; color: #7f8c8d; }
-.type-selector input[type="radio"], .weather-selector input[type="radio"] { display: none; }
-.type-selector label:has(input[type="radio"]:checked), .weather-selector label:has(input[type="radio"]:checked) { border-color: #e74c3c; background-color: #fadbd8; color: #e74c3c; }
-
-/* =========================================
-   4. カフェ記録関連
-========================================= */
-#previewImg { display: none; width: 100%; border-radius: 8px; margin-bottom: 15px; }
-
-/* 検索サジェスト機能 */
-.autocomplete-container { position: relative; margin-bottom: 15px; }
-.autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; border-radius: 8px; max-height: 200px; overflow-y: auto; z-index: 2000; margin: 0; padding: 0; list-style: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: none; }
-.autocomplete-list li { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 0.95rem; }
-.autocomplete-list li:hover { background: #f9f9f9; }
-.badge-master { background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 5px; }
-.badge-new { background: #e74c3c; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 5px; }
-
-/* タグ表示 */
-.tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
-.tag-btn { background: #ecf0f1; border: 1px solid #bdc3c7; color: #34495e; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; cursor: pointer; }
-.tag-btn.active { background: #3498db; color: white; border-color: #2980b9; font-weight: bold; }
-.tag-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; color: white; margin-right: 5px; margin-bottom: 5px; text-shadow: 0 1px 1px rgba(0,0,0,0.2); }
-
-/* =========================================
-   5. 履歴リスト（カードデザイン）
-========================================= */
-.card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; }
-.card img { width: 100%; border-radius: 8px; margin-bottom: 10px; }
-.card-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; color: #2c3e50; }
-.card-meta { font-size: 0.85rem; color: #7f8c8d; margin-bottom: 8px; display: flex; gap: 10px; align-items: center; }
-.card-comment { font-size: 1rem; line-height: 1.5; margin-bottom: 10px; white-space: pre-wrap; }
-
-/* ボタン被り解消のためのフッター配置 */
-.card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 15px; padding-top: 12px; border-top: 1px dashed #bdc3c7; }
-.action-btn { background: #ecf0f1; border: none; font-size: 0.9rem; padding: 8px 12px; border-radius: 5px; cursor: pointer; width: auto; color: #2c3e50; font-weight: bold; margin-bottom: 0; }
-
-/* =========================================
-   6. マップ関連
-========================================= */
-#manualMapArea { display: none; background: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 2px solid #f39c12; position: relative; }
-#pickerMap { width: 100%; height: 250px; border-radius: 8px; margin-bottom: 10px; z-index: 1; }
-#mapView { width: 100%; height: 60vh; border-radius: 12px; z-index: 1; }
-
+/* 🗺️ マップ */
+#mapView { width: 100%; height: 65vh; border-radius: 12px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 .emoji-pin { font-size: 20px; text-align: center; line-height: 36px; width: 36px; height: 36px; border-radius: 50%; box-shadow: 0 3px 6px rgba(0,0,0,0.4); border: 2px solid white; display: flex; align-items: center; justify-content: center; }
-.map-label { background-color: rgba(255, 255, 255, 0.95); border: 1px solid #34495e; border-radius: 4px; color: #2c3e50; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.map-label { background-color: rgba(255, 255, 255, 0.95); border: 1px solid #5d4037; border-radius: 4px; color: #3e2723; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
-/* ピンを隠すボタン */
-.hide-pins-btn { position: absolute; top: 10px; right: 10px; z-index: 1000; padding: 8px 12px; background: rgba(255,255,255,0.9); border: 2px solid #ccc; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); font-weight: bold; font-size: 0.85rem; color: #333; cursor: pointer; width: auto; margin-bottom: 0; }
+/* 📱 ボトムナビ */
+.bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 65px; background-color: #ffffff; display: flex; justify-content: space-around; align-items: center; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05); z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
+.nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; text-decoration: none; color: #cccccc; flex: 1; padding: 5px 0; transition: color 0.2s; }
+.nav-item.active { color: var(--accent-color); }
+.nav-icon { font-size: 24px; margin-bottom: 2px; }
+.nav-label { font-size: 10px; font-weight: bold; }
 
-/* =========================================
-   7. アナリティクス・バッジ関連
-========================================= */
-.dashboard-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-.dashboard-card h3 { margin-top: 0; color: #2c3e50; font-size: 1.1rem; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
-.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-.stat-box { background: #ecf0f1; padding: 15px; border-radius: 8px; text-align: center; }
-.stat-value { font-size: 1.5rem; font-weight: bold; color: #e74c3c; }
-.stat-label { font-size: 0.8rem; color: #7f8c8d; }
-.chart-container { position: relative; width: 100%; }
+.hidden { display: none !important; }
 
-/* 🏆 バッジ機能用スタイル */
-.badge-item { border-radius: 50%; width: 75px; height: 75px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; box-shadow: 0 4px 8px rgba(0,0,0,0.2); text-align: center; transition: transform 0.2s; cursor: pointer; }
-.badge-item:hover { transform: scale(1.1); }
-.badge-icon { font-size: 1.8rem; line-height: 1; margin-bottom: 3px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2)); }
-.badge-title { font-size: 0.6rem; font-weight: bold; line-height: 1.1; padding: 0 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
-
-.badge-locked { background: #ecf0f1 !important; color: #bdc3c7; box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); border: 2px dashed #bdc3c7; }
-.badge-locked .badge-icon { filter: none; opacity: 0.5; }
-.badge-locked .badge-title { text-shadow: none; }
-
-/* =========================================
-   8. 編集モーダル＆カレンダー
-========================================= */
-#editModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; }
-.modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-
-/* 📅 自作カレンダー用スタイル */
-.calendar-header-cell { font-weight: bold; font-size: 0.8rem; color: #7f8c8d; padding: 5px 0; }
-.calendar-day-cell { background: #fdfefe; border: 1px solid #e2e8f0; border-radius: 6px; min-height: 55px; padding: 4px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; cursor: pointer; position: relative; }
-.calendar-day-cell:hover { background: #f4f6f7; }
-.calendar-day-num { font-size: 0.85rem; font-weight: bold; color: #2c3e50; }
-.calendar-day-today { border: 2px solid #e74c3c; background: #fdf2e9; }
-.calendar-day-has-visit { background: #fffde7; }
-.calendar-cafe-dot { font-size: 1rem; line-height: 1; margin-top: 2px; }
-.calendar-day-empty { background: transparent; border: none; cursor: default; }
+/* 🔍 検索バー下部固定 */
+.fixed-filter { position: fixed; bottom: calc(65px + env(safe-area-inset-bottom)); left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); padding: 10px 20px; box-shadow: 0 -4px 10px rgba(0,0,0,0.05); box-sizing: border-box; z-index: 999; backdrop-filter: blur(5px); border-top: 1px solid #f0f0f0; }
