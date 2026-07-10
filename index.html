@@ -52,10 +52,12 @@
         .diary-date { font-size: 0.85em; color: #888; }
         .diary-shop { margin: 0; font-size: 1.25em; color: var(--text-color); font-weight: bold; }
 
-        /* 🖼️ 縦長の写真も見切れないように全体を表示 */
+        /* 🖼️ 写真全体を絶対に表示させるスタイル */
         .diary-image { 
             width: 100%; 
-            height: auto; 
+            max-height: 400px; /* 大きくなりすぎるのを防ぐ */
+            object-fit: contain; /* cover（切り抜き）から contain（全体表示）に変更 */
+            background-color: #fafafa; /* 余白ができた場合の背景色 */
             border-radius: 8px; 
             margin-bottom: 15px; 
         }
