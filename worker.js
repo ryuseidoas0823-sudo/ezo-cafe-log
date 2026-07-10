@@ -33,7 +33,8 @@ export default {
       try {
         if (action === "search_master") {
           const query = url.searchParams.get("query") || "";
-          const { results } = await env.DB.prepare("SELECT shop_name FROM shops_master WHERE shop_name LIKE ? LIMIT 10").bind(`%${query}%`).all();
+          // 🛠️ 修正: shop_id と shop_name の両方を取得する
+          const { results } = await env.DB.prepare("SELECT shop_id, shop_name FROM shops_master WHERE shop_name LIKE ? LIMIT 10").bind(`%${query}%`).all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         } else {
           const { results } = await env.DB.prepare("SELECT * FROM diaries ORDER BY visited_at DESC, id DESC").all();
@@ -54,6 +55,7 @@ export default {
         const lat = data.lat || null;
         const lng = data.lng || null;
         const temp = data.temperature || null;
+        const weatherIcon = data.weatherIcon || "❓"; // 👈 追加: 天気アイコンを受け取る
         
         let targetBase64 = data.imageBase64 || null;
         let moderationTag = ""; 
@@ -115,20 +117,22 @@ export default {
         // 💾 データベース(D1)への保存・更新分岐
         if (data.id) {
           // ✏️ 更新モード (Edit)
+          // 🛠️ 修正: 天気と気温の更新処理を追加
           if (targetBase64) {
-            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ? WHERE id = ?`)
-              .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, data.id).run();
+            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ? WHERE id = ?`)
+              .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, data.id).run();
           } else {
             // 画像が選択されなかった場合は画像カラムを上書きしない
-            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ? WHERE id = ?`)
-              .bind(data.shopName, comment, combinedTags, visitedAt, data.id).run();
+            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, weather_icon = ?, temperature = ? WHERE id = ?`)
+              .bind(data.shopName, comment, combinedTags, visitedAt, weatherIcon, temp, data.id).run();
           }
           return new Response(JSON.stringify({ success: true, id: data.id }), { headers: corsHeaders });
         } else {
           // 🆕 新規作成モード (Insert)
+          // 🛠️ 修正: フロントから受け取った天気アイコン(weatherIcon)を使用する
           const info = await env.DB.prepare(
             `INSERT INTO diaries (shop_id, shop_name, comment, latitude, longitude, image_base64, image_url, tags, weather_icon, temperature, user_gender, user_age, visited_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).bind(data.shopId || null, data.shopName || "名前なし", comment, lat, lng, targetBase64, null, combinedTags, "❓", temp, "未設定", "未設定", visitedAt, createdSystemAt).run();
+          ).bind(data.shopId || null, data.shopName || "名前なし", comment, lat, lng, targetBase64, null, combinedTags, weatherIcon, temp, "未設定", "未設定", visitedAt, createdSystemAt).run();
           return new Response(JSON.stringify({ success: true, id: info.meta.last_row_id }), { headers: corsHeaders });
         }
       } catch (err) {

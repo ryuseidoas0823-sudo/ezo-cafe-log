@@ -19,14 +19,46 @@
         <div id="tab-record">
             <div class="form-card">
                 <form id="recordForm">
-                    <div class="form-group">
+                    <!-- 🛠️ 修正: クラスに relative を追加し、隠し項目とサジェストリストを追加 -->
+                    <div class="form-group relative">
                         <label for="shopName">お店の名前</label>
-                        <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" required>
+                        <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" autocomplete="off" required>
+                        <input type="hidden" id="shopId">
+                        <ul id="shopSuggestList" class="suggest-list"></ul>
                     </div>
+
+                    <!-- ☕️🥡 追加: 店内 / テイクアウトの選択UI -->
+                    <div class="form-group">
+                        <label>利用タイプは？</label>
+                        <div class="type-selector">
+                            <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
+                            <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイクアウト</label>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label for="visitedAt">訪問日（写真を選択すると自動入力）</label>
                         <input type="date" id="visitedAt" required>
                     </div>
+
+                    <!-- ⛅️ 追加: 天気とGPSの入力UI -->
+                    <div class="form-group">
+                        <label>空模様は？</label>
+                        <div class="weather-selector">
+                            <label><input type="radio" name="weatherType" value="☀️">☀️</label>
+                            <label><input type="radio" name="weatherType" value="☁️">☁️</label>
+                            <label><input type="radio" name="weatherType" value="☔️">☔️</label>
+                            <label><input type="radio" name="weatherType" value="❄️">❄️</label>
+                            <label><input type="radio" name="weatherType" value="❓" checked>❓不明</label>
+                        </div>
+                        <button type="button" id="getGpsWeatherBtn" style="background-color: #3498db; color: white; margin-top: 10px; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer;">📍 現在地と気温を自動取得</button>
+                        <p id="gpsStatus" style="font-size: 0.85em; color: #e74c3c; margin-top: 8px; font-weight: bold; text-align: center;"></p>
+                        <!-- 隠しパラメータ -->
+                        <input type="hidden" id="latitude">
+                        <input type="hidden" id="longitude">
+                        <input type="hidden" id="temperature">
+                    </div>
+
                     <div class="form-group">
                         <label for="imageInput">写真を追加</label>
                         <input type="file" id="imageInput" accept="image/*">
@@ -76,24 +108,63 @@
                 </div>
             </div>
         </div>
+
+        <!-- ⚙️ 追加: 設定タブ -->
+        <div id="tab-settings" class="hidden">
+            <div class="dashboard-card">
+                <h3>👤 アナリティクス用属性設定</h3>
+                <p style="font-size: 0.85rem; color: #7f8c8d; margin-bottom: 15px;">※ここで設定した属性は記録と一緒に保存され、将来SNS化した際の統計データにのみ利用されます。</p>
+                
+                <div class="form-group">
+                    <label>性別</label>
+                    <select id="settingGender">
+                        <option value="">選択してください</option>
+                        <option value="男性">男性</option>
+                        <option value="女性">女性</option>
+                        <option value="その他">その他</option>
+                        <option value="回答しない">回答しない</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>年代</label>
+                    <select id="settingAge">
+                        <option value="">選択してください</option>
+                        <option value="10代">10代</option>
+                        <option value="20代">20代</option>
+                        <option value="30代">30代</option>
+                        <option value="40代">40代</option>
+                        <option value="50代">50代</option>
+                        <option value="60代以上">60代以上</option>
+                    </select>
+                </div>
+
+                <button type="button" onclick="saveSettings()" style="background-color: #3498db; margin-top: 15px;">💾 設定をスマホに保存</button>
+            </div>
+        </div>
     </div>
 
+    <!-- 📱 ボトムナビゲーション (5つのタブをスッキリ配置) -->
     <div class="bottom-nav">
         <a href="#" class="nav-item active" onclick="switchTab('record', this)">
             <span class="nav-icon">📝</span>
-            <span class="nav-label">記録する</span>
+            <span class="nav-label">記録</span>
         </a>
         <a href="#" class="nav-item" onclick="switchTab('history', this)">
             <span class="nav-icon">📚</span>
-            <span class="nav-label">履歴を見る</span>
+            <span class="nav-label">履歴</span>
         </a>
         <a href="#" class="nav-item" onclick="switchTab('map', this)">
             <span class="nav-icon">🗺️</span>
-            <span class="nav-label">マップを見る</span>
+            <span class="nav-label">マップ</span>
         </a>
         <a href="#" class="nav-item" onclick="switchTab('analytics', this)">
             <span class="nav-icon">📊</span>
             <span class="nav-label">分析</span>
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('settings', this)">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">設定</span>
         </a>
     </div>
 

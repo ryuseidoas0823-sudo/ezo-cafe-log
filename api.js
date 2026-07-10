@@ -32,6 +32,17 @@ async function saveDiaryApi(payload) {
   }
 }
 
+// 🔍 GET: 店舗マスタの検索 (サジェスト機能用)
+async function searchMasterApi(query) {
+  try {
+    const response = await fetch(`${API_URL}?action=search_master&query=${encodeURIComponent(query)}`);
+    return await response.json();
+  } catch (error) {
+    console.error("マスタ検索エラー:", error);
+    return [];
+  }
+}
+
 // 🗑️ DELETE: 日記の削除
 async function deleteDiaryApi(id) {
   try {
