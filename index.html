@@ -29,6 +29,7 @@
 
         .container { max-width: 600px; margin: 0 auto; }
         
+        /* ボトムナビの裏に隠れないよう全体の下部余白を確保 */
         #main-content { padding-bottom: 80px; }
 
         h1 { text-align: center; color: var(--accent-color); font-size: 1.5em; margin-bottom: 25px; }
@@ -46,24 +47,29 @@
         button:hover { opacity: 0.9; }
         button:disabled { background-color: #a1887f; cursor: not-allowed; }
 
-        .tag-cloud { margin-bottom: 30px; display: flex; flex-wrap: wrap; gap: 8px; }
-        .cloud-tag { padding: 6px 14px; border-radius: 20px; color: white; font-size: 0.85em; font-weight: bold; }
-
         .diary-card { background: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
         .diary-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 15px; }
         .diary-date { font-size: 0.85em; color: #888; }
         .diary-shop { margin: 0; font-size: 1.25em; color: var(--text-color); font-weight: bold; }
-        .diary-image { width: 100%; border-radius: 8px; margin-bottom: 15px; object-fit: cover; max-height: 300px; }
+
+        /* 🖼️ 縦長の写真も見切れないように全体を表示 */
+        .diary-image { 
+            width: 100%; 
+            height: auto; 
+            border-radius: 8px; 
+            margin-bottom: 15px; 
+        }
+
         .diary-comment { font-size: 0.95em; margin-bottom: 15px; white-space: pre-wrap; color: #444; }
         .diary-tags { display: flex; flex-wrap: wrap; gap: 6px; }
         .tag-badge { padding: 4px 10px; border-radius: 12px; color: white; font-size: 0.75em; font-weight: bold; }
 
-        /* 🗺️ 地図表示用のスタイル調整（style.cssの要素を統合） */
+        /* 🗺️ 地図表示用のスタイル調整 */
         #mapView { width: 100%; height: 65vh; border-radius: 12px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         .emoji-pin { font-size: 20px; text-align: center; line-height: 36px; width: 36px; height: 36px; border-radius: 50%; box-shadow: 0 3px 6px rgba(0,0,0,0.4); border: 2px solid white; display: flex; align-items: center; justify-content: center; }
         .map-label { background-color: rgba(255, 255, 255, 0.95); border: 1px solid #5d4037; border-radius: 4px; color: #3e2723; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
-        /* ボトムナビゲーションの設定 */
+        /* 📱 ボトムナビゲーションの設定 */
         .bottom-nav {
             position: fixed;
             bottom: 0; left: 0; width: 100%; height: 65px;
@@ -82,7 +88,34 @@
         .nav-icon { font-size: 24px; margin-bottom: 2px; }
         .nav-label { font-size: 10px; font-weight: bold; }
         
+        /* 非表示用クラス */
         .hidden { display: none !important; }
+
+        /* 🔍 タグ検索バーの下部固定 */
+        .fixed-filter {
+            position: fixed;
+            /* ボトムナビの高さ(65px)分だけ上に浮かせ、iPhoneのセーフエリアも考慮 */
+            bottom: calc(65px + env(safe-area-inset-bottom)); 
+            left: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95); /* 少し透ける背景 */
+            padding: 10px 20px;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.05);
+            box-sizing: border-box;
+            z-index: 999;
+            backdrop-filter: blur(5px);
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .fixed-filter select {
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            background-color: #fafafa; 
+            color: var(--text-color);
+        }
     </style>
 </head>
 <body>
@@ -118,17 +151,11 @@
             </div>
         </div>
 
-        <!-- ==========================================
-             📚 履歴タブ（日記リストを上に、検索を下に）
-             ========================================== -->
         <div id="tab-history" class="hidden">
-            <!-- 📚 日記リスト（タイムライン）を最優先で上に配置 -->
-            <div id="diariesList"></div>
+            <div id="diariesList" style="padding-bottom: 70px;"></div>
 
-            <!-- 🔍 ゴチャつきを解消したプルダウン検索エリアを下に配置 -->
-            <div class="filter-card" style="background: var(--card-bg); padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-top: 25px; margin-bottom: 20px;">
-                <label for="tagFilter" style="display: block; margin-bottom: 8px; font-weight: bold; font-size: 0.9em; color: var(--accent-color);">🔍 タグで日記を絞り込む</label>
-                <select id="tagFilter" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; background-color: #fafafa; color: var(--text-color);">
+            <div class="fixed-filter">
+                <select id="tagFilter">
                     <option value="">すべてのタグ（全件表示）</option>
                 </select>
             </div>

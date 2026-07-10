@@ -24,9 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('visitedAt').value = `${yyyy}-${mm}-${dd}`;
 
   fetchDiaries();
+  
+  // 🔍 プルダウン変更時のフィルターイベントを設定
   document.getElementById('tagFilter').addEventListener('change', filterDiaries);
 });
-
 
 // ==========================================
 // 📸 画像選択 ＆ Exif（撮影日時）自動取得
@@ -180,16 +181,13 @@ function renderDiariesList(diaries) {
 }
 
 // ==========================================
-// 🎨 UI描画：タグクラウドの表示
-// ==========================================
-// ==========================================
 // 🎨 UI描画：タグ選択プルダウンの更新
 // ==========================================
 function renderTagClouds(diaries) {
   const select = document.getElementById('tagFilter');
   if (!select) return;
 
-  // 現在ユーザーが選択しているタグを一時キープ（リロード時に外れないようにする対策）
+  // 現在ユーザーが選択しているタグを一時キープ（更新時に選択が外れないようにする対策）
   const currentValue = select.value;
 
   // プルダウンを一旦初期化
@@ -197,7 +195,7 @@ function renderTagClouds(diaries) {
 
   const allTags = new Set();
   
-  // 常に「全日記データ（allDiaries）」からタグを収集してリストを作る
+  // 常に「全日記データ（allDiaries）」からタグを収集してリストを作成
   allDiaries.forEach(d => {
     parseTags(d.tags).forEach(t => {
       // 🔒 [自衛のDX] 画面の選択肢にはAIタグや非公開マークを出さない
@@ -207,7 +205,7 @@ function renderTagClouds(diaries) {
     }); 
   });
 
-  // タグを五十音・アルファベット順に綺麗に並び替えてプルダウンに追加
+  // タグを五十音・アルファベット順にソートしてプルダウンに追加
   Array.from(allTags).sort().forEach(tag => {
     const option = document.createElement('option');
     option.value = tag;
@@ -220,7 +218,7 @@ function renderTagClouds(diaries) {
 }
 
 // ==========================================
-// 🔍 プルダウン選択による日記のフィルタリング処理（追加）
+// 🔍 プルダウン選択による日記のフィルタリング処理
 // ==========================================
 function filterDiaries() {
   const selectedTag = document.getElementById('tagFilter').value;
@@ -229,13 +227,47 @@ function filterDiaries() {
     // 「すべてのタグ」が選ばれたら全件表示
     renderDiariesList(allDiaries);
   } else {
-    // 選択されたタグが「含まれている」日記だけを抽出して表示
+    // 選択されたタグが含まれている日記だけを抽出して表示
     const filtered = allDiaries.filter(diary => {
       const tagsArray = parseTags(diary.tags);
       return tagsArray.includes(selectedTag);
     });
     renderDiariesList(filtered);
   }
+}
+
+// ==========================================
+// 🛠️ 補助関数（ヘルパー）
+// ==========================================
+
+// タグ文字列を配列に分割する
+function parseTags(tagString) {
+  if (!tagString) return [];
+  return tagString.split(',').map(t => t.trim()).filter(t => t);
+}
+
+// タグの色を文字コードベースで生成する
+function getColorFromTag(tag) {
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) {
+    hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+  return '#' + "00000".substring(0, 6 - c.length) + c;
+}
+
+// HTMLエスケープ（XSS対策）
+function escapeHTML(str) {
+  if (!str) return "";
+  return str.replace(/[&<>'"]/g, 
+    tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[tag] || tag)
+  );
 }
 
 // ==========================================
@@ -250,7 +282,7 @@ function switchTab(tabName, element) {
     // 2. 選ばれたタブの中身だけを表示する
     document.getElementById(`tab-${tabName}`).classList.remove('hidden');
 
-    // 3. アクティブなタブのハイライトを更新
+    // 3. ナビゲーションのアイコンの色（active）を更新
     document.querySelectorAll('.nav-item').forEach(nav => {
         nav.classList.remove('active');
     });
