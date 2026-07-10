@@ -6,6 +6,9 @@
     <title>EzoCafe Log</title>
     
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
         :root {
@@ -26,7 +29,6 @@
 
         .container { max-width: 600px; margin: 0 auto; }
         
-        /* ボトムナビの裏に隠れないよう余白を追加 */
         #main-content { padding-bottom: 80px; }
 
         h1 { text-align: center; color: var(--accent-color); font-size: 1.5em; margin-bottom: 25px; }
@@ -56,9 +58,12 @@
         .diary-tags { display: flex; flex-wrap: wrap; gap: 6px; }
         .tag-badge { padding: 4px 10px; border-radius: 12px; color: white; font-size: 0.75em; font-weight: bold; }
 
-        /* ==========================================
-           📱 ボトムナビゲーションの設定
-           ========================================== */
+        /* 🗺️ 地図表示用のスタイル調整（style.cssの要素を統合） */
+        #mapView { width: 100%; height: 65vh; border-radius: 12px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .emoji-pin { font-size: 20px; text-align: center; line-height: 36px; width: 36px; height: 36px; border-radius: 50%; box-shadow: 0 3px 6px rgba(0,0,0,0.4); border: 2px solid white; display: flex; align-items: center; justify-content: center; }
+        .map-label { background-color: rgba(255, 255, 255, 0.95); border: 1px solid #5d4037; border-radius: 4px; color: #3e2723; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+
+        /* ボトムナビゲーションの設定 */
         .bottom-nav {
             position: fixed;
             bottom: 0; left: 0; width: 100%; height: 65px;
@@ -77,7 +82,6 @@
         .nav-icon { font-size: 24px; margin-bottom: 2px; }
         .nav-label { font-size: 10px; font-weight: bold; }
         
-        /* 非表示用のクラス */
         .hidden { display: none !important; }
     </style>
 </head>
@@ -114,9 +118,24 @@
             </div>
         </div>
 
+        <!-- ==========================================
+             📚 履歴タブ（日記リストを上に、検索を下に）
+             ========================================== -->
         <div id="tab-history" class="hidden">
-            <div id="tagCloud" class="tag-cloud"></div>
+            <!-- 📚 日記リスト（タイムライン）を最優先で上に配置 -->
             <div id="diariesList"></div>
+
+            <!-- 🔍 ゴチャつきを解消したプルダウン検索エリアを下に配置 -->
+            <div class="filter-card" style="background: var(--card-bg); padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-top: 25px; margin-bottom: 20px;">
+                <label for="tagFilter" style="display: block; margin-bottom: 8px; font-weight: bold; font-size: 0.9em; color: var(--accent-color);">🔍 タグで日記を絞り込む</label>
+                <select id="tagFilter" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; background-color: #fafafa; color: var(--text-color);">
+                    <option value="">すべてのタグ（全件表示）</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="tab-map" class="hidden">
+            <div id="mapView"></div>
         </div>
     </div>
 
@@ -129,8 +148,14 @@
             <span class="nav-icon">📚</span>
             <span class="nav-label">履歴を見る</span>
         </a>
+        <a href="#" class="nav-item" onclick="switchTab('map', this)">
+            <span class="nav-icon">🗺️</span>
+            <span class="nav-label">マップを見る</span>
+        </a>
     </div>
 
+    <script src="utils.js"></script>
+    <script src="map.js"></script>
     <script src="main.js"></script>
 </body>
 </html>
