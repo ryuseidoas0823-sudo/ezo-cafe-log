@@ -243,3 +243,26 @@ function escapeHTML(str) {
     }[tag] || tag)
   );
 }
+
+// ==========================================
+// 📱 タブ切り替え機能
+// ==========================================
+function switchTab(tabName, element) {
+    // 1. 全てのタブの中身を隠す
+    document.getElementById('tab-record').classList.add('hidden');
+    document.getElementById('tab-history').classList.add('hidden');
+    
+    // 2. 選ばれたタブの中身だけを表示する
+    document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+
+    // 3. ナビゲーションのアイコンの色（active）をリセットして、押したやつだけ色をつける
+    document.querySelectorAll('.nav-item').forEach(nav => {
+        nav.classList.remove('active');
+    });
+    element.classList.add('active');
+
+    // もし履歴タブが開かれたら、最新のデータを取得して描画し直す
+    if (tabName === 'history') {
+        fetchDiaries();
+    }
+}

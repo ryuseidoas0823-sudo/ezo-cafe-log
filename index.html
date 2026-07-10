@@ -8,18 +8,15 @@
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
 
     <style>
-        /* ==========================================
-           🎨 デザイン設定（カフェらしい落ち着いたテーマ）
-           ========================================== */
         :root {
-            --bg-color: #f8f5f2;       /* 背景色：温かみのあるオフホワイト */
-            --text-color: #3e2723;     /* 文字色：深いコーヒーブラウン */
-            --accent-color: #5d4037;   /* アクセント：少し明るめのブラウン */
-            --card-bg: #ffffff;        /* カード背景：白 */
+            --bg-color: #f8f5f2;
+            --text-color: #3e2723;
+            --accent-color: #5d4037;
+            --card-bg: #ffffff;
         }
 
         body {
-            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+            font-family: "Helvetica Neue", Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
@@ -27,186 +24,111 @@
             line-height: 1.6;
         }
 
-        /* 画面中央に寄せるコンテナ */
-        .container { 
-            max-width: 600px; 
-            margin: 0 auto; 
-        }
-
-        h1 { 
-            text-align: center; 
-            color: var(--accent-color); 
-            font-size: 1.5em;
-            margin-bottom: 25px;
-        }
-
-        /* フォームのカードデザイン */
-        .form-card {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
-            margin-bottom: 30px;
-        }
-
-        .form-group { margin-bottom: 18px; }
+        .container { max-width: 600px; margin: 0 auto; }
         
-        label { 
-            display: block; 
-            margin-bottom: 6px; 
-            font-weight: bold; 
-            font-size: 0.9em; 
-            color: var(--accent-color);
-        }
+        /* ボトムナビの裏に隠れないよう余白を追加 */
+        #main-content { padding-bottom: 80px; }
 
-        input[type="text"], input[type="date"], textarea {
-            width: 100%; 
-            padding: 12px; 
-            border: 1px solid #ddd;
-            border-radius: 8px; 
-            box-sizing: border-box; 
-            font-size: 16px; /* スマホでのズーム防止のため16px以上 */
-            background-color: #fafafa;
-        }
+        h1 { text-align: center; color: var(--accent-color); font-size: 1.5em; margin-bottom: 25px; }
 
-        textarea { 
-            resize: vertical; 
-            min-height: 100px; 
-        }
-
+        .form-card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-bottom: 30px; }
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 0.9em; color: var(--accent-color); }
+        input[type="text"], input[type="date"], textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; background-color: #fafafa; }
+        textarea { resize: vertical; min-height: 100px; }
         input[type="file"] { margin-top: 5px; font-size: 0.9em; }
 
-        /* 写真プレビューのスタイル */
-        #imagePreview { 
-            width: 100%; 
-            border-radius: 8px; 
-            margin-top: 10px; 
-            object-fit: cover;
-            max-height: 250px;
-        }
+        #imagePreview { width: 100%; border-radius: 8px; margin-top: 10px; object-fit: cover; max-height: 250px; }
 
-        /* 記録ボタン */
-        button {
-            background-color: var(--accent-color); 
-            color: white;
-            border: none; 
-            padding: 14px 20px; 
-            width: 100%;
-            border-radius: 8px; 
-            font-size: 16px; 
-            cursor: pointer;
-            transition: opacity 0.2s; 
-            font-weight: bold;
-            margin-top: 10px;
-        }
+        button { background-color: var(--accent-color); color: white; border: none; padding: 14px 20px; width: 100%; border-radius: 8px; font-size: 16px; cursor: pointer; transition: opacity 0.2s; font-weight: bold; margin-top: 10px; }
         button:hover { opacity: 0.9; }
         button:disabled { background-color: #a1887f; cursor: not-allowed; }
 
-        /* ==========================================
-           🏷️ タグクラウド＆日記リストのデザイン
-           ========================================== */
-        .tag-cloud { 
-            margin-bottom: 30px; 
-            display: flex; 
-            flex-wrap: wrap; 
-            gap: 8px; 
-        }
-        .cloud-tag { 
-            padding: 6px 14px; 
-            border-radius: 20px; 
-            color: white; 
-            font-size: 0.85em; 
-            font-weight: bold;
-        }
+        .tag-cloud { margin-bottom: 30px; display: flex; flex-wrap: wrap; gap: 8px; }
+        .cloud-tag { padding: 6px 14px; border-radius: 20px; color: white; font-size: 0.85em; font-weight: bold; }
 
-        .diary-card {
-            background: var(--card-bg); 
-            border-radius: 12px;
-            padding: 20px; 
-            margin-bottom: 20px; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
-        }
-        
-        .diary-header { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: baseline; 
-            border-bottom: 1px solid #f0f0f0; 
-            padding-bottom: 10px; 
-            margin-bottom: 15px; 
-        }
+        .diary-card { background: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); }
+        .diary-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 15px; }
         .diary-date { font-size: 0.85em; color: #888; }
         .diary-shop { margin: 0; font-size: 1.25em; color: var(--text-color); font-weight: bold; }
+        .diary-image { width: 100%; border-radius: 8px; margin-bottom: 15px; object-fit: cover; max-height: 300px; }
+        .diary-comment { font-size: 0.95em; margin-bottom: 15px; white-space: pre-wrap; color: #444; }
+        .diary-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tag-badge { padding: 4px 10px; border-radius: 12px; color: white; font-size: 0.75em; font-weight: bold; }
+
+        /* ==========================================
+           📱 ボトムナビゲーションの設定
+           ========================================== */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0; left: 0; width: 100%; height: 65px;
+            background-color: #ffffff;
+            display: flex; justify-content: space-around; align-items: center;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+            z-index: 1000;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-decoration: none; color: #cccccc; flex: 1; padding: 5px 0;
+            transition: color 0.2s;
+        }
+        .nav-item.active { color: var(--accent-color); }
+        .nav-icon { font-size: 24px; margin-bottom: 2px; }
+        .nav-label { font-size: 10px; font-weight: bold; }
         
-        .diary-image { 
-            width: 100%; 
-            border-radius: 8px; 
-            margin-bottom: 15px; 
-            object-fit: cover; 
-            max-height: 300px; 
-        }
-        
-        .diary-comment { 
-            font-size: 0.95em; 
-            margin-bottom: 15px; 
-            white-space: pre-wrap; /* 改行を反映 */
-            color: #444;
-        }
-        
-        .diary-tags { 
-            display: flex; 
-            flex-wrap: wrap; 
-            gap: 6px; 
-        }
-        .tag-badge { 
-            padding: 4px 10px; 
-            border-radius: 12px; 
-            color: white; 
-            font-size: 0.75em; 
-            font-weight: bold;
-        }
+        /* 非表示用のクラス */
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="main-content">
         <h1>☕️ EzoCafe Log</h1>
 
-        <div class="form-card">
-            <form id="recordForm">
-                
-                <div class="form-group">
-                    <label for="shopName">お店の名前</label>
-                    <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="visitedAt">訪問日（写真を選択すると自動入力されます）</label>
-                    <input type="date" id="visitedAt" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="imageInput">写真を追加</label>
-                    <input type="file" id="imageInput" accept="image/*">
-                    <img id="imagePreview" style="display: none;" alt="プレビュー">
-                </div>
-
-                <div class="form-group">
-                    <label for="comment">感想やメモ</label>
-                    <textarea id="comment" placeholder="コロンビア・ロスノガレスのデカフェを飲みました。窓際の席が静かでリラックスできました。" required></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="tags">自分でつけるタグ（カンマ区切り・任意）</label>
-                    <input type="text" id="tags" placeholder="例: 作業, 癒やし">
-                </div>
-
-                <button type="submit" id="submitBtn">🚀 記録する</button>
-            </form>
+        <div id="tab-record">
+            <div class="form-card">
+                <form id="recordForm">
+                    <div class="form-group">
+                        <label for="shopName">お店の名前</label>
+                        <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="visitedAt">訪問日（写真を選択すると自動入力）</label>
+                        <input type="date" id="visitedAt" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="imageInput">写真を追加</label>
+                        <input type="file" id="imageInput" accept="image/*">
+                        <img id="imagePreview" style="display: none;" alt="プレビュー">
+                    </div>
+                    <div class="form-group">
+                        <label for="comment">感想やメモ</label>
+                        <textarea id="comment" placeholder="コロンビア・ロスノガレスのデカフェを飲みました。" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="tags">自分でつけるタグ（カンマ区切り・任意）</label>
+                        <input type="text" id="tags" placeholder="例: 作業, 癒やし">
+                    </div>
+                    <button type="submit" id="submitBtn">🚀 記録する</button>
+                </form>
+            </div>
         </div>
 
-        <div id="tagCloud" class="tag-cloud"></div>
+        <div id="tab-history" class="hidden">
+            <div id="tagCloud" class="tag-cloud"></div>
+            <div id="diariesList"></div>
+        </div>
+    </div>
 
-        <div id="diariesList"></div>
+    <div class="bottom-nav">
+        <a href="#" class="nav-item active" onclick="switchTab('record', this)">
+            <span class="nav-icon">📝</span>
+            <span class="nav-label">記録する</span>
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('history', this)">
+            <span class="nav-icon">📚</span>
+            <span class="nav-label">履歴を見る</span>
+        </a>
     </div>
 
     <script src="main.js"></script>
