@@ -2,7 +2,7 @@
 // 🛡️ 権限チェックミドルウェア (門番)
 // ==========================================
 async function checkAuthorization(request, env, requiredRoles = []) {
-  // 1. ヘッダーから UUID を抽出 (フロントエンドから X-Ezo-User-UUID ヘッダーで送られる想定)
+  // 1. ヘッダーから UUID を抽出
   let userUuid = request.headers.get("X-Ezo-User-UUID");
   
   // POSTリクエストなどでヘッダーにない場合のフォールバック(URLパラメータ等)
@@ -37,7 +37,8 @@ async function checkAuthorization(request, env, requiredRoles = []) {
     }
 
     // 4. ロール（権限）の検証
-    if (requiredRoles.length > 0 && !requiredRoles.includes(user.role)) {
+    // ★ 変更点: 管理者(admin)は特権として無条件で全操作を通過できるようにする
+    if (requiredRoles.length > 0 && !requiredRoles.includes(user.role) && user.role !== "admin") {
       return { authorized: false, status: 403, error: `Forbidden: この操作には ${requiredRoles.join(" または ")} 権限が必要です。` };
     }
 
@@ -54,7 +55,7 @@ export default {
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, X-Ezo-User-UUID", // カスタムヘッダーを許可
+      "Access-Control-Allow-Headers": "Content-Type, X-Ezo-User-UUID",
     };
 
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -66,7 +67,7 @@ export default {
     // 🗑️ データの削除 (DELETEリクエスト)
     // ==========================================
     if (request.method === "DELETE") {
-      // 🔒 削除は Free, Premium ユーザーに許可 (自身のデータのみ削除可能にする等、今後拡張可能)
+      // 🔒 削除は Free, Premium に許可 (Adminはミドルウェア側で自動許可)
       const auth = await checkAuthorization(request, env, ["free", "premium"]);
       if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -74,7 +75,13 @@ export default {
         const id = url.searchParams.get("id");
         if (!id) throw new Error("IDが指定されていません");
         
-        await env.DB.prepare("DELETE FROM diaries WHERE id = ?").bind(id).run();
+        // ★ 変更点: 管理者は全件削除可能、一般ユーザーは自分のUUIDに紐づくデータのみ削除可能に制限
+        if (auth.user.role === "admin") {
+          await env.DB.prepare("DELETE FROM diaries WHERE id = ?").bind(id).run();
+        } else {
+          await env.DB.prepare("DELETE FROM diaries WHERE id = ? AND user_uuid = ?").bind(id, auth.user.userUuid).run();
+        }
+        
         return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
       } catch (err) {
         return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
@@ -87,12 +94,12 @@ export default {
     if (request.method === "GET") {
       // 🆕 ユーザー自身の権限情報を取得するためのエンドポイント
       if (action === "get_me") {
-        const auth = await checkAuthorization(request, env, []); // 権限を問わず情報を返す
+        const auth = await checkAuthorization(request, env, []); 
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
         return new Response(JSON.stringify(auth.user), { headers: corsHeaders });
       }
 
-      // 🔒 データの読み込みは全ユーザー(free, premium, business)に一旦許可
+      // 🔒 データの読み込みは全ユーザーに一旦許可
       const auth = await checkAuthorization(request, env, ["free", "premium", "business"]);
       if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -105,7 +112,7 @@ export default {
           const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master").all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         } else {
-          // ※今後はここで「自分の日記だけ」か「公開日記も」かを auth.user.role によって分岐させます
+          // ※ 今後「自分の日記のみ表示」等の絞り込み実装予定。現在は全件返す仕様
           const { results } = await env.DB.prepare("SELECT * FROM diaries ORDER BY visited_at DESC, id DESC").all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         }
@@ -121,12 +128,10 @@ export default {
       try {
         const data = await request.json();
         
-        // 🔒 データ保存は Free, Premium ユーザーのみ許可（経営者は分析専用のため保存不可にする設計）
-        // ※UUIDをヘッダーではなくボディ(data.userUuid)から取得して検証するフォールバック処理
         let uuidForAuth = request.headers.get("X-Ezo-User-UUID") || data.userUuid;
-        // 一時的にヘッダーを上書きしてミドルウェアに渡す（フロント実装移行措置）
         request.headers.set("X-Ezo-User-UUID", uuidForAuth);
         
+        // 🔒 データ保存は Free, Premium に許可 (Adminも通過可能)
         const auth = await checkAuthorization(request, env, ["free", "premium"]);
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -144,7 +149,7 @@ export default {
         let targetBase64 = data.imageBase64 || null;
         let moderationTag = ""; 
 
-        // 👁️ 画像のAIモデレーション (既存のロジックそのまま)
+        // 👁️ 画像のAIモデレーション
         if (env.AI && targetBase64) {
           try {
             const b64Data = targetBase64.split(',')[1] || targetBase64;
@@ -164,7 +169,7 @@ export default {
           } catch (err) { console.log("Vision AI Error:", err); }
         }
 
-        // 🤖 テキストのAIモデレーション ＆ 構造化タグ抽出 (既存のロジックそのまま)
+        // 🤖 テキストのAIモデレーション ＆ 構造化タグ抽出
         let aiExtractedTags = "";
         let unclassifiedTags = [];
         
@@ -218,6 +223,7 @@ export default {
         if (moderationTag !== "") combinedTags = combinedTags ? `${combinedTags}, ${moderationTag}` : moderationTag;
         else if (aiExtractedTags) combinedTags = combinedTags ? `${combinedTags}, ${aiExtractedTags}` : aiExtractedTags;
 
+        // ▼ 🔄 ループエンジニアリング：未分類タグのGASエスカレーション
         if (unclassifiedTags && unclassifiedTags.length > 0) {
           const gasWebhookUrl = env.GAS_WEBHOOK_URL || ""; 
           if (gasWebhookUrl) {
@@ -234,6 +240,7 @@ export default {
         const visitedAt = data.visitedAt || createdSystemAt; 
 
         if (data.id) {
+          // 変更点: 自分自身のデータのみ上書き可能にする安全装置（UPDATE文に user_uuid = ? を追加）
           if (targetBase64) {
             await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ? WHERE id = ? AND user_uuid = ?`)
               .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, data.id, userUuid).run();
