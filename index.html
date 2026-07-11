@@ -19,14 +19,16 @@
                 <form id="recordForm">
                     
                     <div class="form-group" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px dashed #bdc3c7;">
-                        <label for="imageInput" style="color: #2980b9;">1. まずは写真を追加 📸 (位置や天気を自動取得します)</label>
-                        <input type="file" id="imageInput" accept="image/*">
+                        <label for="imageInput" style="color: #2980b9; font-weight: bold;">
+                            1. 写真を追加 📸<br>
+                            <span style="font-size: 0.8rem; color: #7f8c8d; font-weight: normal;">※複数枚を同時に選択すると、すべて「未整理」として一括ストックされます！</span>
+                        </label>
+                        <input type="file" id="imageInput" accept="image/*" multiple>
                         <img id="imagePreview" style="display: none;" alt="プレビュー">
                         
                         <label style="display: block; margin-top: 10px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
                             <input type="checkbox" id="isDraft" value="📦">
-                            📦 この写真を「未整理」として仮保存する<br>
-                            <span style="font-size: 0.75rem; color: #bdc3c7;">※将来実装予定の「1記事に複数枚写真」とは異なり、空の日記を1つ作成します。</span>
+                            📦 この1枚を「未整理」として仮保存する
                         </label>
                     </div>
 

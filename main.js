@@ -9,7 +9,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
   
-  // 🚀 DX機能: 日記データとマスタデータを並行して高速取得！
   await Promise.all([
     fetchDiaries(),
     fetchMasterShopsApi()
@@ -42,63 +41,41 @@ function saveSettings() {
   alert("✨ 設定を保存しました！");
 }
 
-// 📸 最優先アクション: 写真を選択した瞬間に、画像プレビュー、リサイズ圧縮、日時・天気自動取得を実行
-document.getElementById('imageInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const statusEl = document.getElementById('gpsStatus');
-  if(statusEl) {
-    statusEl.innerText = "📸 写真を解析＆最適化中...";
-    statusEl.style.color = "#3498db";
-  }
-
-  // ==========================================
-  // 1. 画像のプレビューとCanvasによるリサイズ圧縮
-  // ==========================================
-  const reader = new FileReader();
-  reader.onload = function(event) {
-    const img = new Image();
-    img.onload = function() {
-      // 通信・ストレージ容量を劇的に節約するため、長辺800pxにリサイズ
-      const MAX_SIZE = 800;
-      let width = img.width;
-      let height = img.height;
-
-      if (width > height) {
-        if (width > MAX_SIZE) {
-          height *= MAX_SIZE / width;
-          width = MAX_SIZE;
+// 🛠️ リファクタリング: Canvasによる画像リサイズ圧縮をPromise化
+function resizeImageAsync(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_SIZE = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+        } else {
+          if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
         }
-      } else {
-        if (height > MAX_SIZE) {
-          width *= MAX_SIZE / height;
-          height = MAX_SIZE;
-        }
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-
-      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
-
-      const imgPreview = document.getElementById('imagePreview');
-      imgPreview.src = compressedBase64;
-      imgPreview.style.display = 'block';
-      currentBase64 = compressedBase64; 
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = reject;
+      img.src = event.target.result;
     };
-    img.src = event.target.result;
-  };
-  reader.readAsDataURL(file);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
-  let lat = null;
-  let lng = null;
+// 🛠️ リファクタリング: Exifと天気の抽出処理を関数化
+async function extractExifAndWeather(file) {
+  let lat = null, lng = null, temp = null, weatherIcon = "❓";
   let targetDate = new Date();
-
-  // 2. Exifから日時と位置情報を抽出
+  
   try {
     const exifData = await exifr.parse(file);
     if (exifData) {
@@ -108,76 +85,153 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
       }
       if (exifData.DateTimeOriginal) {
         targetDate = new Date(exifData.DateTimeOriginal);
-        const yyyy = targetDate.getFullYear();
-        const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(targetDate.getDate()).padStart(2, '0');
-        document.getElementById('visitedAt').value = `${yyyy}-${mm}-${dd}`;
       }
     }
   } catch (err) { console.log("Exif error:", err); }
 
-  if (lat === null || lng === null) {
-      if(statusEl) {
-        statusEl.innerText = "ℹ️ 写真に位置情報がないため、天気の自動取得をスキップしました。(手動で変更可能です)";
-        statusEl.style.color = "#f39c12";
-      }
-      return;
-  }
-
-  if(statusEl) statusEl.innerText = "⛅️ 当時の天気データを割り出し中...";
-
-  // 4. 当時の天気をOpen-Meteo APIから取得
   const yyyy = targetDate.getFullYear();
   const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
   const dd = String(targetDate.getDate()).padStart(2, '0');
-  const dateStr = `${yyyy}-${mm}-${dd}`;
+  const visitedAt = `${yyyy}-${mm}-${dd}`;
+  const dateStr = visitedAt;
   const hour = targetDate.getHours();
 
-  let temp = null;
-  let weatherIcon = "❓";
-
-  function getWeatherEmoji(code) {
-    if (code === 0) return "☀️";
-    if (code >= 1 && code <= 3) return "☁️";
-    if (code >= 51 && code <= 67) return "☔️";
-    if (code >= 71 && code <= 86) return "❄️";
-    if (code >= 80 && code <= 82) return "☔️";
-    if (code >= 95 && code <= 99) return "☔️";
-    return "❓";
+  if (lat !== null && lng !== null) {
+    function getWeatherEmoji(code) {
+      if (code === 0) return "☀️";
+      if (code >= 1 && code <= 3) return "☁️";
+      if (code >= 51 && code <= 67) return "☔️";
+      if (code >= 71 && code <= 86) return "❄️";
+      if (code >= 80 && code <= 82) return "☔️";
+      if (code >= 95 && code <= 99) return "☔️";
+      return "❓";
+    }
+    try {
+      let url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo`;
+      let res = await fetch(url);
+      let data = await res.json();
+      if (data.error || !data.hourly) {
+          url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo`;
+          res = await fetch(url);
+          data = await res.json();
+      }
+      if (data && data.hourly) {
+          temp = Math.round(data.hourly.temperature_2m[hour]);
+          const code = data.hourly.weather_code[hour];
+          weatherIcon = getWeatherEmoji(code);
+      }
+    } catch (e) { console.log("Weather API error:", e); }
   }
+  return { lat, lng, visitedAt, weatherIcon, temp };
+}
 
-  try {
-    let url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo`;
-    let res = await fetch(url);
-    let data = await res.json();
 
-    if (data.error || !data.hourly) {
-        url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo`;
-        res = await fetch(url);
-        data = await res.json();
+// 📸 写真選択時のメインアクション (1枚 vs 複数枚の分岐)
+document.getElementById('imageInput').addEventListener('change', async (e) => {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+
+  const statusEl = document.getElementById('gpsStatus');
+
+  // ==========================================
+  // 🅰️ 1枚選択の場合： 通常の日記作成フロー
+  // ==========================================
+  if (files.length === 1) {
+    const file = files[0];
+    if(statusEl) {
+      statusEl.innerText = "📸 写真を解析＆最適化中...";
+      statusEl.style.color = "#3498db";
     }
 
-    if (data && data.hourly) {
-        temp = Math.round(data.hourly.temperature_2m[hour]);
-        const code = data.hourly.weather_code[hour];
-        weatherIcon = getWeatherEmoji(code);
+    // 画像の圧縮とプレビュー表示
+    currentBase64 = await resizeImageAsync(file);
+    const imgPreview = document.getElementById('imagePreview');
+    imgPreview.src = currentBase64;
+    imgPreview.style.display = 'block';
+
+    // Exifと天気を取得してフォームの裏側にセット
+    const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
+    
+    document.getElementById('visitedAt').value = visitedAt;
+    if (weatherIcon !== "❓") {
+      const weatherSelect = document.getElementById('weatherSelect');
+      if (weatherSelect) weatherSelect.value = weatherIcon;
     }
-  } catch (e) { console.log("Weather API error:", e); }
+    document.getElementById('temperature').value = temp !== null ? temp : "";
+    document.getElementById('latitude').value = lat;
+    document.getElementById('longitude').value = lng;
 
-  // 5. 天気と気温、位置情報をフォームにセット
-  if (weatherIcon !== "❓") {
-    const weatherSelect = document.getElementById('weatherSelect');
-    if (weatherSelect) weatherSelect.value = weatherIcon;
-  }
-  document.getElementById('temperature').value = temp !== null ? temp : "";
-  document.getElementById('latitude').value = lat;
-  document.getElementById('longitude').value = lng;
+    if(statusEl) {
+      if (lat !== null) {
+        statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
+        statusEl.style.color = "#27ae60";
+      } else {
+        statusEl.innerText = "ℹ️ 写真に位置情報がないため、天気の自動取得をスキップしました。";
+        statusEl.style.color = "#f39c12";
+      }
+    }
+  } 
+  // ==========================================
+  // 🅱️ 複数枚選択の場合： 神速の「一括未整理アップロード」フロー
+  // ==========================================
+  else {
+    if (!confirm(`${files.length}枚の写真が選択されました。\nすべて「未整理(📦)」として一括ストックしますか？\n（あとから履歴タブで編集できます）`)) {
+      e.target.value = ''; // キャンセル時はリセット
+      return;
+    }
 
-  if(statusEl) {
-    statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
-    statusEl.style.color = "#27ae60";
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+
+    // 順番に裏側で「リサイズ→位置・天気取得→DB保存」のパイプラインを回す
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if(statusEl) {
+        statusEl.innerText = `📦 一括登録中... (${i + 1} / ${files.length} 枚目)`;
+        statusEl.style.color = "#8e44ad";
+      }
+
+      const base64 = await resizeImageAsync(file);
+      const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
+
+      // 未整理データとしてAPIへ直接送信
+      const payload = {
+        id: null,
+        shopId: null,
+        shopName: "未整理の写真", // 一時的な名前
+        comment: "",
+        visitedAt: visitedAt,
+        tags: "", 
+        imageBase64: base64,
+        lat: lat,
+        lng: lng,
+        temperature: temp,
+        weatherIcon: "📦", // ステータスを「未整理」に強制
+        userGender: localStorage.getItem('ezo_gender') || "未設定",
+        userAge: localStorage.getItem('ezo_age') || "未設定"
+      };
+
+      await saveDiaryApi(payload);
+    }
+
+    if(statusEl) {
+      statusEl.innerText = "✅ 全ての一括登録が完了しました！";
+      statusEl.style.color = "#27ae60";
+    }
+
+    // フォームを綺麗にして履歴タブへ自動遷移
+    document.getElementById('recordForm').reset();
+    document.getElementById('imagePreview').style.display = 'none';
+    currentBase64 = null;
+    resetDateToToday();
+    submitBtn.disabled = false;
+    e.target.value = ''; // inputのクリア
+
+    fetchDiaries();
+    switchTab('history', document.querySelector('.bottom-nav .nav-item:nth-child(2)'));
   }
 });
+
 
 // 🔍 店舗マスタサジェスト機能
 let suggestTimeout = null;
@@ -349,14 +403,16 @@ function editDiary(id) {
     if (!diary) return;
 
     switchTab('record', document.querySelector('.bottom-nav .nav-item:nth-child(1)'));
-    document.getElementById('shopName').value = diary.shop_name || "";
+    
+    // 未整理(📦)の場合、お店の名前が「未整理の写真」になっているので、空にして入力しやすくする！
+    document.getElementById('shopName').value = diary.shop_name === "未整理の写真" ? "" : (diary.shop_name || "");
     if (document.getElementById('shopId')) document.getElementById('shopId').value = diary.shop_id || "";
     document.getElementById('visitedAt').value = diary.visited_at ? diary.visited_at.split(' ')[0] : "";
     document.getElementById('comment').value = diary.comment || "";
     
-    // 🎯 チェックボックスとプルダウンの復元処理
+    // 🎯 未整理から編集する際は、通常の日記として登録できるようチェックボックスを「外す」
     document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
-    document.getElementById('isDraft').checked = (diary.weather_icon === "📦");
+    document.getElementById('isDraft').checked = false; // 👈 ここがUXの肝！編集開始時は未整理チェックを外す
 
     if (diary.weather_icon === "💭" || diary.weather_icon === "📦") {
         document.getElementById('weatherSelect').value = "❓";
@@ -417,7 +473,6 @@ function renderTagClouds(diaries) {
   select.innerHTML = '<option value="">すべてのタグ（全件表示）</option>';
 
   const allTags = new Set();
-  // 💭と📦のデータは分析やフィルター対象外としても良いですが、ここでは全て表示します
   globalDiaries.forEach(d => parseTags(d.tags).forEach(t => {
     if (!t.startsWith("🤖") && !t.startsWith("🚨")) allTags.add(t);
   }));
