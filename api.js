@@ -3,27 +3,45 @@
 // ==========================================
 const API_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/";
 
-let globalMasterShops = []; // 🆕 追加: マスタデータを保持するグローバル変数（開拓モード用）
+let globalMasterShops = [];
+
+// 🛡️ [DX機能] 認証用ヘッダーを生成するヘルパー関数
+// LocalStorageからUUIDを取得し、すべてのリクエストのHTTPヘッダーに付与します
+function getAuthHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "X-Ezo-User-UUID": localStorage.getItem('ezo_user_uuid') || ""
+  };
+}
 
 // 📥 GET: 全日記データの取得
 async function fetchDiaries() {
   try {
-    const response = await fetch(`${API_URL}?_t=${Date.now()}`);
+    const response = await fetch(`${API_URL}?_t=${Date.now()}`, {
+      method: "GET",
+      headers: getAuthHeaders() // 🆕 門番に身分証を提示
+    });
     const data = await response.json();
-    globalDiaries = data; // 他のファイル（map, main）で共有する大元のデータ
-    
+    if (data.error) throw new Error(data.error);
+
+    globalDiaries = data;
     renderDiariesList(globalDiaries);
-    renderTagClouds(globalDiaries);
+    renderTagClouds();
   } catch (error) {
     console.error("データ取得エラー:", error);
   }
 }
 
-// 🆕 追加: 📥 GET: マスタ全件取得（マップの開拓モード用）
+// 🆕 📥 GET: マスタ全件取得
 async function fetchMasterShopsApi() {
   try {
-    const response = await fetch(`${API_URL}?action=get_all_master&_t=${Date.now()}`);
-    globalMasterShops = await response.json();
+    const response = await fetch(`${API_URL}?action=get_all_master&_t=${Date.now()}`, {
+      method: "GET",
+      headers: getAuthHeaders() // 🆕 門番に身分証を提示
+    });
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    globalMasterShops = data;
   } catch (error) {
     console.error("マスタ全件取得エラー:", error);
   }
@@ -34,7 +52,7 @@ async function saveDiaryApi(payload) {
   try {
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(), // 🆕 門番に身分証を提示
       body: JSON.stringify(payload)
     });
     return await response.json();
@@ -47,8 +65,13 @@ async function saveDiaryApi(payload) {
 // 🔍 GET: 店舗マスタの検索 (サジェスト機能用)
 async function searchMasterApi(query) {
   try {
-    const response = await fetch(`${API_URL}?action=search_master&query=${encodeURIComponent(query)}`);
-    return await response.json();
+    const response = await fetch(`${API_URL}?action=search_master&query=${encodeURIComponent(query)}`, {
+      method: "GET",
+      headers: getAuthHeaders() // 🆕 門番に身分証を提示
+    });
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    return data;
   } catch (error) {
     console.error("マスタ検索エラー:", error);
     return [];
@@ -58,7 +81,10 @@ async function searchMasterApi(query) {
 // 🗑️ DELETE: 日記の削除
 async function deleteDiaryApi(id) {
   try {
-    const response = await fetch(`${API_URL}?id=${id}`, { method: 'DELETE' });
+    const response = await fetch(`${API_URL}?id=${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders() // 🆕 門番に身分証を提示
+    });
     return await response.json();
   } catch (error) {
     console.error("削除通信エラー:", error);
