@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
   
+  // 🚀 DX機能: 日記データとマスタデータを並行して高速取得！
   await Promise.all([
     fetchDiaries(),
     fetchMasterShopsApi()
@@ -310,10 +311,8 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
 
   // 🎯 ステータス判定: チェックボックスが優先、なければプルの天気
   let finalStatusIcon = document.getElementById('weatherSelect').value;
-  if (document.getElementById('isBookmark').checked) finalStatusIcon = "💭";
-  if (document.getElementById('isDraft').checked) finalStatusIcon = "📦";
-  // 🆕 追加: 閉店チェックが入っていれば最優先で「🚫」にする
-  if (document.getElementById('isClosed').checked) finalStatusIcon = "🚫";
+  if (document.getElementById('isBookmark') && document.getElementById('isBookmark').checked) finalStatusIcon = "💭";
+  if (document.getElementById('isDraft') && document.getElementById('isDraft').checked) finalStatusIcon = "📦";
 
   const payload = {
     id: editingDiaryId,
@@ -360,6 +359,9 @@ function renderDiariesList(diaries) {
   container.innerHTML = "";
 
   diaries.forEach(diary => {
+    // 💀 完全閉店は履歴からは弾かないが、閉店ステータスとして表示を分ける
+    const isClosed = diary.weather_icon === "🚫";
+
     const card = document.createElement('div');
     card.className = "diary-card";
 
@@ -373,9 +375,10 @@ function renderDiariesList(diaries) {
     let imageHTML = diary.image_base64 || diary.image_url ? `<img src="${diary.image_base64 || diary.image_url}" class="diary-image" alt="カフェの写真">` : "";
     const displayDate = diary.visited_at ? diary.visited_at.split(' ')[0] : '日付不明';
 
-    // 💭行きたい、📦未整理の場合は、気温を出さないなど見栄えを調整
+    // 💭行きたい、📦未整理、🚫閉店の場合は見栄えを調整
     let weatherStr = "";
-    if (diary.weather_icon === "💭") weatherStr = "💭 行きたい";
+    if (isClosed) weatherStr = "🚫 閉店・移転報告済み";
+    else if (diary.weather_icon === "💭") weatherStr = "💭 行きたい";
     else if (diary.weather_icon === "📦") weatherStr = "📦 未整理";
     else {
       let tempStr = diary.temperature ? `${diary.temperature}℃` : '';
@@ -384,7 +387,7 @@ function renderDiariesList(diaries) {
 
     card.innerHTML = `
       <div class="diary-header">
-        <span class="diary-date">${escapeHTML(displayDate)} <span style="margin-left: 8px;">${escapeHTML(weatherStr)}</span></span>
+        <span class="diary-date">${escapeHTML(displayDate)} <span style="margin-left: 8px; color: ${isClosed ? '#e74c3c' : 'inherit'};">${escapeHTML(weatherStr)}</span></span>
         <h3 class="diary-shop">${escapeHTML(diary.shop_name)}</h3>
       </div>
       ${imageHTML}
@@ -412,19 +415,16 @@ function editDiary(id) {
     document.getElementById('visitedAt').value = diary.visited_at ? diary.visited_at.split(' ')[0] : "";
     document.getElementById('comment').value = diary.comment || "";
     
-    // 🎯 未整理から編集する際は、通常の日記として登録できるようチェックボックスを「外す」
-    document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
-    document.getElementById('isDraft').checked = false; 
-    // 🆕 追加: 閉店状態の復元
-    document.getElementById('isClosed').checked = (diary.weather_icon === "🚫");
+    // 🎯 チェックボックスの復元処理
+    if (document.getElementById('isBookmark')) document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
+    if (document.getElementById('isDraft')) document.getElementById('isDraft').checked = false; // 👈 編集開始時は未整理チェックを外す
 
-    // 🆕 修正: 🚫の場合も天気プルダウンは「不明」にする
     if (diary.weather_icon === "💭" || diary.weather_icon === "📦" || diary.weather_icon === "🚫") {
-        document.getElementById('weatherSelect').value = "❓";
+        if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
     } else if (diary.weather_icon) {
-        document.getElementById('weatherSelect').value = diary.weather_icon;
+        if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = diary.weather_icon;
     } else {
-        document.getElementById('weatherSelect').value = "❓";
+        if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
     }
 
     if (document.getElementById('latitude')) document.getElementById('latitude').value = diary.latitude || "";
@@ -516,4 +516,89 @@ function switchTab(tabName, element) {
     if (tabName === 'analytics' && typeof renderAnalytics === 'function') {
         renderAnalytics();
     }
+}
+
+// ==========================================
+// 🗺️ マップ上の「閉店・移転報告」処理
+// ==========================================
+window.reportClosed = async function(shopId, shopName, lat, lng) {
+    if (!confirm(`「${shopName}」を閉店・移転として報告しますか？\n(2週間はマップ上で半透明になり、その後完全に消去されます)`)) return;
+    
+    document.body.style.cursor = 'wait'; 
+    
+    const payload = {
+        id: null,
+        shopId: shopId && shopId !== 'null' ? shopId : null,
+        shopName: shopName,
+        comment: "",
+        visitedAt: new Date().toISOString().split('T')[0], // 報告日で登録
+        tags: "",
+        imageBase64: null,
+        lat: lat,
+        lng: lng,
+        temperature: null,
+        weatherIcon: "🚫",
+        userGender: localStorage.getItem('ezo_gender') || "未設定",
+        userAge: localStorage.getItem('ezo_age') || "未設定"
+    };
+
+    await saveDiaryApi(payload);
+    await fetchDiaries(); 
+    if (typeof updateViewMarkers === 'function') updateViewMarkers(globalDiaries);
+    
+    document.body.style.cursor = 'default';
+    alert("閉店・移転を報告しました。ご協力ありがとうございます！");
+};
+
+// ==========================================
+// 🗺️ マップ上の「報告取り消し」処理
+// ==========================================
+window.cancelCloseReport = async function(diaryId) {
+    if (!confirm(`この閉店報告を取り消しますか？\n(誤報や長期休業だった場合など)`)) return;
+    
+    document.body.style.cursor = 'wait';
+    await deleteDiaryApi(diaryId); 
+    await fetchDiaries();
+    if (typeof updateViewMarkers === 'function') updateViewMarkers(globalDiaries);
+    document.body.style.cursor = 'default';
+    alert("報告を取り消しました。マップを元に戻しました。");
+};
+
+// ==========================================
+// 🔍 マップ内店舗検索機能 (超高速フロントエンド検索)
+// ==========================================
+let mapSuggestTimeout = null;
+const mapSearchInput = document.getElementById('mapSearchInput');
+if (mapSearchInput) {
+    mapSearchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        const suggestList = document.getElementById('mapSearchSuggestList');
+        
+        if (mapSuggestTimeout) clearTimeout(mapSuggestTimeout); 
+        if (query.length === 0) { suggestList.style.display = 'none'; return; }
+
+        mapSuggestTimeout = setTimeout(() => {
+            const results = globalMasterShops.filter(s => s.shop_name.includes(query)).slice(0, 10);
+            
+            if (results.length > 0) {
+                suggestList.innerHTML = results.map(shop => 
+                    `<li class="suggest-item" data-lat="${shop.latitude}" data-lng="${shop.longitude}">${escapeHTML(shop.shop_name)}</li>`
+                ).join('');
+                suggestList.style.display = 'block';
+                
+                document.querySelectorAll('#mapSearchSuggestList .suggest-item').forEach(item => {
+                    item.addEventListener('click', (ev) => {
+                        mapSearchInput.value = ev.target.innerText;
+                        const lat = parseFloat(ev.target.dataset.lat);
+                        const lng = parseFloat(ev.target.dataset.lng);
+                        suggestList.style.display = 'none';
+                        
+                        if (typeof flyToShop === 'function') flyToShop(lat, lng);
+                    });
+                });
+            } else {
+                suggestList.style.display = 'none';
+            }
+        }, 100); 
+    });
 }

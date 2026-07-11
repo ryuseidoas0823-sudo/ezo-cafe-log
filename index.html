@@ -28,13 +28,7 @@
                         
                         <label style="display: block; margin-top: 10px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
                             <input type="checkbox" id="isDraft" value="📦">
-                            📦 この写真を「未整理」として仮保存する<br>
-                            <span style="font-size: 0.75rem; color: #bdc3c7;">※将来実装予定の「1記事に複数枚写真」とは異なり、空の日記を1つ作成します。</span>
-                        </label>
-                        
-                        <label style="display: block; margin-top: 10px; font-size: 0.85rem; color: #e74c3c; cursor: pointer;">
-                            <input type="checkbox" id="isClosed" value="🚫">
-                            🚫 このお店はすでに閉店・移転している（マップから隠す）
+                            📦 この1枚を「未整理」として仮保存する
                         </label>
                     </div>
 
@@ -102,7 +96,12 @@
             </div>
         </div>
 
-        <div id="tab-map" class="hidden">
+        <div id="tab-map" class="hidden" style="position: relative;">
+            <div style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 1000;">
+                <input type="text" id="mapSearchInput" placeholder="🔍 店舗名でマップを検索..." autocomplete="off" style="width: 100%; padding: 12px 20px; border-radius: 25px; border: 2px solid #5d4037; box-shadow: 0 4px 6px rgba(0,0,0,0.2); font-size: 16px; box-sizing: border-box; background: rgba(255, 255, 255, 0.95);">
+                <ul id="mapSearchSuggestList" class="suggest-list" style="margin-top: 5px; border-radius: 12px; max-height: 200px;"></ul>
+            </div>
+            
             <div id="mapView"></div>
         </div>
 
