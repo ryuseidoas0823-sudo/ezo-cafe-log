@@ -33,7 +33,6 @@ export default {
       try {
         if (action === "search_master") {
           const query = url.searchParams.get("query") || "";
-          // 🛠️ 修正: shop_id, shop_name に加えて latitude, longitude も取得する！
           const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE shop_name LIKE ? LIMIT 10").bind(`%${query}%`).all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         } else {
@@ -41,7 +40,7 @@ export default {
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         }
       } catch (err) {
-        return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+         return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
       }
     }
 
@@ -57,14 +56,13 @@ export default {
         const temp = data.temperature || null;
         const weatherIcon = data.weatherIcon || "❓"; 
         
-        // ▼ 修正・追加：フロントエンドから「性別」と「年代」を受け取る！
         const userGender = data.userGender || "未設定";
         const userAge = data.userAge || "未設定";
 
         let targetBase64 = data.imageBase64 || null;
         let moderationTag = ""; 
 
-        // 👁️ 画像のAIモデレーション (新規画像が送られてきた時のみ)
+        // 👁️ 画像のAIモデレーション
         if (env.AI && targetBase64) {
           try {
             const b64Data = targetBase64.split(',')[1] || targetBase64;
@@ -84,34 +82,84 @@ export default {
           } catch (err) { console.log("Vision AI Error:", err); }
         }
 
-        // 🤖 テキストのAIモデレーション ＆ 自動タグ抽出
+        // 🤖 テキストのAIモデレーション ＆ 構造化タグ抽出 (JSON)
         let aiExtractedTags = "";
-        if (env.AI && comment.length > 5) {
+        let unclassifiedTags = [];
+        
+        if (env.AI && comment.length > 5 && moderationTag === "") {
+          const systemPrompt = `
+あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。
+厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。
+
+{
+  "moderation": "OK" または "🚨共有不可" または "🚨要確認",
+  "tags": {
+    "coffee": ["抽出したコーヒー関連のタグ(品種, 焙煎, 抽出方法など)"],
+    "food": ["抽出したフード関連のタグ(ランチ, ケーキなど)"],
+    "atmosphere": ["抽出した雰囲気や設備のタグ(Wi-Fi, 作業, 落ち着く, 景色など)"]
+  },
+  "unclassified": ["上記に分類できないが重要そうなキーワード"]
+}`;
+
           try {
             const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
               messages: [
-                { role: "system", content: "あなたはカフェデータアナリストです。性的表現や誹謗中傷は「🚨共有不可」「🚨要確認」を。通常時は「国, 品種, 農園, 席, 設備, 目的」をカンマ区切りで出力してください。" },
+                { role: "system", content: systemPrompt },
                 { role: "user", content: comment }
               ]
             });
             
             if (aiResponse && aiResponse.response) {
-              const rawText = aiResponse.response.trim();
-              if (rawText.includes("🚨共有不可")) moderationTag = "🚨共有不可";
-              else if (rawText.includes("🚨要確認") && moderationTag !== "🚨共有不可") moderationTag = "🚨要確認";
-              else {
-                aiExtractedTags = rawText.replace(/^"|"$/g, '').replace(/、/g, ',').split(',')
-                  .map(t => t.trim()).filter(t => t !== "" && t !== "なし" && !t.includes("🚨"))
-                  .map(t => `🤖${t}`).join(', ');
+              let rawText = aiResponse.response.trim();
+              // Llamaモデルが勝手にMarkdownブロックをつけてきた場合の防御
+              rawText = rawText.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+
+              const result = JSON.parse(rawText);
+              
+              if (result.moderation !== "OK") {
+                moderationTag = result.moderation;
+              } else {
+                // UIと分析で分離しやすくするため、絵文字プレフィックスをつける
+                const coffeeTags = (result.tags.coffee || []).map(t => `🤖☕️${t}`);
+                const foodTags = (result.tags.food || []).map(t => `🤖🍰${t}`);
+                const atmosphereTags = (result.tags.atmosphere || []).map(t => `🤖🛋️${t}`);
+                
+                aiExtractedTags = [...coffeeTags, ...foodTags, ...atmosphereTags].join(', ');
+                unclassifiedTags = result.unclassified || [];
               }
             }
-          } catch (err) { console.log("AI Text Extraction Error:", err); }
+          } catch (err) { 
+            console.log("AI Text Extraction & Parse Error:", err); 
+            // JSONパースでコケた場合も「エラー」として人間監査（SPS）へ回す
+            unclassifiedTags = ["AIパースエラー"];
+          }
         }
 
         // 🔒 タグの結合
         let combinedTags = data.tags || "";
         if (moderationTag !== "") combinedTags = combinedTags ? `${combinedTags}, ${moderationTag}` : moderationTag;
         else if (aiExtractedTags) combinedTags = combinedTags ? `${combinedTags}, ${aiExtractedTags}` : aiExtractedTags;
+
+        // ▼ 🔄 ループエンジニアリング：未分類タグのGASエスカレーション
+        // ctx.waitUntil を使うことで、ユーザーのブラウザには一瞬でレスポンスを返しつつ、裏でゆっくりGASと通信させます。
+        if (unclassifiedTags && unclassifiedTags.length > 0) {
+          const gasWebhookUrl = env.GAS_WEBHOOK_URL || ""; // 後ほど wrangler.toml で設定します
+          
+          if (gasWebhookUrl) {
+            const errorReportData = {
+              shopName: data.shopName || "名前なし",
+              unclassified: unclassifiedTags,
+              comment: comment
+            };
+            ctx.waitUntil(
+              fetch(gasWebhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(errorReportData)
+              }).catch(err => console.log("GAS Webhook Error:", err))
+            );
+          }
+        }
 
         // 📅 日時の設定
         const now = new Date(Date.now() + 9 * 60 * 60 * 1000); 
@@ -120,20 +168,15 @@ export default {
 
         // 💾 データベース(D1)への保存・更新分岐
         if (data.id) {
-          // ✏️ 更新モード (Edit)
-          // ▼ 修正：lat, lng も UPDATE の対象に含める！
           if (targetBase64) {
             await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ? WHERE id = ?`)
               .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, data.id).run();
           } else {
-            // 画像が選択されなかった場合は画像カラムを上書きしない
             await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ? WHERE id = ?`)
               .bind(data.shopName, comment, combinedTags, visitedAt, weatherIcon, temp, lat, lng, data.id).run();
           }
           return new Response(JSON.stringify({ success: true, id: data.id }), { headers: corsHeaders });
         } else {
-          // 🆕 新規作成モード (Insert)
-          // ▼ 修正："未設定" のハードコードを削除し、フロントから受け取った userGender と userAge を使用する！
           const info = await env.DB.prepare(
             `INSERT INTO diaries (shop_id, shop_name, comment, latitude, longitude, image_base64, image_url, tags, weather_icon, temperature, user_gender, user_age, visited_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(data.shopId || null, data.shopName || "名前なし", comment, lat, lng, targetBase64, null, combinedTags, weatherIcon, temp, userGender, userAge, visitedAt, createdSystemAt).run();

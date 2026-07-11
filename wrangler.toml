@@ -1,15 +1,25 @@
 name = "cafe-pipeline"
 main = "worker.js"
 compatibility_date = "2026-07-09"
-account_id = "32baac0d4fff9a0eaaf437ec150dc723" # 👈 この1行を追加！
+account_id = "32baac0d4fff9a0eaaf437ec150dc723" 
 
-# （以下、D1やAIの設定が続きます）
-# D1データベースとの紐付け
+# ==========================================
+# 💾 D1データベースとの紐付け
+# ==========================================
 [[d1_databases]]
 binding = "DB"
-database_name = "cafe-db" # ← Cloudflareのダッシュボード上で決めたDB名に変更してください
-database_id = "b4ab1090-8997-4831-874a-53fdcda65eeb" # ← CloudflareのD1ダッシュボードに記載されているIDに変更してください
+database_name = "cafe-db"
+database_id = "b4ab1090-8997-4831-874a-53fdcda65eeb" 
 
-# AI機能の解放
+# ==========================================
+# 🤖 AI機能の解放 (Vision & Text)
+# ==========================================
 [ai]
 binding = "AI"
+
+# ==========================================
+# 🌐 環境変数 (GAS Webhook 連携用など)
+# ==========================================
+[vars]
+# ▼ 先ほどGASで作成した「ウェブアプリのURL」をここに貼り付けてください！
+GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyOp-cHTDluKEAXD3Qg2nQl2SOTHpDl0SgejDaQKKybN4tT4ySfREIAM1WQyFf0bpd5/exec"
