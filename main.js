@@ -258,16 +258,18 @@ function editDiary(id) {
     if (document.getElementById('temperature')) document.getElementById('temperature').value = diary.temperature || "";
     if (document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = "";
 
-    // ☕️🥡 ③ 編集時に店内/テイクアウトのラジオボタンを復元
+    // ☕️🥡🛍️ ③ 編集時に店内/テイクアウト/物販のラジオボタンを復元
     const allTags = parseTags(diary.tags);
-    if (allTags.includes('🥡テイクアウト')) {
+    if (allTags.includes('🛍️豆・グッズ')) {
+        document.querySelector('input[name="eatType"][value="🛍️豆・グッズ"]').checked = true;
+    } else if (allTags.includes('🥡テイクアウト')) {
         document.querySelector('input[name="eatType"][value="🥡テイクアウト"]').checked = true;
     } else {
         document.querySelector('input[name="eatType"][value="☕️店内"]').checked = true;
     }
 
-    // ☕️🥡 ③ 「店内/テイクアウト」タグはラジオボタンで選ぶため、手動入力欄からは隠す
-    const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内').join(', ');
+    // ☕️🥡🛍️ ③ 利用タイプのタグはラジオボタンで選ぶため、手動入力欄からは隠す
+    const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ').join(', ');
     document.getElementById('tags').value = manualTags;
 
     document.getElementById('imagePreview').style.display = 'none';

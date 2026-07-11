@@ -31,6 +31,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
         uniqueShops[uniqueKey] = { 
           lat: diary.latitude, lng: diary.longitude, 
           isTakeout: diary.tags && diary.tags.includes('🥡テイクアウト'), 
+          isGoods: diary.tags && diary.tags.includes('🛍️豆・グッズ'), // 👈 これを追加
           shopName: isDraft ? '📦 未整理の写真' : s, 
           mainTag: parseTags(diary.tags)[2]||"", 
           visitCount: (isBookmark || isDraft) ? 0 : 1, 
@@ -46,8 +47,9 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
     }
   });
 
-  Object.values(uniqueShops).forEach(shop => {
-    const emoji = shop.isDraftOnly ? '📦' : (shop.isBookmarkOnly ? '💭' : (shop.isTakeout ? '🥡' : '☕️'));
+ Object.values(uniqueShops).forEach(shop => {
+    // 👇 修正：isGoods（物販）の場合は「🛍️」ピンにする
+    const emoji = shop.isDraftOnly ? '📦' : (shop.isBookmarkOnly ? '💭' : (shop.isGoods ? '🛍️' : (shop.isTakeout ? '🥡' : '☕️')));
     const bgColor = shop.isDraftOnly ? '#95a5a6' : getColorFromTag(shop.mainTag);
     
     const badgeHtml = shop.visitCount > 0 ? `<div style="position:absolute; bottom:-5px; right:-5px; background:#e74c3c; color:white; border-radius:50%; width:18px; height:18px; font-size:11px; font-weight:bold; line-height:18px; text-align:center;">${shop.visitCount}</div>` : '';
