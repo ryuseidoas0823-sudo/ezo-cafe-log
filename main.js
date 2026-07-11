@@ -312,6 +312,8 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   let finalStatusIcon = document.getElementById('weatherSelect').value;
   if (document.getElementById('isBookmark').checked) finalStatusIcon = "💭";
   if (document.getElementById('isDraft').checked) finalStatusIcon = "📦";
+  // 🆕 追加: 閉店チェックが入っていれば最優先で「🚫」にする
+  if (document.getElementById('isClosed').checked) finalStatusIcon = "🚫";
 
   const payload = {
     id: editingDiaryId,
@@ -412,9 +414,12 @@ function editDiary(id) {
     
     // 🎯 未整理から編集する際は、通常の日記として登録できるようチェックボックスを「外す」
     document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
-    document.getElementById('isDraft').checked = false; // 👈 ここがUXの肝！編集開始時は未整理チェックを外す
+    document.getElementById('isDraft').checked = false; 
+    // 🆕 追加: 閉店状態の復元
+    document.getElementById('isClosed').checked = (diary.weather_icon === "🚫");
 
-    if (diary.weather_icon === "💭" || diary.weather_icon === "📦") {
+    // 🆕 修正: 🚫の場合も天気プルダウンは「不明」にする
+    if (diary.weather_icon === "💭" || diary.weather_icon === "📦" || diary.weather_icon === "🚫") {
         document.getElementById('weatherSelect').value = "❓";
     } else if (diary.weather_icon) {
         document.getElementById('weatherSelect').value = diary.weather_icon;

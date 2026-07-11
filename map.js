@@ -27,7 +27,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
         lat: shop.latitude,
         lng: shop.longitude,
         shopName: shop.shop_name,
-        isMasterOnly: true, // 👈 未開拓フラグ
+        isMasterOnly: true,
         isTakeout: false,
         isGoods: false,
         mainTag: "",
@@ -38,18 +38,23 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
     });
   }
   
-  // 2️⃣ 重ね塗り: ユーザーの日記（訪問記録や行きたいリスト）で上書き
+  // 2️⃣ 重ね塗り: ユーザーの日記で上書き ＆ 🚫閉店は除外！
   filteredDiaries.forEach(diary => {
     if (diary.latitude && diary.longitude) {
       const s = diary.shop_name; 
       const isBookmark = diary.weather_icon === "💭";
       const isDraft = diary.weather_icon === "📦";
+      const isClosed = diary.weather_icon === "🚫"; // 🆕 閉店フラグ
       
-      // マスター店舗ならIDをキーに。自作店舗や未整理は名前・IDをキーに。
       const uniqueKey = isDraft ? `draft_${diary.id}` : (diary.shop_id || s);
 
+      // 🚨 DX機能: 閉店報告があるお店は、リストから問答無用で消し去る！
+      if (isClosed) {
+        if (uniqueShops[uniqueKey]) delete uniqueShops[uniqueKey];
+        return; // これ以降の処理はスキップ
+      }
+
       if (!uniqueShops[uniqueKey]) {
-        // マスタに存在しない、ユーザーが独自に見つけたお店（自作ピン）
         uniqueShops[uniqueKey] = { 
           lat: diary.latitude, lng: diary.longitude, 
           isMasterOnly: false,
@@ -62,9 +67,8 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
           isDraftOnly: isDraft
         };
       } else {
-        // マスタに存在したお店を上書き（🏳️未開拓を解除！）
         uniqueShops[uniqueKey].isMasterOnly = false;
-        if (!isDraft) uniqueShops[uniqueKey].shopName = s; // 名前を日記側に合わせる
+        if (!isDraft) uniqueShops[uniqueKey].shopName = s; 
         
         if (!isBookmark && !isDraft) { 
           uniqueShops[uniqueKey].visitCount++; 
@@ -72,47 +76,50 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
           uniqueShops[uniqueKey].isTakeout = diary.tags && diary.tags.includes('🥡テイクアウト');
           uniqueShops[uniqueKey].isGoods = diary.tags && diary.tags.includes('🛍️豆・グッズ');
         } else if (isBookmark && uniqueShops[uniqueKey].visitCount === 0) {
-          // まだ訪問していないが「行きたい」に入れた場合
           uniqueShops[uniqueKey].isBookmarkOnly = true;
         }
       }
 
-      // 堅牢なDX: ピンの色を決めるための「メインタグ」を安全に抽出
-      if (!isBookmark && !isDraft) {
+      if (!isBookmark && !isDraft && uniqueShops[uniqueKey]) {
           const allTags = parseTags(diary.tags);
-          // AIタグ（🤖）や絵文字付き（☕️🍰🛋️）などから最初の特徴タグを抽出
           const aiOrManualTag = allTags.find(t => !t.startsWith('🚨') && !t.includes('🥡') && !t.includes('☕️店内') && !t.includes('🛍️'));
           uniqueShops[uniqueKey].mainTag = aiOrManualTag || "";
       }
     }
   });
 
-  // 3️⃣ 描画: ステータスに応じてピンの見た目と色を決定
+  // 3️⃣ 描画: ステータスに応じてピンの見た目を決定
   Object.values(uniqueShops).forEach(shop => {
-    let emoji = '☕️';
-    let bgColor = '#34495e'; // デフォルト
+    let customIcon;
 
+    // 🆕 DX機能: 未開拓（マスタのみ）のピンは極小のドットにして密集を防ぐ！
     if (shop.isMasterOnly) {
-      emoji = '📍'; // 未開拓
-      bgColor = '#bdc3c7'; // グレー
-    } else if (shop.isDraftOnly) {
-      emoji = '📦';
-      bgColor = '#95a5a6'; // 未整理
-    } else if (shop.isBookmarkOnly) {
-      emoji = '💭';
-      bgColor = '#f39c12'; // 行きたいお店は目立つオレンジ！
+      customIcon = L.divIcon({ 
+        html: `<div style="background-color: #bdc3c7; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>`, 
+        className: 'custom-div-icon', 
+        iconSize: [16, 16], 
+        iconAnchor: [8, 8] 
+      });
     } else {
-      emoji = shop.isGoods ? '🛍️' : (shop.isTakeout ? '🥡' : '☕️');
-      bgColor = getColorFromTag(shop.mainTag); // 訪問済みは特徴タグの色！
+      // 訪問済みや行きたいお店は、今まで通りの目立つアイコン！
+      let emoji = '☕️';
+      let bgColor = '#34495e'; 
+
+      if (shop.isDraftOnly) {
+        emoji = '📦'; bgColor = '#95a5a6';
+      } else if (shop.isBookmarkOnly) {
+        emoji = '💭'; bgColor = '#f39c12'; 
+      } else {
+        emoji = shop.isGoods ? '🛍️' : (shop.isTakeout ? '🥡' : '☕️');
+        bgColor = getColorFromTag(shop.mainTag); 
+      }
+      
+      const badgeHtml = shop.visitCount > 0 ? `<div style="position:absolute; bottom:-5px; right:-5px; background:#e74c3c; color:white; border-radius:50%; width:18px; height:18px; font-size:11px; font-weight:bold; line-height:18px; text-align:center;">${shop.visitCount}</div>` : '';
+      customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: ${bgColor}; position:relative;">${emoji}${badgeHtml}</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
     }
-    
-    // 訪問回数バッジ
-    const badgeHtml = shop.visitCount > 0 ? `<div style="position:absolute; bottom:-5px; right:-5px; background:#e74c3c; color:white; border-radius:50%; width:18px; height:18px; font-size:11px; font-weight:bold; line-height:18px; text-align:center;">${shop.visitCount}</div>` : '';
-    const customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: ${bgColor}; position:relative;">${emoji}${badgeHtml}</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
     
     const marker = L.marker([shop.lat, shop.lng], {icon: customIcon}).addTo(viewMap);
     
-    // ポップアップのステータス表示
     let statusText = '💭 行きたいお店に登録中';
     if (shop.isMasterOnly) statusText = '🏳️ 未開拓（マスタ店舗）';
     else if (shop.visitCount > 0) statusText = `👣 訪問回数: ${shop.visitCount}回`;
@@ -127,7 +134,8 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
       </div>
     `;
     marker.bindPopup(popupHtml);
-    // マップ上のラベル（未開拓の場合はラベルを出さないとスッキリします）
+    
+    // 未開拓の場合はラベルも出さず、スッキリさせる
     if (!shop.isMasterOnly) {
         marker.bindTooltip(escapeHTML(shop.shopName), { permanent: true, direction: 'right', className: 'map-label', offset: [15, 0] });
     }
