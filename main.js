@@ -462,6 +462,9 @@ function filterDiaries() {
   else renderDiariesList(globalDiaries.filter(diary => parseTags(diary.tags).includes(selectedTag)));
 }
 
+// ==========================================
+// 📱 switchTab 関数の修正箇所 (main.js 内)
+// ==========================================
 function switchTab(tabName, element) {
     const tabs = ['record', 'history', 'map', 'analytics', 'settings'];
     tabs.forEach(t => {
@@ -474,7 +477,11 @@ function switchTab(tabName, element) {
     element.classList.add('active');
 
     if (tabName === 'history') fetchDiaries();
-    if (tabName === 'map' && typeof initViewMap === 'function') { initViewMap(); updateViewMarkers(globalDiaries); }
+    if (tabName === 'map' && typeof initViewMap === 'function') { 
+        initViewMap(); 
+        // 🎯 修正: タブを開いた時だけ自動フィット (autoFit = true) を発動させる！
+        updateViewMarkers(globalDiaries, true); 
+    }
     if (tabName === 'analytics' && typeof renderAnalytics === 'function') { renderAnalytics(); }
 }
 
