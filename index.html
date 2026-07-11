@@ -42,8 +42,7 @@
                         <input type="date" id="visitedAt" required>
                     </div>
 
-                    <!-- ⛅️ 追加: 天気とGPSの入力UI -->
-                    <div class="form-group">
+                   <div class="form-group">
                         <label>空模様は？</label>
                         <div class="weather-selector">
                             <label><input type="radio" name="weatherType" value="☀️">☀️</label>
@@ -52,9 +51,8 @@
                             <label><input type="radio" name="weatherType" value="❄️">❄️</label>
                             <label><input type="radio" name="weatherType" value="❓" checked>❓不明</label>
                         </div>
-                        <button type="button" id="getGpsWeatherBtn" style="background-color: #3498db; color: white; margin-top: 10px; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer;">📍 現在地と気温を自動取得</button>
+                        <button type="button" id="getGpsWeatherBtn" style="background-color: #3498db; color: white; margin-top: 10px; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer;">📍 写真・現在地から天気を割り出す</button>
                         <p id="gpsStatus" style="font-size: 0.85em; color: #e74c3c; margin-top: 8px; font-weight: bold; text-align: center;"></p>
-                        <!-- 隠しパラメータ -->
                         <input type="hidden" id="latitude">
                         <input type="hidden" id="longitude">
                         <input type="hidden" id="temperature">

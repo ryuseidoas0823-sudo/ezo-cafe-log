@@ -105,43 +105,115 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// 📍 ② 現在地と気温の自動取得処理を追加
-document.getElementById('getGpsWeatherBtn').addEventListener('click', () => {
+// 📍 ② 写真データまたは現在地から過去・現在の天気を割り出す処理
+document.getElementById('getGpsWeatherBtn').addEventListener('click', async () => {
   const statusEl = document.getElementById('gpsStatus');
-  statusEl.innerText = "📍 位置情報と天気を取得中...";
+  statusEl.innerText = "📍 データを解析中...";
   statusEl.style.color = "#3498db";
 
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      document.getElementById('latitude').value = lat;
-      document.getElementById('longitude').value = lng;
-      
-      // ⛅️ 完全無料のOpen-Meteo APIを叩いて気温を取得
-      try {
-        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);
-        const data = await res.json();
-        if (data && data.current_weather) {
-            const temp = data.current_weather.temperature;
-            document.getElementById('temperature').value = temp;
-            statusEl.innerText = `✅ 気温 ${temp}℃ と位置情報を取得しました！`;
-            statusEl.style.color = "#27ae60";
-        } else {
-            statusEl.innerText = "✅ 位置情報のみ取得しました（気温は不明）";
-            statusEl.style.color = "#27ae60";
+  let lat = null;
+  let lng = null;
+  let targetDate = new Date(); // デフォルトは現在時刻
+  let fromPhoto = false;
+
+  // 1. 写真からExif情報（位置と撮影日時）の取得を試みる
+  const fileInput = document.getElementById('imageInput');
+  if (fileInput.files.length > 0) {
+    try {
+      const exifData = await exifr.parse(fileInput.files[0]);
+      if (exifData) {
+        if (exifData.latitude && exifData.longitude) {
+          lat = exifData.latitude;
+          lng = exifData.longitude;
+          fromPhoto = true;
         }
-      } catch (e) {
-        statusEl.innerText = "✅ 位置情報のみ取得しました（天気APIエラー）";
-        statusEl.style.color = "#27ae60";
+        if (exifData.DateTimeOriginal) {
+          targetDate = new Date(exifData.DateTimeOriginal);
+        }
       }
-    },
-    (err) => {
+    } catch (e) { console.log("Exif parse error:", e); }
+  }
+
+  // 2. 写真に位置情報がない場合は、GPSで現在地を取得
+  if (lat === null || lng === null) {
+    statusEl.innerText = "📍 GPSで現在地を取得中...";
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 });
+      });
+      lat = pos.coords.latitude;
+      lng = pos.coords.longitude;
+    } catch (e) {
       statusEl.innerText = "❌ 位置情報の取得に失敗しました。";
       statusEl.style.color = "#e74c3c";
-    },
-    { enableHighAccuracy: true, timeout: 5000 }
-  );
+      return;
+    }
+  }
+
+  statusEl.innerText = "⛅️ 当時の天気データを割り出し中...";
+
+  // 3. Open-Meteo APIで指定日時（または現在）の天気を取得
+  const yyyy = targetDate.getFullYear();
+  const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(targetDate.getDate()).padStart(2, '0');
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+  const hour = targetDate.getHours();
+
+  let temp = null;
+  let weatherIcon = "❓";
+
+  // WMOの天気コードを絵文字に変換する関数
+  function getWeatherEmoji(code) {
+    if (code === 0) return "☀️";
+    if (code >= 1 && code <= 3) return "☁️";
+    if (code >= 51 && code <= 67) return "☔️";
+    if (code >= 71 && code <= 86) return "❄️";
+    if (code >= 80 && code <= 82) return "☔️";
+    if (code >= 95 && code <= 99) return "☔️";
+    return "❓";
+  }
+
+  try {
+    // まずはForecast API（現在〜直近の過去）を叩く
+    let url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo`;
+    let res = await fetch(url);
+    let data = await res.json();
+
+    // 取れなかった場合（古い写真など）はArchive（過去天気）APIへフォールバック
+    if (data.error || !data.hourly) {
+        url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo`;
+        res = await fetch(url);
+        data = await res.json();
+    }
+
+    if (data && data.hourly) {
+        temp = Math.round(data.hourly.temperature_2m[hour]);
+        const code = data.hourly.weather_code[hour];
+        weatherIcon = getWeatherEmoji(code);
+    }
+  } catch (e) { console.log("Weather API error:", e); }
+
+  // 4. 天気アイコンと気温をフォームに反映
+  if (weatherIcon !== "❓") {
+    const radio = document.querySelector(`input[name="weatherType"][value="${weatherIcon}"]`);
+    if (radio) radio.checked = true;
+  }
+  document.getElementById('temperature').value = temp !== null ? temp : "";
+
+  // 5. 【自衛のDX】テイクアウト・物販の場合は自宅バレを防ぐため位置情報を破棄
+  const eatType = document.querySelector('input[name="eatType"]:checked').value;
+  if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
+      document.getElementById('latitude').value = "";
+      document.getElementById('longitude').value = "";
+      statusEl.innerText = `✅ 天気を割り出しました！（※自宅を考慮し位置情報を破棄）\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
+      statusEl.style.color = "#27ae60";
+  } else {
+      document.getElementById('latitude').value = lat;
+      document.getElementById('longitude').value = lng;
+      const srcText = fromPhoto ? "写真の位置" : "現在地";
+      statusEl.innerText = `✅ ${srcText}と天気を割り出しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
+      statusEl.style.color = "#27ae60";
+  }
 });
 
 // 📤 フォーム送信 (保存・更新)
@@ -152,27 +224,39 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   submitBtn.disabled = true;
   submitBtn.innerHTML = "🤖 通信中...";
 
-  // ☕️🥡 ③ ラジオボタンの値を手動タグと結合して裏で送る
+  // ☕️🥡🛍️ ラジオボタンの値を手動タグと結合して裏で送る
   const eatType = document.querySelector('input[name="eatType"]:checked').value;
   const userTags = document.getElementById('tags').value;
   const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;
 
+  // 🛡️ 【自衛のDX】最終安全装置：送信直前に利用タイプを確認し、位置情報を強制破棄
+  let finalLat = document.getElementById('latitude') ? document.getElementById('latitude').value : null;
+  let finalLng = document.getElementById('longitude') ? document.getElementById('longitude').value : null;
+  
+  if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
+      finalLat = null;
+      finalLng = null;
+      // 念のためHTML側の隠し項目も空にしておく
+      if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
+      if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
+  }
+
   const payload = {
     id: editingDiaryId,
-    shopId: document.getElementById('shopId') ? document.getElementById('shopId').value : null, // ① 追加
+    shopId: document.getElementById('shopId') ? document.getElementById('shopId').value : null,
     shopName: document.getElementById('shopName').value,
     comment: document.getElementById('comment').value,
     visitedAt: document.getElementById('visitedAt').value,
-    tags: combinedTags, // ③ 修正
+    tags: combinedTags, 
     imageBase64: currentBase64,
-    // ⛅️ ② GPSと天気のデータを送信
-    lat: document.getElementById('latitude') ? document.getElementById('latitude').value : null,
-    lng: document.getElementById('longitude') ? document.getElementById('longitude').value : null,
+    // ⛅️ 最終チェックを通過した安全なGPSデータのみを送信する
+    lat: finalLat,
+    lng: finalLng,
     temperature: document.getElementById('temperature') ? document.getElementById('temperature').value : null,
     weatherIcon: document.querySelector('input[name="weatherType"]:checked') ? document.querySelector('input[name="weatherType"]:checked').value : "❓"
   };
 
-  const result = await saveDiaryApi(payload); // api.jsの関数を呼ぶ
+  const result = await saveDiaryApi(payload); 
   
   if (result.success) {
     document.getElementById('recordForm').reset();
