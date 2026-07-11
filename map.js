@@ -6,14 +6,42 @@ const HOME_LNG = 141.3500;
 let viewMap = null;
 let mapMarkers = []; 
 
+// 🆕 フィルターの状態を管理するグローバル変数
+let activeMapFilters = { dining: false, takeout: false, goods: false };
+
+// 🎯 DX設計: 北海道の境界線を厳密に定義（スクロール制限用）
+const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
+
 function initViewMap() {
   if (!viewMap) {
-    viewMap = L.map('mapView').setView([HOME_LAT, HOME_LNG], 13);
+    // 北海道限定にビューをガッチリ固定！
+    viewMap = L.map('mapView', {
+      maxBounds: HOKKAIDO_BOUNDS, 
+      maxBoundsViscosity: 1.0, 
+      minZoom: 7, 
+      maxZoom: 19
+    }).setView([HOME_LAT, HOME_LNG], 13);
+    
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(viewMap);
+    
+    // ズーム操作が終わった瞬間に、ピンを最適に再描画（間引き制御用）
+    viewMap.on('zoomend', () => { updateViewMarkers(); });
   }
   setTimeout(() => { viewMap.invalidateSize(); }, 200);
 }
 
+// 🆕 フィルターボタンが押された時のトグル処理
+function toggleMapFilter(type) {
+    activeMapFilters[type] = !activeMapFilters[type];
+    const btn = document.getElementById(`btn-filter-${type}`);
+    if (btn) {
+        if (activeMapFilters[type]) btn.classList.add('active');
+        else btn.classList.remove('active');
+    }
+    updateViewMarkers(); // マーカーを再レンダリングして絞り込み適用！
+}
+
+// 🆕 マップ検索移動関数（滑らかにズームインしてポップアップを開く）
 function flyToShop(lat, lng) {
   if (viewMap) {
     viewMap.flyTo([lat, lng], 17, { duration: 1.5 });
@@ -24,13 +52,56 @@ function flyToShop(lat, lng) {
   }
 }
 
+// 🆕 📸 復活機能: マップ全体を美しい1枚の画像としてPNGエクスポートする
+window.downloadMapImage = function() {
+    const mapContainer = document.getElementById('mapView');
+    const template = document.getElementById('map-watermark-template');
+    const saveBtn = document.getElementById('btn-save-map-image');
+    
+    if (!mapContainer || !template) return;
+
+    const originalBtnText = saveBtn.innerHTML;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = "📸 画像を生成中...";
+
+    // 1. 総開拓数を数えて透かし用テンプレートに埋め込む
+    const validShopsCount = document.getElementById('stat-unique-shops')?.innerText || "0";
+    document.getElementById('watermark-shop-count').innerText = validShopsCount;
+
+    // 2. 透かし用テンプレートを一時的にマップコンテナ内に複製して可視化
+    const watermarkClone = template.cloneNode(true);
+    watermarkClone.style.display = 'block';
+    mapContainer.appendChild(watermarkClone);
+
+    // 3. html2canvasでLeafletコンテナ全体をレンダリング (CORS対応必須)
+    html2canvas(mapContainer, {
+        useCORS: true, 
+        allowTaint: false,
+        ignoreElements: (el) => el.id === 'mapSearchInput' || el.closest('#mapSearchSuggestList') // 検索窓は邪魔なので写さない
+    }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `EzoCafe_Log_MyMap_${new Date().toISOString().split('T')[0]}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+
+        mapContainer.removeChild(watermarkClone);
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalBtnText;
+    }).catch(err => {
+        console.error("Map Image Export Error:", err);
+        mapContainer.removeChild(watermarkClone);
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalBtnText;
+        alert("画像の生成に失敗しました。時間をおいて再度お試しください。");
+    });
+};
+
 function updateViewMarkers(filteredDiaries = globalDiaries) {
   if (!viewMap) return;
+  const currentZoom = viewMap.getZoom();
   viewMap.eachLayer((layer) => { if (layer instanceof L.Marker) viewMap.removeLayer(layer); });
   
   const bounds = L.latLngBounds(); 
-  
-  // 🎯 DX機能: 緯度・経度をキーにして「その場所にある歴代の店舗」をグループ化！
   const locationMap = {};
   let totalValidVisits = 0; 
   mapMarkers = []; 
@@ -43,15 +114,22 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
       
       locationMap[locKey].shops[shop.shop_id] = {
         shopId: shop.shop_id, shopName: shop.shop_name,
-        isMasterOnly: true, isTakeout: false, isGoods: false, mainTag: "", visitCount: 0, 
-        isBookmarkOnly: false, isDraftOnly: false,
-        isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0
+        isMasterOnly: true, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: false,
+        isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0,
+        hasDining: false, hasTakeout: false, hasGoods: false 
       };
     });
   }
   
-  // 2️⃣ 重ね塗り: ユーザーの日記で上書き（座標ごとに集計）
-  filteredDiaries.forEach(diary => {
+  // 🎯 DXの真髄: 日記データを「日付の古い順」にソートしてから処理する（時系列での状態上書き）
+  const chronologicalDiaries = [...filteredDiaries].sort((a, b) => {
+      const timeA = new Date((a.visited_at || "1970-01-01").replace(/-/g, '/')).getTime();
+      const timeB = new Date((b.visited_at || "1970-01-01").replace(/-/g, '/')).getTime();
+      return timeA - timeB; 
+  });
+  
+  // 2️⃣ 重ね塗り: ユーザーの日記から「最新の店舗状態」を抽出・精製
+  chronologicalDiaries.forEach(diary => {
     if (diary.latitude && diary.longitude) {
       const locKey = `${diary.latitude}_${diary.longitude}`;
       if (!locationMap[locKey]) locationMap[locKey] = { lat: diary.latitude, lng: diary.longitude, shops: {} };
@@ -60,20 +138,20 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
       const isBookmark = diary.weather_icon === "💭";
       const isDraft = diary.weather_icon === "📦";
       const isClosedReport = diary.weather_icon === "🚫"; 
-      
       const uniqueKey = isDraft ? `draft_${diary.id}` : (diary.shop_id || s);
 
       if (!locationMap[locKey].shops[uniqueKey]) {
         locationMap[locKey].shops[uniqueKey] = { 
           shopId: diary.shop_id || null, shopName: isDraft ? '📦 未整理の写真' : s,
-          isMasterOnly: false, isTakeout: false, isGoods: false, mainTag: "", visitCount: 0, 
-          isBookmarkOnly: false, isDraftOnly: isDraft,
-          isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0
+          isMasterOnly: false, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: isDraft,
+          isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0,
+          hasDining: false, hasTakeout: false, hasGoods: false
         };
         if (!isBookmark && !isDraft && !isClosedReport) totalValidVisits++;
       }
 
       let shop = locationMap[locKey].shops[uniqueKey];
+      const allTags = parseTags(diary.tags);
 
       // 🚨 閉店フラグの処理
       if (isClosedReport) {
@@ -81,64 +159,74 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
           const reportDateStr = diary.created_at || diary.visited_at || "";
           const reportDate = reportDateStr ? new Date(reportDateStr.replace(/-/g, '/')) : new Date();
           const diffDays = (new Date() - reportDate) / (1000 * 60 * 60 * 24);
-          
-          if (diffDays > 14) {
-            shop.isClosed = true; // 完全閉店（削除せずステータス変更のみ！）
-          } else {
-            shop.isGracePeriod = true;
-            shop.closedDiaryId = diary.id;
-          }
+          if (diffDays > 14) shop.isClosed = true; 
+          else { shop.isGracePeriod = true; shop.closedDiaryId = diary.id; }
         }
         return; 
       }
 
-      // 🌟 通常の記録の重ね塗り処理
+      if (shop.isClosed) return;
+
       shop.isMasterOnly = false;
       if (!isDraft) shop.shopName = s; 
       
       const visitTime = new Date((diary.visited_at || "").replace(/-/g, '/')).getTime();
       if (visitTime > shop.lastVisited) shop.lastVisited = visitTime;
       
+      // 🧠 自動抽出ロジック（ポジティブ・マージ）
+      if (allTags.includes('☕️店内')) shop.hasDining = true;
+      if (allTags.includes('🥡テイクアウト')) shop.hasTakeout = true;
+      if (allTags.includes('🛍️豆・グッズ')) shop.hasGoods = true;
+
+      // 🛑 廃止・終了への対応ロジック（システムタグによるネガティブ・上書き）
+      if (allTags.some(t => t.includes('テイクアウト廃止') || t.includes('テイクアウト終了') || t.includes('テイクアウトなし'))) {
+          shop.hasTakeout = false;
+      }
+      if (allTags.some(t => t.includes('物販終了') || t.includes('豆販売終了'))) {
+          shop.hasGoods = false;
+      }
+
       if (!isBookmark && !isDraft) { 
         shop.visitCount++; 
         if (shop.visitCount > 1) totalValidVisits++; 
         shop.isBookmarkOnly = false; 
-        shop.isTakeout = diary.tags && diary.tags.includes('🥡テイクアウト');
-        shop.isGoods = diary.tags && diary.tags.includes('🛍️豆・グッズ');
       } else if (isBookmark && shop.visitCount === 0) {
         shop.isBookmarkOnly = true;
       }
 
       if (!isBookmark && !isDraft && shop.mainTag === "") {
-          const allTags = parseTags(diary.tags);
           const aiOrManualTag = allTags.find(t => !t.startsWith('🚨') && !t.includes('🥡') && !t.includes('☕️店内') && !t.includes('🛍️'));
           shop.mainTag = aiOrManualTag || "";
       }
     }
   });
 
-  // 3️⃣ 描画処理: グループ化された場所ごとにピンを生成
+  // 3️⃣ 描画処理: フィルターの条件に合致するものだけをマップにプロット
   Object.values(locationMap).forEach(loc => {
-    // 🏢 同じ場所にある店舗をソート（現役の店を先頭に、古い店を後ろに）
-    const shopList = Object.values(loc.shops).sort((a, b) => {
+    // 🏢 座標内の店舗をソート
+    let shopList = Object.values(loc.shops).sort((a, b) => {
         const scoreA = a.isClosed ? 2 : (a.isGracePeriod ? 1 : 0);
         const scoreB = b.isClosed ? 2 : (b.isGracePeriod ? 1 : 0);
-        if (scoreA !== scoreB) return scoreA - scoreB; // 状態優先
-        return b.lastVisited - a.lastVisited; // 次に訪問日
+        if (scoreA !== scoreB) return scoreA - scoreB; 
+        return b.lastVisited - a.lastVisited; 
     });
 
     if (shopList.length === 0) return;
 
-    // 最新・現役の店舗がその座標の「顔（メイン）」になる
+    // 🧠 フィルター絞り込み判定
+    if (activeMapFilters.dining)  shopList = shopList.filter(s => s.hasDining);
+    if (activeMapFilters.takeout) shopList = shopList.filter(s => s.hasTakeout);
+    if (activeMapFilters.goods)   shopList = shopList.filter(s => s.hasGoods);
+
+    if (shopList.length === 0) return;
+
     const mainShop = shopList[0];
-    // その場所全体の訪問回数を合算
     const locTotalVisits = shopList.reduce((sum, s) => sum + s.visitCount, 0);
 
     let customIcon;
     let opacity = 1.0;
 
     if (mainShop.isClosed) {
-      // 🎞️ 歴代店舗がすべて閉店した場所は「思い出の地」としてノスタルジックな表現に！
       customIcon = L.divIcon({ 
         html: `<div class="emoji-pin" style="background-color: #a67c52; position:relative; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">🎞️</div>`, 
         className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] 
@@ -151,12 +239,14 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
       });
       opacity = 0.6;
     } else if (mainShop.isMasterOnly) {
+      // 🎯 究極の超軽量化ロジック (LOD遅延レンダリング)
+      if (currentZoom < 12) return; 
       customIcon = L.divIcon({ 
         html: `<div style="background-color: #bdc3c7; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>`, 
         className: 'custom-div-icon', iconSize: [16, 16], iconAnchor: [8, 8] 
       });
     } else {
-      let emoji = mainShop.isGoods ? '🛍️' : (mainShop.isTakeout ? '🥡' : '☕️');
+      let emoji = mainShop.hasGoods ? '🛍️' : (mainShop.hasTakeout ? '🥡' : '☕️');
       let bgColor = getColorFromTag(mainShop.mainTag); 
       if (mainShop.isDraftOnly) { emoji = '📦'; bgColor = '#95a5a6'; }
       if (mainShop.isBookmarkOnly) { emoji = '💭'; bgColor = '#f39c12'; }
@@ -185,7 +275,14 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
     let popupHtml = `<div style="text-align:center; min-width: 180px; padding: 5px;">`;
     popupHtml += `<p style="margin: 0; font-weight:bold; font-size:1.1rem; color:#2c3e50;">${escapeHTML(mainShop.shopName)}</p>`;
 
-    // 🏢 歴代店舗の表示（同じ場所に複数のお店がある場合）
+    let servicesHtml = '<div style="margin: 6px 0; font-size: 0.8rem; color: #7f8c8d;">✨ 対応: ';
+    if (mainShop.hasDining) servicesHtml += '☕️ ';
+    if (mainShop.hasTakeout) servicesHtml += '🥡 ';
+    if (mainShop.hasGoods) servicesHtml += '🛍️ ';
+    if (!mainShop.hasDining && !mainShop.hasTakeout && !mainShop.hasGoods) servicesHtml += '🏳️ 未確認';
+    servicesHtml += '</div>';
+    popupHtml += servicesHtml;
+
     if (shopList.length > 1) {
         popupHtml += `<div style="margin: 10px 0; padding: 8px; background: #f4f4f9; border-radius: 8px; font-size: 0.8rem; text-align: left; border: 1px solid #eee;">`;
         popupHtml += `<p style="margin: 0 0 5px 0; font-weight: bold; color: #7f8c8d; font-size: 0.75rem;">🏢 歴代・併設の店舗</p>`;
@@ -196,7 +293,6 @@ function updateViewMarkers(filteredDiaries = globalDiaries) {
         popupHtml += `</div>`;
     }
 
-    // メイン店舗に対するステータスとボタン
     let statusText = '';
     let actionBtn = '';
 

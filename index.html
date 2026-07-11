@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -25,65 +26,69 @@
                         </label>
                         <input type="file" id="imageInput" accept="image/*" multiple>
                         <img id="imagePreview" style="display: none;" alt="プレビュー">
-                        
-                        <label style="display: block; margin-top: 10px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
-                            <input type="checkbox" id="isDraft" value="📦">
-                            📦 この1枚を「未整理」として仮保存する
-                        </label>
                     </div>
 
-                    <div class="form-group relative">
-                        <label for="shopName">お店の名前</label>
-                        <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" autocomplete="off">
-                        <input type="hidden" id="shopId">
-                        <ul id="shopSuggestList" class="suggest-list"></ul>
+                    <div id="dynamicFormFields" class="hidden-fields">
                         
-                        <label style="display: block; margin-top: 8px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
-                            <input type="checkbox" id="isBookmark" value="💭">
-                            💭 まだ行ってないけど「行きたいお店」として登録する
-                        </label>
-                    </div>
-
-                    <div class="form-group">
-                        <label>利用タイプは？</label>
-                        <div class="type-selector">
-                            <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
-                            <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイクアウト</label>
-                            <label><input type="radio" name="eatType" value="🛍️豆・グッズ">🛍️ 物販</label>
+                        <div class="form-group">
+                            <label style="display: block; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
+                                <input type="checkbox" id="isDraft" value="📦">
+                                📦 この1枚を「未整理」として仮保存する
+                            </label>
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="visitedAt">訪問日</label>
-                        <input type="date" id="visitedAt" required>
-                    </div>
+                        <div class="form-group relative">
+                            <label for="shopName">お店の名前</label>
+                            <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" autocomplete="off">
+                            <input type="hidden" id="shopId">
+                            <ul id="shopSuggestList" class="suggest-list"></ul>
+                            
+                            <label style="display: block; margin-top: 8px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
+                                <input type="checkbox" id="isBookmark" value="💭">
+                                💭 まだ行ってないけど「行きたいお店」として登録する
+                            </label>
+                        </div>
 
-                    <div class="form-group">
-                        <label for="weatherSelect">天気（写真から自動取得・手動変更可）</label>
-                        <select id="weatherSelect">
-                            <option value="❓">❓ 不明</option>
-                            <option value="☀️">☀️ 晴れ</option>
-                            <option value="☁️">☁️ くもり</option>
-                            <option value="☔️">☔️ 雨</option>
-                            <option value="❄️">❄️ 雪</option>
-                        </select>
-                        <p id="gpsStatus" style="font-size: 0.85em; color: #e74c3c; margin-top: 8px; font-weight: bold; text-align: center;"></p>
-                        <input type="hidden" id="latitude">
-                        <input type="hidden" id="longitude">
-                        <input type="hidden" id="temperature">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="comment">感想やメモ</label>
-                        <textarea id="comment" placeholder="コロンビア・ロスノガレスのデカフェを飲みました。"></textarea>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="tags">自分でつけるタグ（カンマ区切り・任意）</label>
-                        <input type="text" id="tags" placeholder="例: 作業, 癒やし">
-                    </div>
-                    <button type="submit" id="submitBtn">🚀 記録する</button>
-                </form>
+                        <div class="form-group">
+                            <label>利用タイプは？</label>
+                            <div class="type-selector">
+                                <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
+                                <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイクアウト</label>
+                                <label><input type="radio" name="eatType" value="🛍️豆・グッズ">🛍️ 物販</label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="visitedAt">訪問日</label>
+                            <input type="date" id="visitedAt" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="weatherSelect">天気（自動取得・手動変更可）</label>
+                            <select id="weatherSelect">
+                                <option value="❓">❓ 不明</option>
+                                <option value="☀️">☀️ 晴れ</option>
+                                <option value="☁️">☁️ くもり</option>
+                                <option value="☔️">☔️ 雨</option>
+                                <option value="❄️">❄️ 雪</option>
+                            </select>
+                            <p id="gpsStatus" style="font-size: 0.85em; color: #e74c3c; margin-top: 8px; font-weight: bold; text-align: center;"></p>
+                            <input type="hidden" id="latitude">
+                            <input type="hidden" id="longitude">
+                            <input type="hidden" id="temperature">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="comment">感想やメモ</label>
+                            <textarea id="comment" placeholder="コロンビア・ロスノガレスのデカフェを飲みました。"></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="tags">自分でつけるタグ（任意）</label>
+                            <input type="text" id="tags" placeholder="例: 作業, 癒やし">
+                        </div>
+                        <button type="submit" id="submitBtn">🚀 記録する</button>
+                    </div> </form>
             </div>
         </div>
 
@@ -98,10 +103,24 @@
 
         <div id="tab-map" class="hidden" style="position: relative;">
             <div style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 1000;">
-                <input type="text" id="mapSearchInput" placeholder="🔍 店舗名でマップを検索..." autocomplete="off" style="width: 100%; padding: 12px 20px; border-radius: 25px; border: 2px solid #5d4037; box-shadow: 0 4px 6px rgba(0,0,0,0.2); font-size: 16px; box-sizing: border-box; background: rgba(255, 255, 255, 0.95);">
-                <ul id="mapSearchSuggestList" class="suggest-list" style="margin-top: 5px; border-radius: 12px; max-height: 200px;"></ul>
+                <input type="text" id="mapSearchInput" placeholder="🔍 店舗名でマップを検索..." autocomplete="off" style="width: 100%; padding: 12px 20px; border-radius: 25px; border: 2px solid #5d4037; box-shadow: 0 4px 6px rgba(0,0,0,0.2); font-size: 16px; box-sizing: border-box; background: rgba(255, 255, 255, 0.95); margin-bottom: 8px;">
+                <ul id="mapSearchSuggestList" class="suggest-list" style="margin-top: -5px; border-radius: 12px; max-height: 200px; margin-bottom: 8px;"></ul>
+                
+                <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 8px;">
+                    <button type="button" id="btn-filter-dining" class="map-filter-chip" onclick="toggleMapFilter('dining')">☕️ 店内飲食</button>
+                    <button type="button" id="btn-filter-takeout" class="map-filter-chip" onclick="toggleMapFilter('takeout')">🥡 テイクアウト</button>
+                    <button type="button" id="btn-filter-goods" class="map-filter-chip" onclick="toggleMapFilter('goods')">🛍️ 豆・物販</button>
+                </div>
+
+                <button type="button" id="btn-save-map-image" onclick="downloadMapImage()" style="width: 100%; background: #27ae60; color: white; border: none; padding: 10px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 4px 6px rgba(0,0,0,0.15); cursor: pointer; transition: all 0.2s;">📸 この地図を画像として保存</button>
             </div>
             
+            <div id="map-watermark-template" style="display: none; position: absolute; bottom: 20px; right: 20px; z-index: 999; background: rgba(255,255,255,0.85); padding: 10px 15px; border-radius: 8px; border: 1px solid #5d4037; font-family: sans-serif; text-align: right;">
+                <div style="font-size: 12px; color: #7f8c8d; font-weight: bold;">Hokkaido Cafe Map</div>
+                <div style="font-size: 16px; color: #5d4037; font-weight: bold;">☕️ EzoCafe Log</div>
+                <div style="font-size: 11px; color: #e67e22; font-weight: bold; margin-top: 3px;">総開拓店舗数: <span id="watermark-shop-count">0</span> 店舗</div>
+            </div>
+
             <div id="mapView"></div>
         </div>
 
@@ -130,7 +149,7 @@
         <div id="tab-settings" class="hidden">
             <div class="dashboard-card">
                 <h3>👤 アナリティクス用属性設定</h3>
-                <p style="font-size: 0.85rem; color: #7f8c8d; margin-bottom: 15px;">※ここで設定した属性は記録と一緒に保存され、将来SNS化した際の統計データにのみ利用されます。</p>
+                <p style="font-size: 0.85rem; color: #7f8c8d; margin-bottom: 15px;">※ここで設定した属性は将来の統計データにのみ利用されます。</p>
                 
                 <div class="form-group">
                     <label>性別</label>

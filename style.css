@@ -116,3 +116,22 @@ button:disabled { background-color: #a1887f; cursor: not-allowed; }
 .stat-value { font-size: 1.5rem; font-weight: bold; color: #e74c3c; }
 .stat-label { font-size: 0.8rem; color: #7f8c8d; }
 .chart-container { position: relative; width: 100%; margin-top: 15px; }
+
+/* ==========================================
+   🆕 段階的開示 (Progressive Disclosure) 用スタイル
+   ========================================== */
+.hidden-fields {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, max-height 0.6s cubic-bezier(0, 1, 0, 1), transform 0.5s ease;
+}
+
+.hidden-fields.show {
+    opacity: 1;
+    max-height: 2000px;
+    transform: translateY(0);
+    transition: opacity 0.5s ease, max-height 0.6s ease, transform 0.5s ease;
+    margin-top: 20px;
+}

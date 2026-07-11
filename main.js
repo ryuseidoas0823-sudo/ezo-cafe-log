@@ -8,8 +8,8 @@ let currentBase64 = null;
 document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
+  initUserUuid(); // 🆕 匿名UUIDの初期化・仕込み
   
-  // 🚀 DX機能: 日記データとマスタデータを並行して高速取得！
   await Promise.all([
     fetchDiaries(),
     fetchMasterShopsApi()
@@ -17,6 +17,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   document.getElementById('tagFilter').addEventListener('change', filterDiaries);
 });
+
+// 🆕 🧠 B2Bデータ価値向上: 匿名UUIDの生成・固定ロジック
+function initUserUuid() {
+  let uuid = localStorage.getItem('ezo_user_uuid');
+  if (!uuid) {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      uuid = crypto.randomUUID();
+    } else {
+      uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+    localStorage.setItem('ezo_user_uuid', uuid);
+  }
+}
 
 function resetDateToToday() {
   const today = new Date();
@@ -42,7 +58,6 @@ function saveSettings() {
   alert("✨ 設定を保存しました！");
 }
 
-// 🛠️ リファクタリング: Canvasによる画像リサイズ圧縮をPromise化
 function resizeImageAsync(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -72,7 +87,6 @@ function resizeImageAsync(file) {
   });
 }
 
-// 🛠️ リファクタリング: Exifと天気の抽出処理を関数化
 async function extractExifAndWeather(file) {
   let lat = null, lng = null, temp = null, weatherIcon = "❓";
   let targetDate = new Date();
@@ -126,17 +140,14 @@ async function extractExifAndWeather(file) {
   return { lat, lng, visitedAt, weatherIcon, temp };
 }
 
-
-// 📸 写真選択時のメインアクション (1枚 vs 複数枚の分岐)
+// 📸 写真選択時のメインアクション (段階的開示対応)
 document.getElementById('imageInput').addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files || files.length === 0) return;
 
   const statusEl = document.getElementById('gpsStatus');
+  const dynamicForm = document.getElementById('dynamicFormFields');
 
-  // ==========================================
-  // 🅰️ 1枚選択の場合： 通常の日記作成フロー
-  // ==========================================
   if (files.length === 1) {
     const file = files[0];
     if(statusEl) {
@@ -144,13 +155,11 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
       statusEl.style.color = "#3498db";
     }
 
-    // 画像の圧縮とプレビュー表示
     currentBase64 = await resizeImageAsync(file);
     const imgPreview = document.getElementById('imagePreview');
     imgPreview.src = currentBase64;
     imgPreview.style.display = 'block';
 
-    // Exifと天気を取得してフォームの裏側にセット
     const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
     
     document.getElementById('visitedAt').value = visitedAt;
@@ -162,6 +171,9 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
     document.getElementById('latitude').value = lat;
     document.getElementById('longitude').value = lng;
 
+    // 🆕 🧠 段階的開示UI: 解析が終わったら、フワッと他のフォーム要素を出現させる！
+    if (dynamicForm) dynamicForm.classList.add('show');
+
     if(statusEl) {
       if (lat !== null) {
         statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
@@ -172,19 +184,14 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
       }
     }
   } 
-  // ==========================================
-  // 🅱️ 複数枚選択の場合： 神速の「一括未整理アップロード」フロー
-  // ==========================================
   else {
-    if (!confirm(`${files.length}枚の写真が選択されました。\nすべて「未整理(📦)」として一括ストックしますか？\n（あとから履歴タブで編集できます）`)) {
-      e.target.value = ''; // キャンセル時はリセット
-      return;
+    if (!confirm(`${files.length}枚の写真が選択されました。\nすべて「未整理(📦)」として一括ストックしますか？`)) {
+      e.target.value = ''; return;
     }
 
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
 
-    // 順番に裏側で「リサイズ→位置・天気取得→DB保存」のパイプラインを回す
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if(statusEl) {
@@ -195,58 +202,38 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
       const base64 = await resizeImageAsync(file);
       const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
 
-      // 未整理データとしてAPIへ直接送信
       const payload = {
-        id: null,
-        shopId: null,
-        shopName: "未整理の写真", // 一時的な名前
-        comment: "",
-        visitedAt: visitedAt,
-        tags: "", 
-        imageBase64: base64,
-        lat: lat,
-        lng: lng,
-        temperature: temp,
-        weatherIcon: "📦", // ステータスを「未整理」に強制
+        id: null, shopId: null, shopName: "未整理の写真", comment: "", visitedAt: visitedAt, tags: "", 
+        imageBase64: base64, lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
         userGender: localStorage.getItem('ezo_gender') || "未設定",
-        userAge: localStorage.getItem('ezo_age') || "未設定"
+        userAge: localStorage.getItem('ezo_age') || "未設定",
+        userUuid: localStorage.getItem('ezo_user_uuid') // 🆕 UUIDの付与
       };
-
       await saveDiaryApi(payload);
     }
 
-    if(statusEl) {
-      statusEl.innerText = "✅ 全ての一括登録が完了しました！";
-      statusEl.style.color = "#27ae60";
-    }
+    if(statusEl) { statusEl.innerText = "✅ 全ての一括登録が完了しました！"; statusEl.style.color = "#27ae60"; }
 
-    // フォームを綺麗にして履歴タブへ自動遷移
     document.getElementById('recordForm').reset();
     document.getElementById('imagePreview').style.display = 'none';
+    if (dynamicForm) dynamicForm.classList.remove('show'); 
     currentBase64 = null;
     resetDateToToday();
     submitBtn.disabled = false;
-    e.target.value = ''; // inputのクリア
+    e.target.value = '';
 
     fetchDiaries();
     switchTab('history', document.querySelector('.bottom-nav .nav-item:nth-child(2)'));
   }
 });
 
-
-// 🔍 店舗マスタサジェスト機能
 let suggestTimeout = null;
 document.getElementById('shopName').addEventListener('input', (e) => {
   const query = e.target.value.trim();
   const suggestList = document.getElementById('shopSuggestList');
   document.getElementById('shopId').value = ""; 
-  
   if (suggestTimeout) clearTimeout(suggestTimeout); 
-  
-  if (query.length === 0) {
-    suggestList.style.display = 'none';
-    return;
-  }
+  if (query.length === 0) { suggestList.style.display = 'none'; return; }
 
   suggestTimeout = setTimeout(async () => {
     const results = await searchMasterApi(query); 
@@ -265,17 +252,12 @@ document.getElementById('shopName').addEventListener('input', (e) => {
               document.getElementById('latitude').value = ev.target.dataset.lat;
               document.getElementById('longitude').value = ev.target.dataset.lng;
               const statusEl = document.getElementById('gpsStatus');
-              if (statusEl) {
-                  statusEl.innerText = "📍 店舗マスタから位置情報をセットしました";
-                  statusEl.style.color = "#27ae60";
-              }
+              if (statusEl) { statusEl.innerText = "📍 店舗マスタから位置情報をセットしました"; statusEl.style.color = "#27ae60"; }
           }
           suggestList.style.display = 'none';
         });
       });
-    } else {
-      suggestList.style.display = 'none';
-    }
+    } else { suggestList.style.display = 'none'; }
   }, 300);
 });
 
@@ -286,7 +268,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// 📤 フォーム送信 (保存・更新)
 document.getElementById('recordForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const submitBtn = document.getElementById('submitBtn');
@@ -298,18 +279,15 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   const userTags = document.getElementById('tags').value;
   const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;
 
-  // 🛡️ 自衛のDX: テイクアウトや物販の場合は位置情報を強制破棄
   let finalLat = document.getElementById('latitude') ? document.getElementById('latitude').value : null;
   let finalLng = document.getElementById('longitude') ? document.getElementById('longitude').value : null;
   
   if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
-      finalLat = null;
-      finalLng = null;
+      finalLat = null; finalLng = null;
       if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
       if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
   }
 
-  // 🎯 ステータス判定: チェックボックスが優先、なければプルの天気
   let finalStatusIcon = document.getElementById('weatherSelect').value;
   if (document.getElementById('isBookmark') && document.getElementById('isBookmark').checked) finalStatusIcon = "💭";
   if (document.getElementById('isDraft') && document.getElementById('isDraft').checked) finalStatusIcon = "📦";
@@ -322,12 +300,12 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     visitedAt: document.getElementById('visitedAt').value,
     tags: combinedTags, 
     imageBase64: currentBase64,
-    lat: finalLat,
-    lng: finalLng,
+    lat: finalLat, lng: finalLng,
     temperature: document.getElementById('temperature') ? document.getElementById('temperature').value : null,
     weatherIcon: finalStatusIcon,
     userGender: localStorage.getItem('ezo_gender') || "未設定",
-    userAge: localStorage.getItem('ezo_age') || "未設定"
+    userAge: localStorage.getItem('ezo_age') || "未設定",
+    userUuid: localStorage.getItem('ezo_user_uuid') // 🆕 UUIDを付与！
   };
 
   const result = await saveDiaryApi(payload); 
@@ -336,6 +314,8 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     document.getElementById('recordForm').reset();
     document.getElementById('imagePreview').style.display = 'none';
     if(document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = ""; 
+    const dynamicForm = document.getElementById('dynamicFormFields');
+    if (dynamicForm) dynamicForm.classList.remove('show');
     currentBase64 = null;
     resetDateToToday();
     
@@ -344,24 +324,19 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     
     fetchDiaries();
     switchTab('history', document.querySelector('.bottom-nav .nav-item:nth-child(2)'));
-  } else {
-    alert("エラー: " + result.error);
-  }
+  } else { alert("エラー: " + result.error); }
   
   submitBtn.disabled = false;
   submitBtn.innerHTML = originalBtnText;
 });
 
-// 🎨 リストの描画
 function renderDiariesList(diaries) {
   const container = document.getElementById('diariesList');
   if (!container) return;
   container.innerHTML = "";
 
   diaries.forEach(diary => {
-    // 💀 完全閉店は履歴からは弾かないが、閉店ステータスとして表示を分ける
     const isClosed = diary.weather_icon === "🚫";
-
     const card = document.createElement('div');
     card.className = "diary-card";
 
@@ -375,7 +350,6 @@ function renderDiariesList(diaries) {
     let imageHTML = diary.image_base64 || diary.image_url ? `<img src="${diary.image_base64 || diary.image_url}" class="diary-image" alt="カフェの写真">` : "";
     const displayDate = diary.visited_at ? diary.visited_at.split(' ')[0] : '日付不明';
 
-    // 💭行きたい、📦未整理、🚫閉店の場合は見栄えを調整
     let weatherStr = "";
     if (isClosed) weatherStr = "🚫 閉店・移転報告済み";
     else if (diary.weather_icon === "💭") weatherStr = "💭 行きたい";
@@ -402,22 +376,19 @@ function renderDiariesList(diaries) {
   });
 }
 
-// ✏️ 編集処理
 function editDiary(id) {
     const diary = globalDiaries.find(d => d.id === id);
     if (!diary) return;
 
     switchTab('record', document.querySelector('.bottom-nav .nav-item:nth-child(1)'));
     
-    // 未整理(📦)の場合、お店の名前が「未整理の写真」になっているので、空にして入力しやすくする！
     document.getElementById('shopName').value = diary.shop_name === "未整理の写真" ? "" : (diary.shop_name || "");
     if (document.getElementById('shopId')) document.getElementById('shopId').value = diary.shop_id || "";
     document.getElementById('visitedAt').value = diary.visited_at ? diary.visited_at.split(' ')[0] : "";
     document.getElementById('comment').value = diary.comment || "";
     
-    // 🎯 チェックボックスの復元処理
     if (document.getElementById('isBookmark')) document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
-    if (document.getElementById('isDraft')) document.getElementById('isDraft').checked = false; // 👈 編集開始時は未整理チェックを外す
+    if (document.getElementById('isDraft')) document.getElementById('isDraft').checked = false; 
 
     if (diary.weather_icon === "💭" || diary.weather_icon === "📦" || diary.weather_icon === "🚫") {
         if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
@@ -448,29 +419,24 @@ function editDiary(id) {
     if (diary.image_base64 || diary.image_url) {
         imgPreview.src = diary.image_base64 || diary.image_url;
         imgPreview.style.display = 'block';
-    } else {
-        imgPreview.style.display = 'none';
-    }
-    currentBase64 = null; 
+    } else { imgPreview.style.display = 'none'; }
+    
+    const dynamicForm = document.getElementById('dynamicFormFields');
+    if (dynamicForm) dynamicForm.classList.add('show');
 
+    currentBase64 = null; 
     editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";
     window.scrollTo(0, 0); 
 }
 
-// 🗑️ 削除処理
 async function deleteDiary(id) {
     if (!confirm("本当にこの記録を削除しますか？\n(削除後は元に戻せません)")) return;
     const result = await deleteDiaryApi(id);
-    if (result.success) {
-        alert("削除しました。");
-        fetchDiaries();
-    } else {
-        alert("エラー: " + result.error);
-    }
+    if (result.success) { alert("削除しました。"); fetchDiaries(); }
+    else { alert("エラー: " + result.error); }
 }
 
-// 🔍 フィルタープルダウンの描画
 function renderTagClouds(diaries) {
   const select = document.getElementById('tagFilter');
   if (!select) return;
@@ -496,7 +462,6 @@ function filterDiaries() {
   else renderDiariesList(globalDiaries.filter(diary => parseTags(diary.tags).includes(selectedTag)));
 }
 
-// 📱 タブ切り替え
 function switchTab(tabName, element) {
     const tabs = ['record', 'history', 'map', 'analytics', 'settings'];
     tabs.forEach(t => {
@@ -505,57 +470,32 @@ function switchTab(tabName, element) {
     });
 
     document.getElementById(`tab-${tabName}`).classList.remove('hidden');
-    
     document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
     element.classList.add('active');
 
     if (tabName === 'history') fetchDiaries();
-    if (tabName === 'map' && typeof initViewMap === 'function') {
-        initViewMap(); updateViewMarkers(globalDiaries);
-    }
-    if (tabName === 'analytics' && typeof renderAnalytics === 'function') {
-        renderAnalytics();
-    }
+    if (tabName === 'map' && typeof initViewMap === 'function') { initViewMap(); updateViewMarkers(globalDiaries); }
+    if (tabName === 'analytics' && typeof renderAnalytics === 'function') { renderAnalytics(); }
 }
 
-// ==========================================
-// 🗺️ マップ上の「閉店・移転報告」処理
-// ==========================================
 window.reportClosed = async function(shopId, shopName, lat, lng) {
     if (!confirm(`「${shopName}」を閉店・移転として報告しますか？\n(2週間はマップ上で半透明になり、その後完全に消去されます)`)) return;
-    
     document.body.style.cursor = 'wait'; 
-    
     const payload = {
-        id: null,
-        shopId: shopId && shopId !== 'null' ? shopId : null,
-        shopName: shopName,
-        comment: "",
-        visitedAt: new Date().toISOString().split('T')[0], // 報告日で登録
-        tags: "",
-        imageBase64: null,
-        lat: lat,
-        lng: lng,
-        temperature: null,
-        weatherIcon: "🚫",
-        userGender: localStorage.getItem('ezo_gender') || "未設定",
-        userAge: localStorage.getItem('ezo_age') || "未設定"
+        id: null, shopId: shopId && shopId !== 'null' ? shopId : null, shopName: shopName, comment: "",
+        visitedAt: new Date().toISOString().split('T')[0], tags: "", imageBase64: null, lat: lat, lng: lng, temperature: null, weatherIcon: "🚫",
+        userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
+        userUuid: localStorage.getItem('ezo_user_uuid')
     };
-
     await saveDiaryApi(payload);
     await fetchDiaries(); 
     if (typeof updateViewMarkers === 'function') updateViewMarkers(globalDiaries);
-    
     document.body.style.cursor = 'default';
     alert("閉店・移転を報告しました。ご協力ありがとうございます！");
 };
 
-// ==========================================
-// 🗺️ マップ上の「報告取り消し」処理
-// ==========================================
 window.cancelCloseReport = async function(diaryId) {
-    if (!confirm(`この閉店報告を取り消しますか？\n(誤報や長期休業だった場合など)`)) return;
-    
+    if (!confirm(`この閉店報告を取り消しますか？`)) return;
     document.body.style.cursor = 'wait';
     await deleteDiaryApi(diaryId); 
     await fetchDiaries();
@@ -564,41 +504,29 @@ window.cancelCloseReport = async function(diaryId) {
     alert("報告を取り消しました。マップを元に戻しました。");
 };
 
-// ==========================================
-// 🔍 マップ内店舗検索機能 (超高速フロントエンド検索)
-// ==========================================
 let mapSuggestTimeout = null;
 const mapSearchInput = document.getElementById('mapSearchInput');
 if (mapSearchInput) {
     mapSearchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
         const suggestList = document.getElementById('mapSearchSuggestList');
-        
         if (mapSuggestTimeout) clearTimeout(mapSuggestTimeout); 
         if (query.length === 0) { suggestList.style.display = 'none'; return; }
 
         mapSuggestTimeout = setTimeout(() => {
             const results = globalMasterShops.filter(s => s.shop_name.includes(query)).slice(0, 10);
-            
             if (results.length > 0) {
-                suggestList.innerHTML = results.map(shop => 
-                    `<li class="suggest-item" data-lat="${shop.latitude}" data-lng="${shop.longitude}">${escapeHTML(shop.shop_name)}</li>`
-                ).join('');
+                suggestList.innerHTML = results.map(shop => `<li class="suggest-item" data-lat="${shop.latitude}" data-lng="${shop.longitude}">${escapeHTML(shop.shop_name)}</li>`).join('');
                 suggestList.style.display = 'block';
-                
                 document.querySelectorAll('#mapSearchSuggestList .suggest-item').forEach(item => {
                     item.addEventListener('click', (ev) => {
                         mapSearchInput.value = ev.target.innerText;
-                        const lat = parseFloat(ev.target.dataset.lat);
-                        const lng = parseFloat(ev.target.dataset.lng);
+                        const lat = parseFloat(ev.target.dataset.lat); const lng = parseFloat(ev.target.dataset.lng);
                         suggestList.style.display = 'none';
-                        
                         if (typeof flyToShop === 'function') flyToShop(lat, lng);
                     });
                 });
-            } else {
-                suggestList.style.display = 'none';
-            }
+            } else { suggestList.style.display = 'none'; }
         }, 100); 
     });
 }
