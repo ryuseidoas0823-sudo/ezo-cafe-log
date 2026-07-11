@@ -16,6 +16,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   ]);
   
   document.getElementById('tagFilter').addEventListener('change', filterDiaries);
+
+  // 🆕 マップのタグフィルターが変更されたら、ズームを維持したままピンを再描画！
+  const mapTagFilterEl = document.getElementById('mapTagFilter');
+  if (mapTagFilterEl) {
+      mapTagFilterEl.addEventListener('change', () => {
+          if (typeof updateViewMarkers === 'function') {
+              updateViewMarkers(globalDiaries, false);
+          }
+      });
+  }
 });
 
 function initUserUuid() {
@@ -225,30 +235,30 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
   }
 });
 
-// 🆕 ✍️ 写真なし記録ボタンのアクション
-document.getElementById('btnSkipPhoto').addEventListener('click', () => {
-    const dynamicForm = document.getElementById('dynamicFormFields');
-    const statusEl = document.getElementById('gpsStatus');
-    
-    // 画像データをリセット
-    currentBase64 = null;
-    document.getElementById('imageInput').value = '';
-    document.getElementById('imagePreview').style.display = 'none';
-    
-    // GPSや天気をリセット
-    document.getElementById('latitude').value = "";
-    document.getElementById('longitude').value = "";
-    document.getElementById('temperature').value = "";
-    document.getElementById('weatherSelect').value = "❓";
-    
-    // フォームを展開
-    if (dynamicForm) dynamicForm.classList.add('show');
-    
-    if (statusEl) {
-        statusEl.innerText = "ℹ️ 写真なしで記録します。\n店舗名で検索して選択すると、自動で位置情報がセットされます！";
-        statusEl.style.color = "#3498db";
-    }
-});
+// ✍️ 写真なし記録ボタンのアクション
+const btnSkipPhoto = document.getElementById('btnSkipPhoto');
+if (btnSkipPhoto) {
+    btnSkipPhoto.addEventListener('click', () => {
+        const dynamicForm = document.getElementById('dynamicFormFields');
+        const statusEl = document.getElementById('gpsStatus');
+        
+        currentBase64 = null;
+        document.getElementById('imageInput').value = '';
+        document.getElementById('imagePreview').style.display = 'none';
+        
+        document.getElementById('latitude').value = "";
+        document.getElementById('longitude').value = "";
+        document.getElementById('temperature').value = "";
+        document.getElementById('weatherSelect').value = "❓";
+        
+        if (dynamicForm) dynamicForm.classList.add('show');
+        
+        if (statusEl) {
+            statusEl.innerText = "ℹ️ 写真なしで記録します。\n店舗名で検索して選択すると、自動で位置情報がセットされます！";
+            statusEl.style.color = "#3498db";
+        }
+    });
+}
 
 let suggestTimeout = null;
 document.getElementById('shopName').addEventListener('input', (e) => {
@@ -353,7 +363,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   submitBtn.innerHTML = originalBtnText;
 });
 
-// 🆕 🎨 タイポグラフィカードの自動生成ジェネレーター（Canvas API）
+// 🎨 タイポグラフィカードの自動生成ジェネレーター（Canvas API）
 function generateTypographyBase64(shopName, tags, weatherIcon) {
     const canvas = document.createElement('canvas');
     canvas.width = 800;
@@ -430,7 +440,6 @@ function renderDiariesList(diaries) {
       }
     });
 
-    // 🆕 🧠 写真がある場合は写真、ない場合は「タイポグラフィカード」を描画！
     let imageHTML = "";
     if (diary.image_base64 || diary.image_url) {
         imageHTML = `<img src="${diary.image_base64 || diary.image_url}" class="diary-image" alt="カフェの写真">`;
@@ -530,22 +539,38 @@ async function deleteDiary(id) {
     else { alert("エラー: " + result.error); }
 }
 
-function renderTagClouds(diaries) {
-  const select = document.getElementById('tagFilter');
-  if (!select) return;
-  const currentValue = select.value;
-  select.innerHTML = '<option value="">すべてのタグ（全件表示）</option>';
+function renderTagClouds() {
+  const selectHistory = document.getElementById('tagFilter');
+  const selectMap = document.getElementById('mapTagFilter');
+  
+  const currentHistoryVal = selectHistory ? selectHistory.value : "";
+  const currentMapVal = selectMap ? selectMap.value : "";
+
+  if (selectHistory) selectHistory.innerHTML = '<option value="">すべてのタグ（全件表示）</option>';
+  if (selectMap) selectMap.innerHTML = '<option value="">🏷️ すべての気分・目的・タグ</option>';
 
   const allTags = new Set();
+  
   globalDiaries.forEach(d => parseTags(d.tags).forEach(t => {
-    if (!t.startsWith("🤖") && !t.startsWith("🚨")) allTags.add(t);
+    if (!t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ') {
+        allTags.add(t);
+    }
   }));
 
   Array.from(allTags).sort().forEach(tag => {
-    const option = document.createElement('option');
-    option.value = tag; option.textContent = tag;
-    if (tag === currentValue) option.selected = true;
-    select.appendChild(option);
+    if (selectHistory) {
+        const option = document.createElement('option');
+        option.value = tag; option.textContent = tag;
+        if (tag === currentHistoryVal) option.selected = true;
+        selectHistory.appendChild(option);
+    }
+    if (selectMap) {
+        const option = document.createElement('option');
+        option.value = tag; 
+        option.textContent = tag.replace(/🤖[☕️🍰🛋️]/, '🤖 ');
+        if (tag === currentMapVal) option.selected = true;
+        selectMap.appendChild(option);
+    }
   });
 }
 

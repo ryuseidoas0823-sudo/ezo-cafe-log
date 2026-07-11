@@ -109,11 +109,20 @@
 
         <div id="tab-map" class="hidden" style="display: flex; flex-direction: column; height: 100vh; padding-bottom: 70px; box-sizing: border-box;">
             
+            <!-- 🎛️ 上部コントロールパネル（マップとは独立させる） -->
             <div style="padding: 10px 15px; background: #f8f9fa; z-index: 10; border-bottom: 1px solid #bdc3c7; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
                 <input type="text" id="mapSearchInput" placeholder="🔍 店舗名でマップを検索..." autocomplete="off" style="width: 100%; padding: 10px 15px; border-radius: 20px; border: 1px solid #bdc3c7; font-size: 14px; box-sizing: border-box; margin-bottom: 10px;">
                 <ul id="mapSearchSuggestList" class="suggest-list" style="margin-top: -8px; border-radius: 12px; max-height: 200px; margin-bottom: 10px;"></ul>
                 
+                <!-- 🆕 気分・目的タグフィルター -->
+                <div style="margin-bottom: 10px;">
+                    <select id="mapTagFilter" style="width: 100%; padding: 8px 15px; border-radius: 20px; border: 1px solid #bdc3c7; font-size: 0.85rem; background: white; color: #2c3e50; box-sizing: border-box; font-weight: bold; cursor: pointer; outline: none;">
+                        <option value="">🏷️ すべての気分・目的・タグ</option>
+                    </select>
+                </div>
+
                 <div style="display: flex; gap: 5px; justify-content: space-between; margin-bottom: 10px;">
+                    <!-- CSSの干渉を防ぐため、インラインスタイルでガチガチに固定！ -->
                     <button type="button" id="btn-filter-dining" onclick="toggleMapFilter('dining')" style="flex: 1; padding: 8px 2px; border-radius: 20px; border: 1px solid #bdc3c7; background: #fff; color: #5d4037; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: all 0.2s; margin: 0; width: auto;">☕️ 店内</button>
                     <button type="button" id="btn-filter-takeout" onclick="toggleMapFilter('takeout')" style="flex: 1; padding: 8px 2px; border-radius: 20px; border: 1px solid #bdc3c7; background: #fff; color: #5d4037; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: all 0.2s; margin: 0; width: auto;">🥡 テイクアウト</button>
                     <button type="button" id="btn-filter-goods" onclick="toggleMapFilter('goods')" style="flex: 1; padding: 8px 2px; border-radius: 20px; border: 1px solid #bdc3c7; background: #fff; color: #5d4037; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: all 0.2s; margin: 0; width: auto;">🛍️ 物販</button>
