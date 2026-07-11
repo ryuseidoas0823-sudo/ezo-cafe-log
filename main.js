@@ -195,8 +195,9 @@ document.getElementById('shopName').addEventListener('input', (e) => {
   suggestTimeout = setTimeout(async () => {
     const results = await searchMasterApi(query); 
     if (results.length > 0) {
+      // ▼ 修正: data-lat, data-lng 属性を追加して緯度経度を保持
       suggestList.innerHTML = results.map(shop => 
-        `<li class="suggest-item" data-id="${shop.shop_id || ''}">${escapeHTML(shop.shop_name)}</li>`
+        `<li class="suggest-item" data-id="${shop.shop_id || ''}" data-lat="${shop.latitude || ''}" data-lng="${shop.longitude || ''}">${escapeHTML(shop.shop_name)}</li>`
       ).join('');
       suggestList.style.display = 'block';
       
@@ -204,6 +205,19 @@ document.getElementById('shopName').addEventListener('input', (e) => {
         item.addEventListener('click', (ev) => {
           document.getElementById('shopName').value = ev.target.innerText;
           document.getElementById('shopId').value = ev.target.dataset.id;
+          
+          // ▼ 修正・追加: サジェストを選んだら、マスタの位置情報をフォーム裏にセットする！
+          // （※後から写真をアップロードした場合は、写真のExifGPSがこれを上書きするので安全です）
+          if (ev.target.dataset.lat && ev.target.dataset.lng) {
+              document.getElementById('latitude').value = ev.target.dataset.lat;
+              document.getElementById('longitude').value = ev.target.dataset.lng;
+              const statusEl = document.getElementById('gpsStatus');
+              if (statusEl) {
+                  statusEl.innerText = "📍 店舗マスタから位置情報をセットしました";
+                  statusEl.style.color = "#27ae60";
+              }
+          }
+
           suggestList.style.display = 'none';
         });
       });

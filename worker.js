@@ -33,15 +33,15 @@ export default {
       try {
         if (action === "search_master") {
           const query = url.searchParams.get("query") || "";
-          // 🛠️ 修正: shop_id と shop_name の両方を取得する
-          const { results } = await env.DB.prepare("SELECT shop_id, shop_name FROM shops_master WHERE shop_name LIKE ? LIMIT 10").bind(`%${query}%`).all();
+          // 🛠️ 修正: shop_id, shop_name に加えて latitude, longitude も取得する！
+          const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE shop_name LIKE ? LIMIT 10").bind(`%${query}%`).all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         } else {
           const { results } = await env.DB.prepare("SELECT * FROM diaries ORDER BY visited_at DESC, id DESC").all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         }
       } catch (err) {
-         return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
       }
     }
 

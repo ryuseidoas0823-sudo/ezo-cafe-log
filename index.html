@@ -39,13 +39,15 @@
                     </div>
 
                     <div class="form-group">
-                        <label>空模様は？</label>
-                        <div class="weather-selector">
+                        <label>ステータス / 天気</label>
+                        <div class="weather-selector" style="flex-wrap: wrap;">
                             <label><input type="radio" name="weatherType" value="☀️">☀️</label>
                             <label><input type="radio" name="weatherType" value="☁️">☁️</label>
                             <label><input type="radio" name="weatherType" value="☔️">☔️</label>
                             <label><input type="radio" name="weatherType" value="❄️">❄️</label>
                             <label><input type="radio" name="weatherType" value="❓" checked>❓不明</label>
+                            <label style="flex-basis: 48%; margin-top: 5px; font-size: 0.8rem;"><input type="radio" name="weatherType" value="💭">💭 行きたい</label>
+                            <label style="flex-basis: 48%; margin-top: 5px; font-size: 0.8rem;"><input type="radio" name="weatherType" value="📦">📦 未整理</label>
                         </div>
                         <p id="gpsStatus" style="font-size: 0.85em; color: #e74c3c; margin-top: 8px; font-weight: bold; text-align: center;"></p>
                         <input type="hidden" id="latitude">
@@ -58,10 +60,12 @@
                         <input type="file" id="imageInput" accept="image/*">
                         <img id="imagePreview" style="display: none;" alt="プレビュー">
                     </div>
+                    
                     <div class="form-group">
                         <label for="comment">感想やメモ</label>
-                        <textarea id="comment" placeholder="コロンビア・ロスノガレスのデカフェを飲みました。" required></textarea>
+                        <textarea id="comment" placeholder="コロンビア・ロスノガレスのデカフェを飲みました。"></textarea>
                     </div>
+                    
                     <div class="form-group">
                         <label for="tags">自分でつけるタグ（カンマ区切り・任意）</label>
                         <input type="text" id="tags" placeholder="例: 作業, 癒やし">
