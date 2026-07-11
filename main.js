@@ -36,26 +36,61 @@ function saveSettings() {
   alert("✨ 設定を保存しました！");
 }
 
-// 📸 ✨機能統合: 写真を選択した瞬間に、画像プレビュー、日時取得、過去の天気割り出しをすべて自動で実行
+// 📸 ✨機能統合: 写真を選択した瞬間に、画像プレビュー、リサイズ圧縮、日時取得、過去の天気割り出しをすべて自動で実行
 document.getElementById('imageInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
-  // 1. プレビューの表示
-  const reader = new FileReader();
-  reader.onload = function(event) {
-    const imgPreview = document.getElementById('imagePreview');
-    imgPreview.src = event.target.result;
-    imgPreview.style.display = 'block';
-    currentBase64 = event.target.result;
-  };
-  reader.readAsDataURL(file);
-
   const statusEl = document.getElementById('gpsStatus');
   if(statusEl) {
-    statusEl.innerText = "📸 写真を解析中...";
+    statusEl.innerText = "📸 写真を解析＆最適化中...";
     statusEl.style.color = "#3498db";
   }
+
+  // ==========================================
+  // 1. 画像のプレビューとCanvasによるリサイズ圧縮
+  // ==========================================
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const img = new Image();
+    img.onload = function() {
+      // 縮小する最大サイズを設定（長辺800pxに制限して通信・ストレージ容量を劇的に節約）
+      const MAX_SIZE = 800;
+      let width = img.width;
+      let height = img.height;
+
+      // アスペクト比を維持しながらリサイズ計算
+      if (width > height) {
+        if (width > MAX_SIZE) {
+          height *= MAX_SIZE / width;
+          width = MAX_SIZE;
+        }
+      } else {
+        if (height > MAX_SIZE) {
+          width *= MAX_SIZE / height;
+          height = MAX_SIZE;
+        }
+      }
+
+      // Canvasを作成して画像を描画
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // JPEG形式で品質を80%に圧縮してBase64化
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+
+      // プレビュー表示と送信データのセット
+      const imgPreview = document.getElementById('imagePreview');
+      imgPreview.src = compressedBase64;
+      imgPreview.style.display = 'block';
+      currentBase64 = compressedBase64; // ← 圧縮されたBase64を送信データにセット！
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
 
   let lat = null;
   let lng = null;
@@ -209,6 +244,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
       if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
   }
 
+  // ▼ 修正・追加：localStorageから取得した性別・年代をペイロードに乗せる！
   const payload = {
     id: editingDiaryId,
     shopId: document.getElementById('shopId') ? document.getElementById('shopId').value : null,
@@ -220,7 +256,9 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     lat: finalLat,
     lng: finalLng,
     temperature: document.getElementById('temperature') ? document.getElementById('temperature').value : null,
-    weatherIcon: document.querySelector('input[name="weatherType"]:checked') ? document.querySelector('input[name="weatherType"]:checked').value : "❓"
+    weatherIcon: document.querySelector('input[name="weatherType"]:checked') ? document.querySelector('input[name="weatherType"]:checked').value : "❓",
+    userGender: localStorage.getItem('ezo_gender') || "未設定",
+    userAge: localStorage.getItem('ezo_age') || "未設定"
   };
 
   const result = await saveDiaryApi(payload); 
@@ -319,8 +357,15 @@ function editDiary(id) {
     const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ').join(', ');
     document.getElementById('tags').value = manualTags;
 
-    document.getElementById('imagePreview').style.display = 'none';
-    currentBase64 = null; 
+    // ▼ 修正・追加：編集時、過去の画像がある場合はプレビューを復活させて表示する！
+    const imgPreview = document.getElementById('imagePreview');
+    if (diary.image_base64 || diary.image_url) {
+        imgPreview.src = diary.image_base64 || diary.image_url;
+        imgPreview.style.display = 'block';
+    } else {
+        imgPreview.style.display = 'none';
+    }
+    currentBase64 = null; // ※画像変更がなければ新たに送信はしない（DB上書きを防ぐため）
 
     editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";
