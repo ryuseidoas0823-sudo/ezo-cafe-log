@@ -2,24 +2,29 @@
 // 📊 analytics.js (データ分析・Chart.js制御)
 // ==========================================
 let tagsChartInstance = null;
-let eatTypeChartInstance = null; // 🆕 追加
+let eatTypeChartInstance = null; 
 
 function renderAnalytics() {
     if (!globalDiaries || globalDiaries.length === 0) return;
 
-    // 1. 基本統計の計算（総記録数と、ユニークな店舗数）
-    const totalVisits = globalDiaries.length;
-    const uniqueShops = new Set(globalDiaries.map(d => d.shop_name)).size;
+    // ▼ 🎯 DX機能: 「行きたい(💭)」と「未整理(📦)」を分析対象から完全に除外する！
+    const validDiaries = globalDiaries.filter(d => d.weather_icon !== "💭" && d.weather_icon !== "📦");
 
-    document.getElementById('stat-total-visits').innerText = totalVisits;
-    document.getElementById('stat-unique-shops').innerText = uniqueShops;
+    // 1. 基本統計の計算（フィルタリング後の「実際に訪問した数」で計算）
+    const totalVisits = validDiaries.length;
+    const uniqueShops = new Set(validDiaries.map(d => d.shop_name)).size;
 
-    // 2. タグの集計（利用タイプと、ユーザーの好みを「分離」して抽出）
+    const statTotalEl = document.getElementById('stat-total-visits');
+    const statUniqueEl = document.getElementById('stat-unique-shops');
+    if (statTotalEl) statTotalEl.innerText = totalVisits;
+    if (statUniqueEl) statUniqueEl.innerText = uniqueShops;
+
     const tagCounts = {};
     const eatTypeCounts = {};
     const eatTypeKeywords = ['☕️店内', '🥡テイクアウト', '🛍️豆・グッズ'];
 
-    globalDiaries.forEach(d => {
+    // 2. フィルタリング後の実データのみでタグを集計
+    validDiaries.forEach(d => {
         parseTags(d.tags).forEach(tag => {
             if (eatTypeKeywords.includes(tag)) {
                 // 🍽️ 利用タイプとして集計
@@ -46,28 +51,31 @@ function renderAnalytics() {
     };
     const eatColors = eatLabels.map(tag => getEatTypeColor(tag));
 
-    const ctxEat = document.getElementById('eatTypeChart').getContext('2d');
-    if (eatTypeChartInstance) eatTypeChartInstance.destroy(); 
+    const ctxEatEl = document.getElementById('eatTypeChart');
+    if (ctxEatEl) {
+        const ctxEat = ctxEatEl.getContext('2d');
+        if (eatTypeChartInstance) eatTypeChartInstance.destroy(); 
 
-    eatTypeChartInstance = new Chart(ctxEat, {
-        type: 'doughnut',
-        data: {
-            labels: eatLabels,
-            datasets: [{
-                data: eatData,
-                backgroundColor: eatColors,
-                borderWidth: 0,
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom' },
-                title: { display: true, text: '利用タイプの割合', font: { size: 14, color: '#5d4037' } }
+        eatTypeChartInstance = new Chart(ctxEat, {
+            type: 'doughnut',
+            data: {
+                labels: eatLabels,
+                datasets: [{
+                    data: eatData,
+                    backgroundColor: eatColors,
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    title: { display: true, text: '利用タイプの割合', font: { size: 14, color: '#5d4037' } }
+                }
             }
-        }
-    });
+        });
+    }
 
     // ==========================================
     // 📊 チャート2：よく記録するタグ（ユーザーの嗜好）
@@ -80,26 +88,29 @@ function renderAnalytics() {
     // utils.js の関数を使ってタグ名から色を自動生成
     const chartColors = sortedTags.map(tag => getColorFromTag(tag));
 
-    const ctxTags = document.getElementById('tagsChart').getContext('2d');
-    if (tagsChartInstance) tagsChartInstance.destroy(); 
+    const ctxTagsEl = document.getElementById('tagsChart');
+    if (ctxTagsEl) {
+        const ctxTags = ctxTagsEl.getContext('2d');
+        if (tagsChartInstance) tagsChartInstance.destroy(); 
 
-    tagsChartInstance = new Chart(ctxTags, {
-        type: 'doughnut',
-        data: {
-            labels: chartLabels,
-            datasets: [{
-                data: chartData,
-                backgroundColor: chartColors,
-                borderWidth: 0,
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom' },
-                title: { display: true, text: 'よく記録するタグ（上位）', font: { size: 14, color: '#5d4037' } }
+        tagsChartInstance = new Chart(ctxTags, {
+            type: 'doughnut',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    data: chartData,
+                    backgroundColor: chartColors,
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    title: { display: true, text: 'よく記録するタグ（上位）', font: { size: 14, color: '#5d4037' } }
+                }
             }
-        }
-    });
+        });
+    }
 }

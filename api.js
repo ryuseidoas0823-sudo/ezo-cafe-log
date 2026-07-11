@@ -3,6 +3,8 @@
 // ==========================================
 const API_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/";
 
+let globalMasterShops = []; // 🆕 追加: マスタデータを保持するグローバル変数（開拓モード用）
+
 // 📥 GET: 全日記データの取得
 async function fetchDiaries() {
   try {
@@ -14,6 +16,16 @@ async function fetchDiaries() {
     renderTagClouds(globalDiaries);
   } catch (error) {
     console.error("データ取得エラー:", error);
+  }
+}
+
+// 🆕 追加: 📥 GET: マスタ全件取得（マップの開拓モード用）
+async function fetchMasterShopsApi() {
+  try {
+    const response = await fetch(`${API_URL}?action=get_all_master&_t=${Date.now()}`);
+    globalMasterShops = await response.json();
+  } catch (error) {
+    console.error("マスタ全件取得エラー:", error);
   }
 }
 

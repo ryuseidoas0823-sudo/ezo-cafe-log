@@ -17,11 +17,29 @@
         <div id="tab-record">
             <div class="form-card">
                 <form id="recordForm">
+                    
+                    <div class="form-group" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px dashed #bdc3c7;">
+                        <label for="imageInput" style="color: #2980b9;">1. まずは写真を追加 📸 (位置や天気を自動取得します)</label>
+                        <input type="file" id="imageInput" accept="image/*">
+                        <img id="imagePreview" style="display: none;" alt="プレビュー">
+                        
+                        <label style="display: block; margin-top: 10px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
+                            <input type="checkbox" id="isDraft" value="📦">
+                            📦 この写真を「未整理」として仮保存する<br>
+                            <span style="font-size: 0.75rem; color: #bdc3c7;">※将来実装予定の「1記事に複数枚写真」とは異なり、空の日記を1つ作成します。</span>
+                        </label>
+                    </div>
+
                     <div class="form-group relative">
                         <label for="shopName">お店の名前</label>
-                        <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" autocomplete="off" required>
+                        <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" autocomplete="off">
                         <input type="hidden" id="shopId">
                         <ul id="shopSuggestList" class="suggest-list"></ul>
+                        
+                        <label style="display: block; margin-top: 8px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
+                            <input type="checkbox" id="isBookmark" value="💭">
+                            💭 まだ行ってないけど「行きたいお店」として登録する
+                        </label>
                     </div>
 
                     <div class="form-group">
@@ -34,31 +52,23 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="visitedAt">訪問日（写真を選択すると自動入力）</label>
+                        <label for="visitedAt">訪問日</label>
                         <input type="date" id="visitedAt" required>
                     </div>
 
                     <div class="form-group">
-                        <label>ステータス / 天気</label>
-                        <div class="weather-selector" style="flex-wrap: wrap;">
-                            <label><input type="radio" name="weatherType" value="☀️">☀️</label>
-                            <label><input type="radio" name="weatherType" value="☁️">☁️</label>
-                            <label><input type="radio" name="weatherType" value="☔️">☔️</label>
-                            <label><input type="radio" name="weatherType" value="❄️">❄️</label>
-                            <label><input type="radio" name="weatherType" value="❓" checked>❓不明</label>
-                            <label style="flex-basis: 48%; margin-top: 5px; font-size: 0.8rem;"><input type="radio" name="weatherType" value="💭">💭 行きたい</label>
-                            <label style="flex-basis: 48%; margin-top: 5px; font-size: 0.8rem;"><input type="radio" name="weatherType" value="📦">📦 未整理</label>
-                        </div>
+                        <label for="weatherSelect">天気（写真から自動取得・手動変更可）</label>
+                        <select id="weatherSelect">
+                            <option value="❓">❓ 不明</option>
+                            <option value="☀️">☀️ 晴れ</option>
+                            <option value="☁️">☁️ くもり</option>
+                            <option value="☔️">☔️ 雨</option>
+                            <option value="❄️">❄️ 雪</option>
+                        </select>
                         <p id="gpsStatus" style="font-size: 0.85em; color: #e74c3c; margin-top: 8px; font-weight: bold; text-align: center;"></p>
                         <input type="hidden" id="latitude">
                         <input type="hidden" id="longitude">
                         <input type="hidden" id="temperature">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="imageInput">写真を追加</label>
-                        <input type="file" id="imageInput" accept="image/*">
-                        <img id="imagePreview" style="display: none;" alt="プレビュー">
                     </div>
                     
                     <div class="form-group">
@@ -101,11 +111,9 @@
                         <div class="stat-label">開拓店舗数</div>
                     </div>
                 </div>
-                
                 <div class="chart-container">
                     <canvas id="eatTypeChart"></canvas>
                 </div>
-                
                 <div class="chart-container" style="margin-top: 30px;">
                     <canvas id="tagsChart"></canvas>
                 </div>

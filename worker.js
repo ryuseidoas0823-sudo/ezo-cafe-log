@@ -32,10 +32,16 @@ export default {
     if (request.method === "GET") {
       try {
         if (action === "search_master") {
+          // 既存: サジェスト用（10件制限）
           const query = url.searchParams.get("query") || "";
           const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE shop_name LIKE ? LIMIT 10").bind(`%${query}%`).all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
+        } else if (action === "get_all_master") {
+          // 🆕 追加: 開拓モード用（全件のID、名前、緯度経度だけを取得して高速化）
+          const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master").all();
+          return new Response(JSON.stringify(results), { headers: corsHeaders });
         } else {
+          // 既存: 日記の取得
           const { results } = await env.DB.prepare("SELECT * FROM diaries ORDER BY visited_at DESC, id DESC").all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         }

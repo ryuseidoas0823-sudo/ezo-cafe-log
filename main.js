@@ -5,10 +5,16 @@ let globalDiaries = [];
 let editingDiaryId = null;
 let currentBase64 = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
-  fetchDiaries(); 
+  
+  // 🚀 DX機能: 日記データとマスタデータを並行して高速取得！
+  await Promise.all([
+    fetchDiaries(),
+    fetchMasterShopsApi()
+  ]);
+  
   document.getElementById('tagFilter').addEventListener('change', filterDiaries);
 });
 
@@ -36,7 +42,7 @@ function saveSettings() {
   alert("✨ 設定を保存しました！");
 }
 
-// 📸 ✨機能統合: 写真を選択した瞬間に、画像プレビュー、リサイズ圧縮、日時取得、過去の天気割り出しをすべて自動で実行
+// 📸 最優先アクション: 写真を選択した瞬間に、画像プレビュー、リサイズ圧縮、日時・天気自動取得を実行
 document.getElementById('imageInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -54,12 +60,11 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
   reader.onload = function(event) {
     const img = new Image();
     img.onload = function() {
-      // 縮小する最大サイズを設定（長辺800pxに制限して通信・ストレージ容量を劇的に節約）
+      // 通信・ストレージ容量を劇的に節約するため、長辺800pxにリサイズ
       const MAX_SIZE = 800;
       let width = img.width;
       let height = img.height;
 
-      // アスペクト比を維持しながらリサイズ計算
       if (width > height) {
         if (width > MAX_SIZE) {
           height *= MAX_SIZE / width;
@@ -72,21 +77,18 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
         }
       }
 
-      // Canvasを作成して画像を描画
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
-      // JPEG形式で品質を80%に圧縮してBase64化
       const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
 
-      // プレビュー表示と送信データのセット
       const imgPreview = document.getElementById('imagePreview');
       imgPreview.src = compressedBase64;
       imgPreview.style.display = 'block';
-      currentBase64 = compressedBase64; // ← 圧縮されたBase64を送信データにセット！
+      currentBase64 = compressedBase64; 
     };
     img.src = event.target.result;
   };
@@ -114,10 +116,9 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
     }
   } catch (err) { console.log("Exif error:", err); }
 
-  // 3. 緯度経度がない場合（スクショ等）はスキップ
   if (lat === null || lng === null) {
       if(statusEl) {
-        statusEl.innerText = "ℹ️ 写真に位置情報が含まれていないため、天気の自動取得をスキップしました。";
+        statusEl.innerText = "ℹ️ 写真に位置情報がないため、天気の自動取得をスキップしました。(手動で変更可能です)";
         statusEl.style.color = "#f39c12";
       }
       return;
@@ -163,17 +164,17 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
     }
   } catch (e) { console.log("Weather API error:", e); }
 
-  // 5. 天気と気温、位置情報をフォームの裏側にセット
+  // 5. 天気と気温、位置情報をフォームにセット
   if (weatherIcon !== "❓") {
-    const radio = document.querySelector(`input[name="weatherType"][value="${weatherIcon}"]`);
-    if (radio) radio.checked = true;
+    const weatherSelect = document.getElementById('weatherSelect');
+    if (weatherSelect) weatherSelect.value = weatherIcon;
   }
   document.getElementById('temperature').value = temp !== null ? temp : "";
   document.getElementById('latitude').value = lat;
   document.getElementById('longitude').value = lng;
 
   if(statusEl) {
-    statusEl.innerText = `✅ 写真から当時の天気を割り出しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
+    statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
     statusEl.style.color = "#27ae60";
   }
 });
@@ -195,7 +196,6 @@ document.getElementById('shopName').addEventListener('input', (e) => {
   suggestTimeout = setTimeout(async () => {
     const results = await searchMasterApi(query); 
     if (results.length > 0) {
-      // ▼ 修正: data-lat, data-lng 属性を追加して緯度経度を保持
       suggestList.innerHTML = results.map(shop => 
         `<li class="suggest-item" data-id="${shop.shop_id || ''}" data-lat="${shop.latitude || ''}" data-lng="${shop.longitude || ''}">${escapeHTML(shop.shop_name)}</li>`
       ).join('');
@@ -206,8 +206,6 @@ document.getElementById('shopName').addEventListener('input', (e) => {
           document.getElementById('shopName').value = ev.target.innerText;
           document.getElementById('shopId').value = ev.target.dataset.id;
           
-          // ▼ 修正・追加: サジェストを選んだら、マスタの位置情報をフォーム裏にセットする！
-          // （※後から写真をアップロードした場合は、写真のExifGPSがこれを上書きするので安全です）
           if (ev.target.dataset.lat && ev.target.dataset.lng) {
               document.getElementById('latitude').value = ev.target.dataset.lat;
               document.getElementById('longitude').value = ev.target.dataset.lng;
@@ -217,7 +215,6 @@ document.getElementById('shopName').addEventListener('input', (e) => {
                   statusEl.style.color = "#27ae60";
               }
           }
-
           suggestList.style.display = 'none';
         });
       });
@@ -234,7 +231,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-
 // 📤 フォーム送信 (保存・更新)
 document.getElementById('recordForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -247,7 +243,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   const userTags = document.getElementById('tags').value;
   const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;
 
-  // 🛡️ 【自衛のDX】最終安全装置：送信直前に利用タイプを確認し、位置情報を強制破棄
+  // 🛡️ 自衛のDX: テイクアウトや物販の場合は位置情報を強制破棄
   let finalLat = document.getElementById('latitude') ? document.getElementById('latitude').value : null;
   let finalLng = document.getElementById('longitude') ? document.getElementById('longitude').value : null;
   
@@ -258,7 +254,11 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
       if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
   }
 
-  // ▼ 修正・追加：localStorageから取得した性別・年代をペイロードに乗せる！
+  // 🎯 ステータス判定: チェックボックスが優先、なければプルの天気
+  let finalStatusIcon = document.getElementById('weatherSelect').value;
+  if (document.getElementById('isBookmark').checked) finalStatusIcon = "💭";
+  if (document.getElementById('isDraft').checked) finalStatusIcon = "📦";
+
   const payload = {
     id: editingDiaryId,
     shopId: document.getElementById('shopId') ? document.getElementById('shopId').value : null,
@@ -270,7 +270,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     lat: finalLat,
     lng: finalLng,
     temperature: document.getElementById('temperature') ? document.getElementById('temperature').value : null,
-    weatherIcon: document.querySelector('input[name="weatherType"]:checked') ? document.querySelector('input[name="weatherType"]:checked').value : "❓",
+    weatherIcon: finalStatusIcon,
     userGender: localStorage.getItem('ezo_gender') || "未設定",
     userAge: localStorage.getItem('ezo_age') || "未設定"
   };
@@ -317,8 +317,14 @@ function renderDiariesList(diaries) {
     let imageHTML = diary.image_base64 || diary.image_url ? `<img src="${diary.image_base64 || diary.image_url}" class="diary-image" alt="カフェの写真">` : "";
     const displayDate = diary.visited_at ? diary.visited_at.split(' ')[0] : '日付不明';
 
-    let tempStr = diary.temperature ? `${diary.temperature}℃` : '';
-    let weatherStr = diary.weather_icon && diary.weather_icon !== "❓" ? `${diary.weather_icon} ${tempStr}` : '';
+    // 💭行きたい、📦未整理の場合は、気温を出さないなど見栄えを調整
+    let weatherStr = "";
+    if (diary.weather_icon === "💭") weatherStr = "💭 行きたい";
+    else if (diary.weather_icon === "📦") weatherStr = "📦 未整理";
+    else {
+      let tempStr = diary.temperature ? `${diary.temperature}℃` : '';
+      weatherStr = diary.weather_icon && diary.weather_icon !== "❓" ? `${diary.weather_icon} ${tempStr}` : '';
+    }
 
     card.innerHTML = `
       <div class="diary-header">
@@ -348,12 +354,18 @@ function editDiary(id) {
     document.getElementById('visitedAt').value = diary.visited_at ? diary.visited_at.split(' ')[0] : "";
     document.getElementById('comment').value = diary.comment || "";
     
-    if (diary.weather_icon) {
-        const radio = document.querySelector(`input[name="weatherType"][value="${diary.weather_icon}"]`);
-        if (radio) radio.checked = true;
+    // 🎯 チェックボックスとプルダウンの復元処理
+    document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
+    document.getElementById('isDraft').checked = (diary.weather_icon === "📦");
+
+    if (diary.weather_icon === "💭" || diary.weather_icon === "📦") {
+        document.getElementById('weatherSelect').value = "❓";
+    } else if (diary.weather_icon) {
+        document.getElementById('weatherSelect').value = diary.weather_icon;
     } else {
-        document.querySelector('input[name="weatherType"][value="❓"]').checked = true;
+        document.getElementById('weatherSelect').value = "❓";
     }
+
     if (document.getElementById('latitude')) document.getElementById('latitude').value = diary.latitude || "";
     if (document.getElementById('longitude')) document.getElementById('longitude').value = diary.longitude || "";
     if (document.getElementById('temperature')) document.getElementById('temperature').value = diary.temperature || "";
@@ -371,7 +383,6 @@ function editDiary(id) {
     const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ').join(', ');
     document.getElementById('tags').value = manualTags;
 
-    // ▼ 修正・追加：編集時、過去の画像がある場合はプレビューを復活させて表示する！
     const imgPreview = document.getElementById('imagePreview');
     if (diary.image_base64 || diary.image_url) {
         imgPreview.src = diary.image_base64 || diary.image_url;
@@ -379,7 +390,7 @@ function editDiary(id) {
     } else {
         imgPreview.style.display = 'none';
     }
-    currentBase64 = null; // ※画像変更がなければ新たに送信はしない（DB上書きを防ぐため）
+    currentBase64 = null; 
 
     editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";
@@ -406,6 +417,7 @@ function renderTagClouds(diaries) {
   select.innerHTML = '<option value="">すべてのタグ（全件表示）</option>';
 
   const allTags = new Set();
+  // 💭と📦のデータは分析やフィルター対象外としても良いですが、ここでは全て表示します
   globalDiaries.forEach(d => parseTags(d.tags).forEach(t => {
     if (!t.startsWith("🤖") && !t.startsWith("🚨")) allTags.add(t);
   }));
