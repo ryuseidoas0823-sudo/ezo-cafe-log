@@ -26,6 +26,12 @@
                         </label>
                         <input type="file" id="imageInput" accept="image/*" multiple>
                         <img id="imagePreview" style="display: none;" alt="プレビュー">
+
+                        <div style="margin-top: 15px; text-align: center; border-top: 1px dashed #ddd; padding-top: 10px;">
+                            <button type="button" id="btnSkipPhoto" style="background: transparent; border: 2px solid #bdc3c7; color: #7f8c8d; padding: 8px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; transition: all 0.3s; font-size: 0.85rem;">
+                                ✍️ 写真なしでテキストのみ記録する
+                            </button>
+                        </div>
                     </div>
 
                     <div id="dynamicFormFields" class="hidden-fields">
@@ -124,7 +130,7 @@
 
             <div id="mapView" style="flex-grow: 1; width: 100%; position: relative; z-index: 1;"></div>
         </div>
-        
+
         <div id="tab-analytics" class="hidden">
             <div class="dashboard-card">
                 <h3>☕️ あなたのカフェ開拓データ</h3>

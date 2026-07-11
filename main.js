@@ -8,7 +8,7 @@ let currentBase64 = null;
 document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
-  initUserUuid(); // 🆕 匿名UUIDの初期化・仕込み
+  initUserUuid(); 
   
   await Promise.all([
     fetchDiaries(),
@@ -18,7 +18,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('tagFilter').addEventListener('change', filterDiaries);
 });
 
-// 🆕 🧠 B2Bデータ価値向上: 匿名UUIDの生成・固定ロジック
 function initUserUuid() {
   let uuid = localStorage.getItem('ezo_user_uuid');
   if (!uuid) {
@@ -140,7 +139,7 @@ async function extractExifAndWeather(file) {
   return { lat, lng, visitedAt, weatherIcon, temp };
 }
 
-// 📸 写真選択時のメインアクション (段階的開示対応)
+// 📸 写真選択アクション
 document.getElementById('imageInput').addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files || files.length === 0) return;
@@ -171,7 +170,6 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
     document.getElementById('latitude').value = lat;
     document.getElementById('longitude').value = lng;
 
-    // 🆕 🧠 段階的開示UI: 解析が終わったら、フワッと他のフォーム要素を出現させる！
     if (dynamicForm) dynamicForm.classList.add('show');
 
     if(statusEl) {
@@ -207,7 +205,7 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
         imageBase64: base64, lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
         userGender: localStorage.getItem('ezo_gender') || "未設定",
         userAge: localStorage.getItem('ezo_age') || "未設定",
-        userUuid: localStorage.getItem('ezo_user_uuid') // 🆕 UUIDの付与
+        userUuid: localStorage.getItem('ezo_user_uuid')
       };
       await saveDiaryApi(payload);
     }
@@ -225,6 +223,31 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
     fetchDiaries();
     switchTab('history', document.querySelector('.bottom-nav .nav-item:nth-child(2)'));
   }
+});
+
+// 🆕 ✍️ 写真なし記録ボタンのアクション
+document.getElementById('btnSkipPhoto').addEventListener('click', () => {
+    const dynamicForm = document.getElementById('dynamicFormFields');
+    const statusEl = document.getElementById('gpsStatus');
+    
+    // 画像データをリセット
+    currentBase64 = null;
+    document.getElementById('imageInput').value = '';
+    document.getElementById('imagePreview').style.display = 'none';
+    
+    // GPSや天気をリセット
+    document.getElementById('latitude').value = "";
+    document.getElementById('longitude').value = "";
+    document.getElementById('temperature').value = "";
+    document.getElementById('weatherSelect').value = "❓";
+    
+    // フォームを展開
+    if (dynamicForm) dynamicForm.classList.add('show');
+    
+    if (statusEl) {
+        statusEl.innerText = "ℹ️ 写真なしで記録します。\n店舗名で検索して選択すると、自動で位置情報がセットされます！";
+        statusEl.style.color = "#3498db";
+    }
 });
 
 let suggestTimeout = null;
@@ -305,7 +328,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     weatherIcon: finalStatusIcon,
     userGender: localStorage.getItem('ezo_gender') || "未設定",
     userAge: localStorage.getItem('ezo_age') || "未設定",
-    userUuid: localStorage.getItem('ezo_user_uuid') // 🆕 UUIDを付与！
+    userUuid: localStorage.getItem('ezo_user_uuid')
   };
 
   const result = await saveDiaryApi(payload); 
@@ -330,6 +353,66 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   submitBtn.innerHTML = originalBtnText;
 });
 
+// 🆕 🎨 タイポグラフィカードの自動生成ジェネレーター（Canvas API）
+function generateTypographyBase64(shopName, tags, weatherIcon) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 450;
+    const ctx = canvas.getContext('2d');
+
+    const tagList = parseTags(tags);
+    const manualTags = tagList.filter(t => !t.startsWith('🤖') && !t.startsWith('🚨') && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ');
+    const mainTag = manualTags.length > 0 ? manualTags[0] : (tagList[0] || "カフェ");
+    const baseColor = getColorFromTag(mainTag);
+
+    // 背景塗りつぶし
+    ctx.fillStyle = baseColor;
+    ctx.fillRect(0, 0, 800, 450);
+
+    // エレガントなグラデーションのオーバーレイ
+    const gradient = ctx.createLinearGradient(0, 0, 800, 450);
+    gradient.addColorStop(0, 'rgba(255,255,255,0.25)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.15)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 800, 450);
+
+    // 中央の透かし絵文字（ウォーターマーク）
+    ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+    ctx.font = "200px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(weatherIcon && weatherIcon !== "❓" ? weatherIcon : "☕️", 400, 225);
+
+    // テキスト用の丸角背景ボックス
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    const rectX = 100, rectY = 125, rectW = 600, rectH = 200, r = 20;
+    ctx.beginPath();
+    ctx.moveTo(rectX + r, rectY);
+    ctx.lineTo(rectX + rectW - r, rectY);
+    ctx.quadraticCurveTo(rectX + rectW, rectY, rectX + rectW, rectY + r);
+    ctx.lineTo(rectX + rectW, rectY + rectH - r);
+    ctx.quadraticCurveTo(rectX + rectW, rectY + rectH, rectX + rectW - r, rectY + rectH);
+    ctx.lineTo(rectX + r, rectY + rectH);
+    ctx.quadraticCurveTo(rectX, rectY + rectH, rectX, rectY + rectH - r);
+    ctx.lineTo(rectX, rectY + r);
+    ctx.quadraticCurveTo(rectX, rectY, rectX + r, rectY);
+    ctx.closePath();
+    ctx.fill();
+
+    // 店舗名
+    ctx.fillStyle = '#2c3e50';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.fillText(shopName || '名前なし', 400, 200);
+
+    // タグ一覧（サブタイトル）
+    ctx.fillStyle = '#7f8c8d';
+    ctx.font = '22px sans-serif';
+    const displayTags = manualTags.length > 0 ? manualTags.join(' / ') : '日常の記録';
+    ctx.fillText(displayTags, 400, 260);
+
+    return canvas.toDataURL('image/jpeg', 0.8);
+}
+
 function renderDiariesList(diaries) {
   const container = document.getElementById('diariesList');
   if (!container) return;
@@ -347,7 +430,15 @@ function renderDiariesList(diaries) {
       }
     });
 
-    let imageHTML = diary.image_base64 || diary.image_url ? `<img src="${diary.image_base64 || diary.image_url}" class="diary-image" alt="カフェの写真">` : "";
+    // 🆕 🧠 写真がある場合は写真、ない場合は「タイポグラフィカード」を描画！
+    let imageHTML = "";
+    if (diary.image_base64 || diary.image_url) {
+        imageHTML = `<img src="${diary.image_base64 || diary.image_url}" class="diary-image" alt="カフェの写真">`;
+    } else {
+        const typoBase64 = generateTypographyBase64(diary.shop_name, diary.tags, diary.weather_icon);
+        imageHTML = `<img src="${typoBase64}" class="diary-image" alt="タイポグラフィカード" style="box-shadow: 0 4px 6px rgba(0,0,0,0.1);">`;
+    }
+
     const displayDate = diary.visited_at ? diary.visited_at.split(' ')[0] : '日付不明';
 
     let weatherStr = "";
@@ -419,7 +510,9 @@ function editDiary(id) {
     if (diary.image_base64 || diary.image_url) {
         imgPreview.src = diary.image_base64 || diary.image_url;
         imgPreview.style.display = 'block';
-    } else { imgPreview.style.display = 'none'; }
+    } else { 
+        imgPreview.style.display = 'none'; 
+    }
     
     const dynamicForm = document.getElementById('dynamicFormFields');
     if (dynamicForm) dynamicForm.classList.add('show');
@@ -462,9 +555,6 @@ function filterDiaries() {
   else renderDiariesList(globalDiaries.filter(diary => parseTags(diary.tags).includes(selectedTag)));
 }
 
-// ==========================================
-// 📱 switchTab 関数の修正箇所 (main.js 内)
-// ==========================================
 function switchTab(tabName, element) {
     const tabs = ['record', 'history', 'map', 'analytics', 'settings'];
     tabs.forEach(t => {
@@ -479,7 +569,6 @@ function switchTab(tabName, element) {
     if (tabName === 'history') fetchDiaries();
     if (tabName === 'map' && typeof initViewMap === 'function') { 
         initViewMap(); 
-        // 🎯 修正: タブを開いた時だけ自動フィット (autoFit = true) を発動させる！
         updateViewMarkers(globalDiaries, true); 
     }
     if (tabName === 'analytics' && typeof renderAnalytics === 'function') { renderAnalytics(); }
