@@ -67,7 +67,6 @@ export default {
     // 🗑️ データの削除 (DELETEリクエスト)
     // ==========================================
     if (request.method === "DELETE") {
-      // 🔒 削除は Free, Premium に許可 (Adminはミドルウェア側で自動許可)
       const auth = await checkAuthorization(request, env, ["free", "premium"]);
       if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -75,7 +74,6 @@ export default {
         const id = url.searchParams.get("id");
         if (!id) throw new Error("IDが指定されていません");
         
-        // 管理者は全件削除可能、一般ユーザーは自分のUUIDに紐づくデータのみ削除可能に制限
         if (auth.user.role === "admin") {
           await env.DB.prepare("DELETE FROM diaries WHERE id = ?").bind(id).run();
         } else {
@@ -99,12 +97,8 @@ export default {
         return new Response(JSON.stringify(auth.user), { headers: corsHeaders });
       }
 
-      // データの読み込みは全ユーザーに一旦許可
-      const auth = await checkAuthorization(request, env, ["free", "premium", "business"]);
-      if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
-
       try {
-// 👑 🆕 B2B用: 店舗全体の客層アナリティクス集計
+        // 👑 🆕 B2B用: 店舗全体の客層アナリティクス集計
         if (action === "get_shop_analytics") {
           const auth = await checkAuthorization(request, env, ["admin", "business"]);
           if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -122,7 +116,6 @@ export default {
 
           const { results } = await env.DB.prepare(query).bind(...params).all();
           
-          // サーバー側でデータを構造化して集計（通信量削減）
           let total = results.length;
           let genders = {};
           let ages = {};
@@ -144,31 +137,29 @@ export default {
               }
           });
 
-          // タグを出現回数順にソートして上位10件を抽出
           const topTags = Object.entries(tagsCount).sort((a,b) => b[1]-a[1]).slice(0, 10);
           return new Response(JSON.stringify({ total, genders, ages, topTags }), { headers: corsHeaders });
         }
 
+        // データの読み込みは全ユーザーに許可
+        const auth = await checkAuthorization(request, env, ["free", "premium", "business"]);
+        if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
+
         if (action === "search_master") {
-          // サジェスト検索は、ユーザーの利便性（自由な記録）のため全件から検索可能にする
           const query = url.searchParams.get("query") || "";
           const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE shop_name LIKE ? LIMIT 10").bind(`%${query}%`).all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
 
         } else if (action === "get_all_master") {
-          // 🗺️ マップ描画用のマスタ全件取得
           if (auth.user.role === "admin") {
-            // 管理者(Admin)は、非表示(is_local=0)のチェーン店も含めて全件見れる
             const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude, is_local FROM shops_master").all();
             return new Response(JSON.stringify(results), { headers: corsHeaders });
           } else {
-            // 一般ユーザー(Free/Premium)には、ローカル店(is_local=1)のみを返却してデータ量を削減
             const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE is_local = 1").all();
             return new Response(JSON.stringify(results), { headers: corsHeaders });
           }
 
         } else {
-          // 日記データの取得
           const { results } = await env.DB.prepare("SELECT * FROM diaries ORDER BY visited_at DESC, id DESC").all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         }
@@ -184,9 +175,18 @@ export default {
       try {
         const data = await request.json();
         
+        // 👑 🆕 開発用特権: 自身をAdminに昇格するAPI
+        if (data.action === "upgrade_admin") {
+            const auth = await checkAuthorization(request, env, []); 
+            if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
+            
+            await env.DB.prepare("UPDATE users SET role = 'admin' WHERE user_uuid = ?").bind(auth.user.userUuid).run();
+            return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        }
+        
         // 👑 管理者バックドア用アクション（チェーン店非表示切替）
         if (data.action === "toggle_local") {
-            const auth = await checkAuthorization(request, env, ["admin"]); // 管理者のみ許可
+            const auth = await checkAuthorization(request, env, ["admin"]); 
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
             if (!data.shopId) return new Response(JSON.stringify({ error: "shopIdが必要です" }), { status: 400, headers: corsHeaders });
 
@@ -206,7 +206,6 @@ export default {
         
         const userGender = data.userGender || "未設定";
         const userAge = data.userAge || "未設定";
-        // 門番が検証した信頼できるUUIDを使用
         const userUuid = auth.user.userUuid;
 
         let targetBase64 = data.imageBase64 || null;
@@ -303,7 +302,6 @@ export default {
         const visitedAt = data.visitedAt || createdSystemAt; 
 
         if (data.id) {
-          // 自分自身のデータのみ上書き可能にする安全装置（UPDATE文に user_uuid = ? を追加）
           if (targetBase64) {
             await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ? WHERE id = ? AND user_uuid = ?`)
               .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, data.id, userUuid).run();

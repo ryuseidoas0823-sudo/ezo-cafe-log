@@ -140,3 +140,17 @@ async function fetchShopAnalyticsApi(shopId, shopName) {
     return null;
   }
 }
+
+// 👑 開発用：自身をAdminに昇格するAPI通信
+async function upgradeToAdminApi() {
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ action: "upgrade_admin" })
+    });
+    return await response.json();
+  } catch (error) {
+    return { success: false, error: "通信エラー" };
+  }
+}

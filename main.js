@@ -4,14 +4,15 @@
 let globalDiaries = []; 
 let editingDiaryId = null;
 let currentBase64 = null;
-let currentUser = null; 
+window.currentUser = null; // 👑 変数のスコープを確実にグローバル化
 
 document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
   initUserUuid(); 
   
-  currentUser = await fetchMe(); 
+  // 👑 起動時に自分の権限情報を取得して window オブジェクトに保持
+  window.currentUser = await fetchMe(); 
   
   await Promise.all([
     fetchDiaries(),
@@ -648,3 +649,17 @@ if (mapSearchInput) {
         }, 100); 
     });
 }
+
+// ==========================================
+// 👑 開発用：管理者昇格アクション
+// ==========================================
+window.upgradeToAdmin = async function() {
+    if(!confirm("あなたのアカウントを管理者(Admin)に昇格させますか？")) return;
+    const res = await upgradeToAdminApi();
+    if(res.success) {
+        alert("👑 管理者に昇格しました！画面をリロードします。");
+        window.location.reload();
+    } else {
+        alert("エラーが発生しました。");
+    }
+};

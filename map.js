@@ -7,6 +7,7 @@ let viewMap = null;
 let mapMarkers = []; 
 
 let activeMapFilters = { dining: false, takeout: false, goods: false };
+// 北海道内にパン（スクロール）を制限
 const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
 
 function initViewMap() {
@@ -19,8 +20,11 @@ function initViewMap() {
     }).setView([HOME_LAT, HOME_LNG], 13);
     
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(viewMap);
+    
+    // 無限ループ防止: ズーム操作時は「自動フィット(autoFit)」を false にして呼ぶ
     viewMap.on('zoomend', () => { updateViewMarkers(globalDiaries, false); });
   }
+  // DOMのレンダリング遅延に対応してマップサイズを再計算
   setTimeout(() => { viewMap.invalidateSize(); }, 200);
 }
 
@@ -36,6 +40,7 @@ function toggleMapFilter(type) {
             btn.style.color = '#5d4037';
         }
     }
+    // フィルター操作時もズーム位置はキープする
     updateViewMarkers(globalDiaries, false); 
 }
 
@@ -44,6 +49,7 @@ function flyToShop(lat, lng) {
     viewMap.flyTo([lat, lng], 17, { duration: 1.5 });
     setTimeout(() => {
       const targetMarker = mapMarkers.find(m => m.getLatLng().lat === lat && m.getLatLng().lng === lng);
+      // ポップアップではなくクリックイベントを発火させてボトムシートを開く
       if (targetMarker) targetMarker.fire('click');
     }, 1500);
   }
@@ -70,6 +76,7 @@ window.downloadMapImage = function() {
     html2canvas(mapContainer, {
         useCORS: true, 
         allowTaint: false,
+        // コントロール系のUI要素を画像出力から除外
         ignoreElements: (el) => el.id === 'mapSearchInput' || el.closest('#mapSearchSuggestList') || el.classList.contains('floating-map-controls') || el.classList.contains('bottom-sheet')
     }).then(canvas => {
         const link = document.createElement('a');
@@ -93,6 +100,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   if (!viewMap) return;
   const currentZoom = viewMap.getZoom();
   
+  // 既存のマーカーをクリア
   viewMap.eachLayer((layer) => { if (layer instanceof L.Marker) viewMap.removeLayer(layer); });
   
   const bounds = L.latLngBounds(); 
@@ -100,6 +108,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   let totalValidVisits = 0; 
   mapMarkers = []; 
   
+  // 1️⃣ ベースレイヤー: 店舗マスタデータをすべて読み込む
   if (typeof globalMasterShops !== 'undefined') {
     globalMasterShops.forEach(shop => {
       const locKey = `${shop.latitude}_${shop.longitude}`;
@@ -115,12 +124,14 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
     });
   }
   
+  // 過去の日記を時系列順にソート
   const chronologicalDiaries = [...filteredDiaries].sort((a, b) => {
       const timeA = new Date((a.visited_at || "1970-01-01").replace(/-/g, '/')).getTime();
       const timeB = new Date((b.visited_at || "1970-01-01").replace(/-/g, '/')).getTime();
       return timeA - timeB; 
   });
   
+  // 2️⃣ 重ね塗り: ユーザーの日記から「最新の店舗状態」を抽出・精製
   chronologicalDiaries.forEach(diary => {
     if (diary.latitude && diary.longitude) {
       const locKey = `${diary.latitude}_${diary.longitude}`;
@@ -150,6 +161,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
 
       allTags.forEach(t => shop.allTagsSet.add(t));
 
+      // 閉店フラグの処理
       if (isClosedReport) {
         if (!shop.isClosed && !shop.isGracePeriod) {
           const reportDateStr = diary.created_at || diary.visited_at || "";
@@ -192,9 +204,10 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
 
   const selectedMoodTag = document.getElementById('mapTagFilter') ? document.getElementById('mapTagFilter').value : "";
 
+  // 3️⃣ 描画処理
   Object.values(locationMap).forEach(loc => {
     
-    // 🧠 修正①: 最終マージ処理（同じ座標内で、同じ名前の店舗がある場合は実績を完全に1つに結合する）
+    // 🧠 最終マージ処理（同じ座標内で、同じ名前の店舗がある場合は実績を完全に1つに結合する）
     const mergedShops = {};
     Object.values(loc.shops).forEach(s => {
         const normName = (s.shopName || "").trim().toLowerCase();
@@ -275,6 +288,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
     const marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: opacity}).addTo(viewMap);
     mapMarkers.push(marker);
     
+    // ボトムシートを開くイベントリスナー
     marker.on('click', () => {
         openShopBottomSheet(mainShop, shopList, loc, locTotalVisits);
     });
@@ -289,6 +303,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
       viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
   }
 
+  // 地図の余白をタップした時にボトムシートを閉じる処理
   if (!viewMap.hasSheetCloseEvent) {
       viewMap.on('click', () => { closeBottomSheet(); });
       viewMap.hasSheetCloseEvent = true;
@@ -296,7 +311,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
 }
 
 // ==========================================
-// ボトムシートの制御関数 (ネイティブアコーディオン統合版)
+// 🆕 ボトムシートの制御関数 (B2Bアナリティクス完全統合版)
 // ==========================================
 
 function closeBottomSheet() {
@@ -345,7 +360,7 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     html += `<p style="margin: 10px 0; font-weight:bold; color:#34495e;">${statusText}</p>`;
     
     // ==========================================
-    // 📊 修正②: 個人のアナリティクスデータ（ネイティブ・アコーディオン）
+    // 📊 B2C用: 個人のアナリティクスデータ（ネイティブ・アコーディオン）
     // ==========================================
     let analyticsHtml = "";
     const shopDiaries = globalDiaries.filter(d =>
@@ -371,7 +386,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         });
         const topTags = Object.entries(tagsCount).sort((a,b) => b[1] - a[1]).slice(0, 5); 
 
-        // 💡 HTML5の <details> と <summary> を使ったJS不要のスマートな開閉UI
         analyticsHtml += `<details style="margin-top: 15px; background: rgba(255, 255, 255, 0.7); padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05); text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.02); cursor: pointer; transition: all 0.3s ease;">`;
         analyticsHtml += `<summary style="font-size: 0.95rem; color: #2c3e50; font-weight: bold; outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center;">`;
         analyticsHtml += `<span>📊 あなたの訪問傾向</span> <span style="font-size: 0.8rem; color: #3498db; background: #ebf5fb; padding: 4px 10px; border-radius: 12px;">開く / 閉じる</span>`;
@@ -403,7 +417,26 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
 
     html += analyticsHtml;
 
-    if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin' && mainShop.shopId && mainShop.shopId.startsWith('node/')) {
+    // ==========================================
+    // 👑 🆕 Business/Admin専用: 店舗全体の客層アナリティクスUI
+    // ==========================================
+    if (window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.role === 'business')) {
+        const safeShopId = mainShop.shopId ? `'${mainShop.shopId}'` : 'null';
+        const safeShopName = `'${mainShop.shopName.replace(/'/g, "\\'")}'`;
+        const containerId = mainShop.shopId ? mainShop.shopId.replace(/\W/g, '') : 'manual';
+        
+        html += `<div style="margin-top:20px; padding: 15px; background: rgba(41, 128, 185, 0.05); border-radius: 12px; border: 1px solid rgba(41, 128, 185, 0.2); text-align: left;">
+            <p style="margin:0 0 10px 0; font-size:0.85rem; color:#2980b9; font-weight:bold;">🏢 店舗全体アナリティクス (B2B)</p>
+            <div id="b2b-analytics-container-${containerId}">
+                <button onclick="loadShopAnalytics(this, ${safeShopId}, ${safeShopName})" style="background: #2980b9; width:100%; border:none; color:white; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📊 顧客データと客層を集計する</button>
+            </div>
+        </div>`;
+    }
+
+    // ==========================================
+    // 👑 🆕 管理者(Admin)用バックドアUI
+    // ==========================================
+    if (window.currentUser && window.currentUser.role === 'admin' && mainShop.shopId && mainShop.shopId.startsWith('node/')) {
         const currentIsLocal = mainShop.isLocal !== 0; 
         const toggleVal = currentIsLocal ? 0 : 1;
         const toggleText = currentIsLocal ? '🚫 チェーン非表示化' : '✅ ローカル復活';
@@ -422,6 +455,71 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     sheet.classList.add('active');
 }
 
+// ==========================================
+// 👑 B2B用: 店舗アナリティクスの動的ロードと描画関数
+// ==========================================
+window.loadShopAnalytics = async function(btnElement, shopId, shopName) {
+    btnElement.innerHTML = "⏳ データを集計中...";
+    btnElement.disabled = true;
+
+    const data = await fetchShopAnalyticsApi(shopId, shopName);
+    if (!data || data.total === 0) {
+        btnElement.innerHTML = "❌ データがありません";
+        return;
+    }
+
+    let html = `<div style="animation: fadeIn 0.4s ease;">`;
+    html += `<p style="font-size:0.8rem; color:#7f8c8d; margin: 0 0 10px 0; font-weight: bold;">👥 累計来店記録: ${data.total}件</p>`;
+
+    // 性別グラフ
+    html += `<div style="margin-bottom: 12px;">`;
+    html += `<p style="font-size:0.75rem; margin:0 0 4px 0; color:#2c3e50; font-weight:bold;">性別分布</p>`;
+    Object.entries(data.genders).sort((a,b) => b[1]-a[1]).forEach(([k, v]) => {
+        const percent = Math.round((v / data.total) * 100);
+        html += `<div style="display:flex; align-items:center; margin-bottom:4px; font-size:0.75rem; color:#34495e;">
+            <span style="width:60px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${k}</span>
+            <div style="flex-grow:1; background:rgba(0,0,0,0.05); height:12px; border-radius:6px; margin:0 8px; position:relative; overflow:hidden;">
+                <div style="width:${percent}%; background:#3498db; height:100%; border-radius:6px; transition: width 1s ease-out;"></div>
+            </div>
+            <span style="width:30px; text-align:right;">${percent}%</span>
+        </div>`;
+    });
+    html += `</div>`;
+
+    // 年代グラフ
+    html += `<div style="margin-bottom: 12px;">`;
+    html += `<p style="font-size:0.75rem; margin:0 0 4px 0; color:#2c3e50; font-weight:bold;">年代分布</p>`;
+    Object.entries(data.ages).sort((a,b) => b[1]-a[1]).forEach(([k, v]) => {
+        const percent = Math.round((v / data.total) * 100);
+        html += `<div style="display:flex; align-items:center; margin-bottom:4px; font-size:0.75rem; color:#34495e;">
+            <span style="width:60px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${k}</span>
+            <div style="flex-grow:1; background:rgba(0,0,0,0.05); height:12px; border-radius:6px; margin:0 8px; position:relative; overflow:hidden;">
+                <div style="width:${percent}%; background:#2ecc71; height:100%; border-radius:6px; transition: width 1s ease-out;"></div>
+            </div>
+            <span style="width:30px; text-align:right;">${percent}%</span>
+        </div>`;
+    });
+    html += `</div>`;
+
+    // 客観的タグ（ワードクラウド風）
+    if (data.topTags.length > 0) {
+        html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#2c3e50; font-weight:bold;">客観的イメージ（AI抽出タグ）</p>`;
+        html += `<div style="display: flex; flex-wrap: wrap; gap: 6px;">`;
+        data.topTags.forEach(t => {
+            let bgColor = t[0].startsWith('🚨') ? '#e74c3c' : (t[0].startsWith('🤖') ? '#8e44ad' : '#f39c12');
+            let tagName = escapeHTML(t[0].replace(/🤖[☕️🍰🛋️]/, '🤖 '));
+            html += `<span style="background: ${bgColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">${tagName} <span style="opacity:0.8; font-size:0.65rem;">x${t[1]}</span></span>`;
+        });
+        html += `</div>`;
+    }
+
+    html += `</div>`;
+    btnElement.parentElement.innerHTML = html;
+};
+
+// ==========================================
+// 👑 管理者バックドア：店舗のローカル/チェーン状態を切り替える
+// ==========================================
 window.toggleLocalStatus = async function(shopId, isLocal) {
     if (!confirm(`この店舗を「${isLocal === 1 ? 'ローカル店として表示' : 'チェーン店として非表示'}」に変更しますか？\n(一般ユーザーのマップから消去されます)`)) return;
     
@@ -437,16 +535,3 @@ window.toggleLocalStatus = async function(shopId, isLocal) {
     }
     document.body.style.cursor = 'default';
 };
-
-// 👑 🆕 Business/Admin専用: 店舗全体の客層アナリティクスUI
-    if (typeof currentUser !== 'undefined' && currentUser && (currentUser.role === 'admin' || currentUser.role === 'business')) {
-        const safeShopId = mainShop.shopId ? `'${mainShop.shopId}'` : 'null';
-        const safeShopName = `'${mainShop.shopName.replace(/'/g, "\\'")}'`;
-        
-        html += `<div style="margin-top:20px; padding: 15px; background: rgba(41, 128, 185, 0.05); border-radius: 12px; border: 1px solid rgba(41, 128, 185, 0.2); text-align: left;">
-            <p style="margin:0 0 10px 0; font-size:0.85rem; color:#2980b9; font-weight:bold;">🏢 店舗全体アナリティクス (B2B)</p>
-            <div id="b2b-analytics-container-${mainShop.shopId || 'manual'}">
-                <button onclick="loadShopAnalytics(this, ${safeShopId}, ${safeShopName})" style="background: #2980b9; width:100%; border:none; color:white; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📊 顧客データと客層を集計する</button>
-            </div>
-        </div>`;
-    }
