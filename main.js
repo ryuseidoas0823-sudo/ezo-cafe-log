@@ -1,5 +1,5 @@
 // ==========================================
-// 📱 main.js (UI制御・イベント管理 - ゴーストピン対応版)
+// 📱 main.js (UI制御・イベント管理 - 完全版)
 // ==========================================
 let globalDiaries = []; 
 let editingDiaryId = null;
@@ -60,8 +60,9 @@ function loadSettings() {
   if (a && document.getElementById('settingAge')) document.getElementById('settingAge').value = a;
 }
 
+// 🐛 修正: 前回のタイポ (document.getElementById) を修正
 function saveSettings() {
-  const g = document.getElementById('document.getElementById') ? document.getElementById('settingGender').value : "";
+  const g = document.getElementById('settingGender') ? document.getElementById('settingGender').value : "";
   const a = document.getElementById('settingAge') ? document.getElementById('settingAge').value : "";
   if (!g || !a) { alert("性別と年代を両方選択してください。"); return; }
   localStorage.setItem('ezo_gender', g);
@@ -151,7 +152,6 @@ async function extractExifAndWeather(file) {
   return { lat, lng, visitedAt, weatherIcon, temp };
 }
 
-// 📝 項目1: 通常日記用の写真選択アクション (1枚のみ)
 document.getElementById('imageInputSingle').addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files || files.length === 0) return;
@@ -194,7 +194,6 @@ document.getElementById('imageInputSingle').addEventListener('change', async (e)
   }
 });
 
-// 📦 項目2: 写真だけまとめて一括ストックのアクション (複数枚)
 document.getElementById('imageInputBulk').addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files || files.length === 0) return;
@@ -222,7 +221,7 @@ document.getElementById('imageInputBulk').addEventListener('change', async (e) =
       userGender: localStorage.getItem('ezo_gender') || "未設定",
       userAge: localStorage.getItem('ezo_age') || "未設定",
       userUuid: localStorage.getItem('ezo_user_uuid'),
-      isPublic: 0 // 一括ストック時は安全のため強制非公開
+      isPublic: 0 
     };
     await saveDiaryApi(payload);
   }
@@ -239,7 +238,6 @@ document.getElementById('imageInputBulk').addEventListener('change', async (e) =
   }, 1200);
 });
 
-// ✍️ 写真なし記録ボタンのアクション
 const btnSkipPhoto = document.getElementById('btnSkipPhoto');
 if (btnSkipPhoto) {
     btnSkipPhoto.addEventListener('click', () => {
@@ -305,6 +303,36 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// 👑 🆕 マップのボトムシートから「このお店を記録する」ための直行関数
+window.recordFromMap = function(shopId, shopName, lat, lng) {
+    switchTab('record', document.querySelector('.bottom-nav .nav-item:nth-child(1)'));
+    document.getElementById('recordForm').reset();
+    document.getElementById('shopId').value = shopId || "";
+    document.getElementById('shopName').value = shopName || "";
+    document.getElementById('latitude').value = lat || "";
+    document.getElementById('longitude').value = lng || "";
+    
+    document.getElementById('imageInputSingle').value = '';
+    document.getElementById('imagePreview').style.display = 'none';
+    currentBase64 = null;
+    editingDiaryId = null;
+    resetDateToToday();
+
+    const dynamicForm = document.getElementById('dynamicFormFields');
+    if (dynamicForm) dynamicForm.classList.add('show');
+
+    const statusEl = document.getElementById('gpsStatus');
+    if (statusEl) {
+        statusEl.innerText = "📍 マップから店舗と位置情報をセットしました";
+        statusEl.style.color = "#27ae60";
+    }
+    
+    document.getElementById('submitBtn').innerHTML = "🚀 記録する";
+    window.scrollTo(0, 0);
+    
+    if(typeof closeBottomSheet === 'function') closeBottomSheet();
+};
+
 document.getElementById('recordForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const submitBtn = document.getElementById('submitBtn');
@@ -329,7 +357,6 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   if (document.getElementById('isBookmark') && document.getElementById('isBookmark').checked) finalStatusIcon = "💭";
   if (document.getElementById('isDraft') && document.getElementById('isDraft').checked) finalStatusIcon = "📦";
 
-  // 👻 🆕 公開フラグの数値を抽出 (チェック有なら1, 無なら0)
   const isPublicVal = document.getElementById('isPublicCheckbox') && document.getElementById('isPublicCheckbox').checked ? 1 : 0;
 
   const payload = {
@@ -346,7 +373,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     userGender: localStorage.getItem('ezo_gender') || "未設定",
     userAge: localStorage.getItem('ezo_age') || "未設定",
     userUuid: localStorage.getItem('ezo_user_uuid'),
-    isPublic: isPublicVal // 👻 連携
+    isPublic: isPublicVal 
   };
 
   const result = await saveDiaryApi(payload); 
@@ -492,7 +519,6 @@ function editDiary(id) {
     if (document.getElementById('isBookmark')) document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
     if (document.getElementById('isDraft')) document.getElementById('isDraft').checked = false; 
 
-    // 👻 🆕 編集時にチェックボックスの公開状態を復元
     if (document.getElementById('isPublicCheckbox')) {
         document.getElementById('isPublicCheckbox').checked = (diary.is_public === 1);
     }

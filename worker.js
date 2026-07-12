@@ -2,10 +2,8 @@
 // 🛡️ 権限チェックミドルウェア (門番)
 // ==========================================
 async function checkAuthorization(request, env, requiredRoles = []) {
-  // 1. ヘッダーから UUID を抽出
   let userUuid = request.headers.get("X-Ezo-User-UUID");
   
-  // POSTリクエストなどでヘッダーにない場合のフォールバック(URLパラメータ等)
   if (!userUuid) {
       const url = new URL(request.url);
       userUuid = url.searchParams.get("uuid");
@@ -16,12 +14,10 @@ async function checkAuthorization(request, env, requiredRoles = []) {
   }
 
   try {
-    // 2. D1データベースからユーザー情報を取得
     const user = await env.DB.prepare("SELECT role, associated_shop_id FROM users WHERE user_uuid = ?")
       .bind(userUuid)
       .first();
 
-    // 3. 未登録ユーザーの場合、自動的に Free ユーザーとして登録 (オンボーディング)
     if (!user) {
       const now = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString();
       await env.DB.prepare("INSERT INTO users (user_uuid, role, created_at, updated_at) VALUES (?, 'free', ?, ?)")
@@ -36,13 +32,10 @@ async function checkAuthorization(request, env, requiredRoles = []) {
       };
     }
 
-    // 4. ロール（権限）の検証
-    // 管理者(admin)は特権として無条件で全操作を通過できるようにする
     if (requiredRoles.length > 0 && !requiredRoles.includes(user.role) && user.role !== "admin") {
       return { authorized: false, status: 403, error: `Forbidden: この操作には ${requiredRoles.join(" または ")} 権限が必要です。` };
     }
 
-    // 検証通過
     return { authorized: true, status: 200, user: { userUuid: userUuid, ...user } };
 
   } catch (err) {
@@ -90,21 +83,15 @@ export default {
     // 📥 データの取得 (GETリクエスト)
     // ==========================================
     if (request.method === "GET") {
-      // ユーザー自身の権限情報を取得するためのエンドポイント
       if (action === "get_me") {
         const auth = await checkAuthorization(request, env, []); 
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
         return new Response(JSON.stringify(auth.user), { headers: corsHeaders });
       }
 
-      
-
       try {
-        // ==========================================
-        // 👻 🆕 B2Cプレミアム用: ゴーストピン（他者の足跡）の取得
-        // ==========================================
+        // 👻 B2Cプレミアム用: ゴーストピン（他者の足跡）の取得
         if (action === "get_ghost_pins") {
-          // 権限チェック: Premium または Admin のみに解放
           const auth = await checkAuthorization(request, env, ["premium", "admin"]);
           if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -149,7 +136,8 @@ export default {
 
           return new Response(JSON.stringify(ghosts), { headers: corsHeaders });
         }
-        // 👑 🆕 B2B用: 店舗全体の客層アナリティクス集計
+
+        // 👑 B2B用: 店舗全体の客層アナリティクス集計
         if (action === "get_shop_analytics") {
           const auth = await checkAuthorization(request, env, ["admin", "business"]);
           if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -192,7 +180,7 @@ export default {
           return new Response(JSON.stringify({ total, genders, ages, topTags }), { headers: corsHeaders });
         }
 
-        // データの読み込みは全ユーザーに許可
+        // 通常データの読み込み
         const auth = await checkAuthorization(request, env, ["free", "premium", "business"]);
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -226,7 +214,7 @@ export default {
       try {
         const data = await request.json();
         
-        // 👑 🆕 開発用特権: 自身をAdminに昇格するAPI
+        // 👑 開発用特権: 自身をAdminに昇格するAPI
         if (data.action === "upgrade_admin") {
             const auth = await checkAuthorization(request, env, []); 
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -245,7 +233,6 @@ export default {
             return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         }
 
-        // 🔒 データ保存は Free, Premium に許可 (Adminも通過可能)
         const auth = await checkAuthorization(request, env, ["free", "premium"]);
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -258,6 +245,9 @@ export default {
         const userGender = data.userGender || "未設定";
         const userAge = data.userAge || "未設定";
         const userUuid = auth.user.userUuid;
+        
+        // 👻 フロントエンドから送られてきた公開フラグを取得（デフォルトは安全のため0）
+        const isPublicVal = data.isPublic !== undefined ? data.isPublic : 0;
 
         let targetBase64 = data.imageBase64 || null;
         let moderationTag = ""; 
@@ -352,19 +342,20 @@ export default {
         const createdSystemAt = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')} ${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')}`;
         const visitedAt = data.visitedAt || createdSystemAt; 
 
+        // 📝 データの保存（is_public を確実に保存するよう UPDATE / INSERT クエリにカラムを追加）
         if (data.id) {
           if (targetBase64) {
-            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ? WHERE id = ? AND user_uuid = ?`)
-              .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, data.id, userUuid).run();
+            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
+              .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
           } else {
-            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ? WHERE id = ? AND user_uuid = ?`)
-              .bind(data.shopName, comment, combinedTags, visitedAt, weatherIcon, temp, lat, lng, data.id, userUuid).run();
+            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
+              .bind(data.shopName, comment, combinedTags, visitedAt, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
           }
           return new Response(JSON.stringify({ success: true, id: data.id }), { headers: corsHeaders });
         } else {
           const info = await env.DB.prepare(
-            `INSERT INTO diaries (shop_id, shop_name, comment, latitude, longitude, image_base64, image_url, tags, weather_icon, temperature, user_gender, user_age, user_uuid, visited_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).bind(data.shopId || null, data.shopName || "名前なし", comment, lat, lng, targetBase64, null, combinedTags, weatherIcon, temp, userGender, userAge, userUuid, visitedAt, createdSystemAt).run();
+            `INSERT INTO diaries (shop_id, shop_name, comment, latitude, longitude, image_base64, image_url, tags, weather_icon, temperature, user_gender, user_age, user_uuid, visited_at, created_at, is_public) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(data.shopId || null, data.shopName || "名前なし", comment, lat, lng, targetBase64, null, combinedTags, weatherIcon, temp, userGender, userAge, userUuid, visitedAt, createdSystemAt, isPublicVal).run();
           return new Response(JSON.stringify({ success: true, id: info.meta.last_row_id }), { headers: corsHeaders });
         }
       } catch (err) {
