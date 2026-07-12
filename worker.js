@@ -97,7 +97,58 @@ export default {
         return new Response(JSON.stringify(auth.user), { headers: corsHeaders });
       }
 
+      
+
       try {
+        // ==========================================
+        // 👻 🆕 B2Cプレミアム用: ゴーストピン（他者の足跡）の取得
+        // ==========================================
+        if (action === "get_ghost_pins") {
+          // 権限チェック: Premium または Admin のみに解放
+          const auth = await checkAuthorization(request, env, ["premium", "admin"]);
+          if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
+
+          // 自分以外の、公開許可が出ている(is_public = 1)日記を取得
+          const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude, visited_at, tags FROM diaries WHERE is_public = 1 AND user_uuid != ?").bind(auth.user.userUuid).all();
+
+          // 🎭 文学的マスキング処理（時間の抽象化）
+          const getAbstractTime = (dateStr) => {
+              if (!dateStr) return "いつかの日";
+              const date = new Date(dateStr.replace(/-/g, '/'));
+              const month = date.getMonth() + 1;
+              const hour = date.getHours();
+              
+              let season = "いつか";
+              if (month >= 3 && month <= 5) season = "春";
+              else if (month >= 6 && month <= 8) season = "夏";
+              else if (month >= 9 && month <= 11) season = "秋";
+              else season = "冬";
+
+              let time = "時間帯";
+              if (hour >= 5 && hour < 10) time = "朝";
+              else if (hour >= 10 && hour < 14) time = "昼下がり";
+              else if (hour >= 14 && hour < 18) time = "午後";
+              else if (hour >= 18 && hour < 23) time = "夜";
+              else time = "深夜";
+
+              return `ある${season}の${time}`;
+          };
+
+          const ghosts = results.map(r => {
+              // ユーザーの手動入力テキストは完全に削ぎ落とし、AIタグ（🤖）だけを残す
+              const aiTags = r.tags ? r.tags.split(',').map(t => t.trim()).filter(t => t.startsWith("🤖")) : [];
+              return {
+                  shopId: r.shop_id,
+                  shopName: r.shop_name,
+                  lat: r.latitude,
+                  lng: r.longitude,
+                  abstractTime: getAbstractTime(r.visited_at),
+                  tags: aiTags
+              };
+          });
+
+          return new Response(JSON.stringify(ghosts), { headers: corsHeaders });
+        }
         // 👑 🆕 B2B用: 店舗全体の客層アナリティクス集計
         if (action === "get_shop_analytics") {
           const auth = await checkAuthorization(request, env, ["admin", "business"]);

@@ -154,3 +154,18 @@ async function upgradeToAdminApi() {
     return { success: false, error: "通信エラー" };
   }
 }
+
+// 👻 🆕 GET: プレミアム用 ゴーストピン（他者の足跡）の取得
+async function fetchGhostPinsApi() {
+  try {
+    const response = await fetch(`${API_URL}?action=get_ghost_pins&_t=${Date.now()}`, {
+      method: "GET",
+      headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    return data.error ? [] : data;
+  } catch (error) {
+    console.error("ゴーストピン取得エラー:", error);
+    return [];
+  }
+}
