@@ -15,6 +15,9 @@
     <div class="container" id="main-content">
         <h1 style="position: relative; z-index: 10;">☕️ EzoCafe Log</h1>
 
+        <!-- ========================================== -->
+        <!-- 📝 記録タブ -->
+        <!-- ========================================== -->
         <div id="tab-record">
             <div class="form-card" style="margin-bottom: 25px;">
                 <h3 style="margin-top:0; color:#5d4037; font-size:1.1rem; border-bottom:2px solid #f8f5f2; padding-bottom:5px;">📝 カフェ日記を書く</h3>
@@ -94,11 +97,24 @@
                             <label for="tags">自分でつけるタグ（任意）</label>
                             <input type="text" id="tags" placeholder="例: 作業, 癒やし">
                         </div>
+
+                        <!-- 👻 🆕 オプトイン方式の共有チェックボックス -->
+                        <div class="form-group" style="margin-top: 15px; background: rgba(142, 68, 173, 0.05); padding: 12px; border-radius: 8px; border: 1px solid rgba(142, 68, 173, 0.15);">
+                            <label style="display: block; font-size: 0.85rem; color: #8e44ad; font-weight: bold; cursor: pointer; margin: 0;">
+                                <input type="checkbox" id="isPublicCheckbox" value="1">
+                                👻 匿名でこの街の足跡（ゴーストピン）として共有する
+                            </label>
+                            <span style="font-size: 0.75rem; color: #7f8c8d; display: block; margin-top: 6px; font-weight: normal; line-height: 1.4;">
+                                ※チェックを入れると、写真や感想文は完全にマスキングされ、「抽象化された訪問時期」と「AIタグ」だけが他のPremiumユーザーのマップに匿名で共有されます（デフォルトは安全のため非公開です）。
+                            </span>
+                        </div>
+
                         <button type="submit" id="submitBtn">🚀 記録する</button>
                     </div> 
                 </form>
             </div>
 
+            <!-- 📦 項目2: 写真だけまとめてアップロード（一括ストック機能） -->
             <div class="form-card">
                 <h3 style="margin-top:0; color:#5d4037; font-size:1.1rem; border-bottom:2px solid #f8f5f2; padding-bottom:5px;">📦 写真だけまとめてストック</h3>
                 <div class="form-group" style="background: #f4f0ec; padding: 15px; border-radius: 8px; border: 1px dashed #a1887f;">
@@ -112,6 +128,9 @@
             </div>
         </div>
 
+        <!-- ========================================== -->
+        <!-- 📚 履歴タブ -->
+        <!-- ========================================== -->
         <div id="tab-history" class="hidden">
             <div id="diariesList" style="padding-bottom: 70px;"></div>
             <div class="fixed-filter">
@@ -121,6 +140,9 @@
             </div>
         </div>
 
+        <!-- ========================================== -->
+        <!-- 🗺️ マップタブ -->
+        <!-- ========================================== -->
         <div id="tab-map" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
             <div id="mapView" style="flex-grow: 1; width: 100%; z-index: 1;"></div>
             
@@ -151,6 +173,9 @@
             </div>
         </div>
 
+        <!-- ========================================== -->
+        <!-- 📊 分析タブ -->
+        <!-- ========================================== -->
         <div id="tab-analytics" class="hidden">
             <div class="dashboard-card" style="position: relative; z-index: 10;">
                 <h3>☕️ あなたのカフェ開拓データ</h3>
@@ -173,6 +198,9 @@
             </div>
         </div>
 
+        <!-- ========================================== -->
+        <!-- ⚙️ 設定タブ -->
+        <!-- ========================================== -->
         <div id="tab-settings" class="hidden">
             <div class="dashboard-card" style="position: relative; z-index: 10;">
                 <h3>👤 アナリティクス用属性設定</h3>
@@ -215,6 +243,9 @@
         </div>
     </div>
 
+    <!-- ========================================== -->
+    <!-- 📱 ボトムナビゲーション -->
+    <!-- ========================================== -->
     <div class="bottom-nav">
         <a href="#" class="nav-item active" onclick="switchTab('record', this)">
             <span class="nav-icon">📝</span>
