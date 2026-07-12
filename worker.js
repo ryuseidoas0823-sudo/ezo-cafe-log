@@ -140,6 +140,16 @@ export default {
         let uuidForAuth = request.headers.get("X-Ezo-User-UUID") || data.userUuid;
         request.headers.set("X-Ezo-User-UUID", uuidForAuth);
         
+        // 👑 🆕 管理者バックドア用アクション（チェーン店非表示切替）
+        if (data.action === "toggle_local") {
+            const auth = await checkAuthorization(request, env, ["admin"]); // 管理者のみ許可
+            if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
+            if (!data.shopId) return new Response(JSON.stringify({ error: "shopIdが必要です" }), { status: 400, headers: corsHeaders });
+
+            await env.DB.prepare("UPDATE shops_master SET is_local = ? WHERE shop_id = ?").bind(data.isLocal, data.shopId).run();
+            return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        }
+
         // 🔒 データ保存は Free, Premium に許可 (Adminも通過可能)
         const auth = await checkAuthorization(request, env, ["free", "premium"]);
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
