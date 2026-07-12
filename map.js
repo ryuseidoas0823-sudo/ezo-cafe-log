@@ -36,7 +36,7 @@ function toggleMapFilter(type) {
             btn.style.background = '#5d4037';
             btn.style.color = '#fff';
         } else {
-            btn.style.background = '#fff';
+            btn.style.background = 'rgba(255, 255, 255, 0.9)';
             btn.style.color = '#5d4037';
         }
     }
@@ -49,7 +49,8 @@ function flyToShop(lat, lng) {
     viewMap.flyTo([lat, lng], 17, { duration: 1.5 });
     setTimeout(() => {
       const targetMarker = mapMarkers.find(m => m.getLatLng().lat === lat && m.getLatLng().lng === lng);
-      if (targetMarker) targetMarker.openPopup();
+      // ポップアップではなくクリックイベントを発火させてボトムシートを開く
+      if (targetMarker) targetMarker.fire('click');
     }, 1500);
   }
 }
@@ -76,7 +77,7 @@ window.downloadMapImage = function() {
         useCORS: true, 
         allowTaint: false,
         // コントロール系のUI要素を画像出力から除外
-        ignoreElements: (el) => el.id === 'mapSearchInput' || el.closest('#mapSearchSuggestList')
+        ignoreElements: (el) => el.id === 'mapSearchInput' || el.closest('#mapSearchSuggestList') || el.classList.contains('floating-map-controls') || el.classList.contains('bottom-sheet')
     }).then(canvas => {
         const link = document.createElement('a');
         link.download = `EzoCafe_Log_MyMap_${new Date().toISOString().split('T')[0]}.png`;
@@ -270,60 +271,14 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
     const marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: opacity}).addTo(viewMap);
     mapMarkers.push(marker);
     
-    let popupHtml = `<div style="text-align:center; min-width: 180px; padding: 5px;">`;
-    popupHtml += `<p style="margin: 0; font-weight:bold; font-size:1.1rem; color:#2c3e50;">${escapeHTML(mainShop.shopName)}</p>`;
-
-    let servicesHtml = '<div style="margin: 6px 0; font-size: 0.8rem; color: #7f8c8d;">✨ 対応: ';
-    if (mainShop.hasDining) servicesHtml += '☕️ ';
-    if (mainShop.hasTakeout) servicesHtml += '🥡 ';
-    if (mainShop.hasGoods) servicesHtml += '🛍️ ';
-    if (!mainShop.hasDining && !mainShop.hasTakeout && !mainShop.hasGoods) servicesHtml += '🏳️ 未確認';
-    servicesHtml += '</div>';
-    popupHtml += servicesHtml;
-
-    if (shopList.length > 1) {
-        popupHtml += `<div style="margin: 10px 0; padding: 8px; background: #f4f4f9; border-radius: 8px; font-size: 0.8rem; text-align: left; border: 1px solid #eee;">`;
-        popupHtml += `<p style="margin: 0 0 5px 0; font-weight: bold; color: #7f8c8d; font-size: 0.75rem;">🏢 歴代・併設の店舗</p>`;
-        shopList.forEach(s => {
-            let badge = s.isClosed ? '<span style="color:#a67c52; font-weight:bold;">[🎞️思い出]</span>' : (s.isGracePeriod ? '<span style="color:#f39c12; font-weight:bold;">[👻休業中]</span>' : '<span style="color:#27ae60; font-weight:bold;">[☕️現存]</span>');
-            popupHtml += `<div style="margin-bottom: 4px; border-bottom: 1px dashed #ddd; padding-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${badge} ${escapeHTML(s.shopName)}</div>`;
-        });
-        popupHtml += `</div>`;
-    }
-
-    let statusText = ''; let actionBtn = '';
-    if (mainShop.isClosed) { statusText = '<span style="color:#a67c52;">🎞️ 記憶に残る思い出の地</span>'; }
-    else if (mainShop.isGracePeriod) {
-        statusText = '<span style="color:#e74c3c;">🚨 閉店・移転の報告あり<br>(2週間後にマップから消去)</span>';
-        actionBtn = `<div style="margin-top:12px;"><button onclick="cancelCloseReport(${mainShop.closedDiaryId})" style="background:#e74c3c; width:100%; border:none; color:white; padding:8px; border-radius:5px; font-weight:bold; cursor:pointer;">誤報を取り消す</button></div>`;
-    } else {
-        if (mainShop.isMasterOnly) statusText = '🏳️ 未開拓（マスタ店舗）';
-        else if (locTotalVisits > 0) statusText = `👣 訪問回数: ${locTotalVisits}回`;
-        else if (mainShop.isDraftOnly) statusText = '📦 未整理の写真';
-        else statusText = '💭 行きたいお店に登録中';
-        
-        actionBtn = `<div style="margin-top:12px; border-top:1px dashed #ddd; padding-top:8px;"><a href="#" onclick="reportClosed('${mainShop.shopId || mainShop.shopName}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng}); return false;" style="color:#7f8c8d; font-size:0.75rem; text-decoration:none;">🚫 ${escapeHTML(mainShop.shopName)} の閉店を報告</a></div>`;
-    }
-
-    popupHtml += `<p style="margin: 5px 0 0 0; font-size:0.85rem; color:#7f8c8d; font-weight:bold;">${statusText}</p>`;
-    popupHtml += actionBtn; 
-
-    // 👑 🆕 管理者(Admin)用バックドアUI（チェーン店非表示ボタン）
-    if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin' && mainShop.shopId && mainShop.shopId.startsWith('node/')) {
-        const currentIsLocal = mainShop.isLocal !== 0; 
-        const toggleVal = currentIsLocal ? 0 : 1;
-        const toggleText = currentIsLocal ? '🚫 チェーン非表示化' : '✅ ローカル復活';
-        const toggleColor = currentIsLocal ? '#e74c3c' : '#27ae60';
-        
-        popupHtml += `<div style="margin-top:12px; padding: 10px; background: #fceceb; border-radius: 8px; border: 1px solid #f5b7b1;">
-            <p style="margin:0 0 8px 0; font-size:0.75rem; color:#c0392b; font-weight:bold;">👑 管理者バックドア</p>
-            <button onclick="toggleLocalStatus('${mainShop.shopId}', ${toggleVal})" style="background:${toggleColor}; width:100%; border:none; color:white; padding:8px; border-radius:5px; font-weight:bold; cursor:pointer; font-size: 0.8rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${toggleText}</button>
-        </div>`;
-    }
-
-    popupHtml += `</div>`;
-    marker.bindPopup(popupHtml);
+    // ==========================================
+    // 🆕 ボトムシート連動: ピンがクリックされたらボトムシートを開く
+    // ==========================================
+    marker.on('click', () => {
+        openShopBottomSheet(mainShop, shopList, loc, locTotalVisits);
+    });
     
+    // ツールチップ（ホバー時の店名表示）は維持
     if (!mainShop.isMasterOnly && !mainShop.isGracePeriod && !mainShop.isClosed) {
         marker.bindTooltip(escapeHTML(mainShop.shopName), { permanent: true, direction: 'right', className: 'map-label', offset: [15, 0] });
     }
@@ -334,9 +289,95 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   if (autoFit && Object.keys(locationMap).length > 0) {
       viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
   }
+
+  // 🆕 地図の余白をタップした時にボトムシートを閉じる処理
+  if (!viewMap.hasSheetCloseEvent) {
+      viewMap.on('click', () => { closeBottomSheet(); });
+      viewMap.hasSheetCloseEvent = true;
+  }
 }
 
-// 👑 🆕 管理者バックドア：店舗のローカル/チェーン状態を切り替える
+// ==========================================
+// 🆕 ボトムシートの制御関数
+// ==========================================
+
+function closeBottomSheet() {
+    const sheet = document.getElementById('shopBottomSheet');
+    if (sheet) sheet.classList.remove('active');
+}
+
+function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
+    const sheet = document.getElementById('shopBottomSheet');
+    const content = document.getElementById('bottomSheetContent');
+    
+    // ここからボトムシート内に表示するHTML（器）を組み立てる
+    let html = `<div style="text-align:center;">`;
+    html += `<h2 style="margin: 0 0 5px 0; color:#2c3e50; font-size: 1.4rem;">${escapeHTML(mainShop.shopName)}</h2>`;
+    
+    let servicesHtml = '<div style="margin: 8px 0 15px 0; font-size: 0.9rem; color: #7f8c8d;">✨ 対応: ';
+    if (mainShop.hasDining) servicesHtml += '☕️店内 ';
+    if (mainShop.hasTakeout) servicesHtml += '🥡テイクアウト ';
+    if (mainShop.hasGoods) servicesHtml += '🛍️豆・グッズ ';
+    if (!mainShop.hasDining && !mainShop.hasTakeout && !mainShop.hasGoods) servicesHtml += '🏳️ 未確認';
+    servicesHtml += '</div>';
+    html += servicesHtml;
+
+    // 歴代店舗の表示
+    if (shopList.length > 1) {
+        html += `<div style="margin: 10px 0; padding: 12px; background: rgba(244,244,249,0.7); border-radius: 12px; font-size: 0.85rem; text-align: left;">`;
+        html += `<p style="margin: 0 0 8px 0; font-weight: bold; color: #7f8c8d;">🏢 歴代・併設の店舗</p>`;
+        shopList.forEach(s => {
+            let badge = s.isClosed ? '<span style="color:#a67c52;">[🎞️思い出]</span>' : (s.isGracePeriod ? '<span style="color:#f39c12;">[👻休業中]</span>' : '<span style="color:#27ae60;">[☕️現存]</span>');
+            html += `<div style="margin-bottom: 6px;">${badge} ${escapeHTML(s.shopName)}</div>`;
+        });
+        html += `</div>`;
+    }
+
+    // ステータス表示
+    let statusText = ''; let actionBtn = '';
+    if (mainShop.isClosed) { statusText = '<span style="color:#a67c52; font-size:1.1rem;">🎞️ 記憶に残る思い出の地</span>'; }
+    else if (mainShop.isGracePeriod) {
+        statusText = '<span style="color:#e74c3c;">🚨 閉店・移転の報告あり</span>';
+        actionBtn = `<div style="margin-top:15px;"><button onclick="cancelCloseReport(${mainShop.closedDiaryId})" style="background:#e74c3c; width:100%; border:none; color:white; padding:12px; border-radius:8px; font-weight:bold; cursor:pointer;">誤報を取り消す</button></div>`;
+    } else {
+        if (mainShop.isMasterOnly) statusText = '🏳️ 未開拓（マスタ店舗）';
+        else if (locTotalVisits > 0) statusText = `👣 累計訪問回数: ${locTotalVisits}回`;
+        else if (mainShop.isDraftOnly) statusText = '📦 未整理の写真';
+        else statusText = '💭 行きたいお店に登録中';
+        
+        actionBtn = `<div style="margin-top:15px; border-top:1px solid rgba(0,0,0,0.1); padding-top:15px;"><a href="#" onclick="reportClosed('${mainShop.shopId || mainShop.shopName}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng}); return false;" style="color:#95a5a6; font-size:0.85rem; text-decoration:none;">🚫 閉店を報告する</a></div>`;
+    }
+    html += `<p style="margin: 10px 0; font-weight:bold; color:#34495e;">${statusText}</p>`;
+    
+    // 【次フェーズ用】ここにアナリティクス用のプレースホルダーを準備
+    html += `<div id="shopAnalyticsContainer" style="margin-top: 15px; text-align: left;">
+                </div>`;
+
+    html += actionBtn;
+
+    // 👑 管理者(Admin)用バックドアUI
+    if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin' && mainShop.shopId && mainShop.shopId.startsWith('node/')) {
+        const currentIsLocal = mainShop.isLocal !== 0; 
+        const toggleVal = currentIsLocal ? 0 : 1;
+        const toggleText = currentIsLocal ? '🚫 チェーン非表示化' : '✅ ローカル復活';
+        const toggleColor = currentIsLocal ? '#e74c3c' : '#27ae60';
+        
+        html += `<div style="margin-top:20px; padding: 15px; background: rgba(252,236,235,0.8); border-radius: 12px; border: 1px solid #f5b7b1;">
+            <p style="margin:0 0 10px 0; font-size:0.85rem; color:#c0392b; font-weight:bold;">👑 管理者メニュー</p>
+            <button onclick="toggleLocalStatus('${mainShop.shopId}', ${toggleVal})" style="background:${toggleColor}; width:100%; border:none; color:white; padding:12px; border-radius:8px; font-weight:bold; cursor:pointer;">${toggleText}</button>
+        </div>`;
+    }
+
+    html += `</div>`;
+    
+    // DOM更新とシートのスライドアップアニメーション実行
+    content.innerHTML = html;
+    sheet.classList.add('active');
+}
+
+// ==========================================
+// 👑 管理者バックドア：店舗のローカル/チェーン状態を切り替える
+// ==========================================
 window.toggleLocalStatus = async function(shopId, isLocal) {
     if (!confirm(`この店舗を「${isLocal === 1 ? 'ローカル店として表示' : 'チェーン店として非表示'}」に変更しますか？\n(一般ユーザーのマップから消去されます)`)) return;
     
@@ -347,6 +388,7 @@ window.toggleLocalStatus = async function(shopId, isLocal) {
         // マスタデータを再取得してマップを再描画
         await fetchMasterShopsApi(); 
         updateViewMarkers(globalDiaries, false); 
+        closeBottomSheet(); // 切り替え後にシートを閉じる
     } else {
         alert("エラー: " + result.error);
     }

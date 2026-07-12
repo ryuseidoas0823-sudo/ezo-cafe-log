@@ -37,7 +37,7 @@ async function checkAuthorization(request, env, requiredRoles = []) {
     }
 
     // 4. ロール（権限）の検証
-    // ★ 変更点: 管理者(admin)は特権として無条件で全操作を通過できるようにする
+    // 管理者(admin)は特権として無条件で全操作を通過できるようにする
     if (requiredRoles.length > 0 && !requiredRoles.includes(user.role) && user.role !== "admin") {
       return { authorized: false, status: 403, error: `Forbidden: この操作には ${requiredRoles.join(" または ")} 権限が必要です。` };
     }
@@ -75,7 +75,7 @@ export default {
         const id = url.searchParams.get("id");
         if (!id) throw new Error("IDが指定されていません");
         
-        // ★ 変更点: 管理者は全件削除可能、一般ユーザーは自分のUUIDに紐づくデータのみ削除可能に制限
+        // 管理者は全件削除可能、一般ユーザーは自分のUUIDに紐づくデータのみ削除可能に制限
         if (auth.user.role === "admin") {
           await env.DB.prepare("DELETE FROM diaries WHERE id = ?").bind(id).run();
         } else {
@@ -92,12 +92,14 @@ export default {
     // 📥 データの取得 (GETリクエスト)
     // ==========================================
     if (request.method === "GET") {
+      // ユーザー自身の権限情報を取得するためのエンドポイント
       if (action === "get_me") {
         const auth = await checkAuthorization(request, env, []); 
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
         return new Response(JSON.stringify(auth.user), { headers: corsHeaders });
       }
 
+      // データの読み込みは全ユーザーに一旦許可
       const auth = await checkAuthorization(request, env, ["free", "premium", "business"]);
       if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -111,11 +113,11 @@ export default {
         } else if (action === "get_all_master") {
           // 🗺️ マップ描画用のマスタ全件取得
           if (auth.user.role === "admin") {
-            // ★ 管理者(Admin)は、非表示(is_local=0)のチェーン店も含めて全件見れる
+            // 管理者(Admin)は、非表示(is_local=0)のチェーン店も含めて全件見れる
             const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude, is_local FROM shops_master").all();
             return new Response(JSON.stringify(results), { headers: corsHeaders });
           } else {
-            // ★ 一般ユーザー(Free/Premium)には、ローカル店(is_local=1)のみを返却してデータ量を削減
+            // 一般ユーザー(Free/Premium)には、ローカル店(is_local=1)のみを返却してデータ量を削減
             const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE is_local = 1").all();
             return new Response(JSON.stringify(results), { headers: corsHeaders });
           }
@@ -137,10 +139,7 @@ export default {
       try {
         const data = await request.json();
         
-        let uuidForAuth = request.headers.get("X-Ezo-User-UUID") || data.userUuid;
-        request.headers.set("X-Ezo-User-UUID", uuidForAuth);
-        
-        // 👑 🆕 管理者バックドア用アクション（チェーン店非表示切替）
+        // 👑 管理者バックドア用アクション（チェーン店非表示切替）
         if (data.action === "toggle_local") {
             const auth = await checkAuthorization(request, env, ["admin"]); // 管理者のみ許可
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -259,7 +258,7 @@ export default {
         const visitedAt = data.visitedAt || createdSystemAt; 
 
         if (data.id) {
-          // 変更点: 自分自身のデータのみ上書き可能にする安全装置（UPDATE文に user_uuid = ? を追加）
+          // 自分自身のデータのみ上書き可能にする安全装置（UPDATE文に user_uuid = ? を追加）
           if (targetBase64) {
             await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ? WHERE id = ? AND user_uuid = ?`)
               .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, data.id, userUuid).run();
