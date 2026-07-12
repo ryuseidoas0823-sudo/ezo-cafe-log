@@ -104,6 +104,51 @@ export default {
       if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
       try {
+// 👑 🆕 B2B用: 店舗全体の客層アナリティクス集計
+        if (action === "get_shop_analytics") {
+          const auth = await checkAuthorization(request, env, ["admin", "business"]);
+          if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
+
+          const shopId = url.searchParams.get("shop_id");
+          const shopName = url.searchParams.get("shop_name");
+
+          let query = "SELECT user_gender, user_age, tags FROM diaries WHERE ";
+          let params = [];
+          if (shopId && shopId !== 'null') {
+             query += "shop_id = ?"; params.push(shopId);
+          } else {
+             query += "shop_name = ?"; params.push(shopName);
+          }
+
+          const { results } = await env.DB.prepare(query).bind(...params).all();
+          
+          // サーバー側でデータを構造化して集計（通信量削減）
+          let total = results.length;
+          let genders = {};
+          let ages = {};
+          let tagsCount = {};
+
+          results.forEach(r => {
+              const g = r.user_gender || '未設定';
+              const a = r.user_age || '未設定';
+              genders[g] = (genders[g] || 0) + 1;
+              ages[a] = (ages[a] || 0) + 1;
+              
+              if (r.tags) {
+                  r.tags.split(',').forEach(t => {
+                      let cleanTag = t.trim();
+                      if (cleanTag && !cleanTag.includes('店内') && !cleanTag.includes('テイクアウト') && !cleanTag.includes('グッズ')) {
+                          tagsCount[cleanTag] = (tagsCount[cleanTag] || 0) + 1;
+                      }
+                  });
+              }
+          });
+
+          // タグを出現回数順にソートして上位10件を抽出
+          const topTags = Object.entries(tagsCount).sort((a,b) => b[1]-a[1]).slice(0, 10);
+          return new Response(JSON.stringify({ total, genders, ages, topTags }), { headers: corsHeaders });
+        }
+
         if (action === "search_master") {
           // サジェスト検索は、ユーザーの利便性（自由な記録）のため全件から検索可能にする
           const query = url.searchParams.get("query") || "";

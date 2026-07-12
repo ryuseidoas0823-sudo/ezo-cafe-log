@@ -121,3 +121,22 @@ async function toggleLocalStatusApi(shopId, isLocal) {
     return { success: false, error: "通信に失敗しました" };
   }
 }
+
+// 🆕 👑 B2B用：店舗全体の客層アナリティクスを取得する
+async function fetchShopAnalyticsApi(shopId, shopName) {
+  try {
+    const params = new URLSearchParams({ action: "get_shop_analytics" });
+    if (shopId) params.append("shop_id", shopId);
+    if (shopName) params.append("shop_name", shopName);
+    
+    const response = await fetch(`${API_URL}?${params.toString()}`, {
+      method: "GET",
+      headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    return data.error ? null : data;
+  } catch (error) {
+    console.error("店舗アナリティクス取得エラー:", error);
+    return null;
+  }
+}

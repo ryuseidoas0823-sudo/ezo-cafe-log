@@ -437,3 +437,16 @@ window.toggleLocalStatus = async function(shopId, isLocal) {
     }
     document.body.style.cursor = 'default';
 };
+
+// 👑 🆕 Business/Admin専用: 店舗全体の客層アナリティクスUI
+    if (typeof currentUser !== 'undefined' && currentUser && (currentUser.role === 'admin' || currentUser.role === 'business')) {
+        const safeShopId = mainShop.shopId ? `'${mainShop.shopId}'` : 'null';
+        const safeShopName = `'${mainShop.shopName.replace(/'/g, "\\'")}'`;
+        
+        html += `<div style="margin-top:20px; padding: 15px; background: rgba(41, 128, 185, 0.05); border-radius: 12px; border: 1px solid rgba(41, 128, 185, 0.2); text-align: left;">
+            <p style="margin:0 0 10px 0; font-size:0.85rem; color:#2980b9; font-weight:bold;">🏢 店舗全体アナリティクス (B2B)</p>
+            <div id="b2b-analytics-container-${mainShop.shopId || 'manual'}">
+                <button onclick="loadShopAnalytics(this, ${safeShopId}, ${safeShopName})" style="background: #2980b9; width:100%; border:none; color:white; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">📊 顧客データと客層を集計する</button>
+            </div>
+        </div>`;
+    }
