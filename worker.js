@@ -92,27 +92,36 @@ export default {
     // 📥 データの取得 (GETリクエスト)
     // ==========================================
     if (request.method === "GET") {
-      // 🆕 ユーザー自身の権限情報を取得するためのエンドポイント
       if (action === "get_me") {
         const auth = await checkAuthorization(request, env, []); 
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
         return new Response(JSON.stringify(auth.user), { headers: corsHeaders });
       }
 
-      // 🔒 データの読み込みは全ユーザーに一旦許可
       const auth = await checkAuthorization(request, env, ["free", "premium", "business"]);
       if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
       try {
         if (action === "search_master") {
+          // サジェスト検索は、ユーザーの利便性（自由な記録）のため全件から検索可能にする
           const query = url.searchParams.get("query") || "";
           const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE shop_name LIKE ? LIMIT 10").bind(`%${query}%`).all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
+
         } else if (action === "get_all_master") {
-          const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master").all();
-          return new Response(JSON.stringify(results), { headers: corsHeaders });
+          // 🗺️ マップ描画用のマスタ全件取得
+          if (auth.user.role === "admin") {
+            // ★ 管理者(Admin)は、非表示(is_local=0)のチェーン店も含めて全件見れる
+            const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude, is_local FROM shops_master").all();
+            return new Response(JSON.stringify(results), { headers: corsHeaders });
+          } else {
+            // ★ 一般ユーザー(Free/Premium)には、ローカル店(is_local=1)のみを返却してデータ量を削減
+            const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE is_local = 1").all();
+            return new Response(JSON.stringify(results), { headers: corsHeaders });
+          }
+
         } else {
-          // ※ 今後「自分の日記のみ表示」等の絞り込み実装予定。現在は全件返す仕様
+          // 日記データの取得
           const { results } = await env.DB.prepare("SELECT * FROM diaries ORDER BY visited_at DESC, id DESC").all();
           return new Response(JSON.stringify(results), { headers: corsHeaders });
         }
