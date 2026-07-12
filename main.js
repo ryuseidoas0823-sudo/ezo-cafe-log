@@ -1,17 +1,16 @@
 // ==========================================
-// 📱 main.js (UI制御・イベント管理)
+// 📱 main.js (UI制御・イベント管理 - ゴーストピン対応版)
 // ==========================================
 let globalDiaries = []; 
 let editingDiaryId = null;
 let currentBase64 = null;
-window.currentUser = null; // 👑 変数のスコープを確実にグローバル化
+window.currentUser = null; 
 
 document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
   initUserUuid(); 
   
-  // 👑 起動時に自分の権限情報を取得して window オブジェクトに保持
   window.currentUser = await fetchMe(); 
   
   await Promise.all([
@@ -62,8 +61,8 @@ function loadSettings() {
 }
 
 function saveSettings() {
-  const g = document.getElementById('settingGender').value;
-  const a = document.getElementById('settingAge').value;
+  const g = document.getElementById('document.getElementById') ? document.getElementById('settingGender').value : "";
+  const a = document.getElementById('settingAge') ? document.getElementById('settingAge').value : "";
   if (!g || !a) { alert("性別と年代を両方選択してください。"); return; }
   localStorage.setItem('ezo_gender', g);
   localStorage.setItem('ezo_age', a);
@@ -205,7 +204,7 @@ document.getElementById('imageInputBulk').addEventListener('change', async (e) =
   }
 
   const bulkStatusEl = document.getElementById('bulkStatus');
-  e.target.disabled = true; // 多重動作防止
+  e.target.disabled = true; 
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -222,7 +221,8 @@ document.getElementById('imageInputBulk').addEventListener('change', async (e) =
       imageBase64: base64, lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
       userGender: localStorage.getItem('ezo_gender') || "未設定",
       userAge: localStorage.getItem('ezo_age') || "未設定",
-      userUuid: localStorage.getItem('ezo_user_uuid')
+      userUuid: localStorage.getItem('ezo_user_uuid'),
+      isPublic: 0 // 一括ストック時は安全のため強制非公開
     };
     await saveDiaryApi(payload);
   }
@@ -329,6 +329,9 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   if (document.getElementById('isBookmark') && document.getElementById('isBookmark').checked) finalStatusIcon = "💭";
   if (document.getElementById('isDraft') && document.getElementById('isDraft').checked) finalStatusIcon = "📦";
 
+  // 👻 🆕 公開フラグの数値を抽出 (チェック有なら1, 無なら0)
+  const isPublicVal = document.getElementById('isPublicCheckbox') && document.getElementById('isPublicCheckbox').checked ? 1 : 0;
+
   const payload = {
     id: editingDiaryId,
     shopId: document.getElementById('shopId') ? document.getElementById('shopId').value : null,
@@ -342,7 +345,8 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     weatherIcon: finalStatusIcon,
     userGender: localStorage.getItem('ezo_gender') || "未設定",
     userAge: localStorage.getItem('ezo_age') || "未設定",
-    userUuid: localStorage.getItem('ezo_user_uuid')
+    userUuid: localStorage.getItem('ezo_user_uuid'),
+    isPublic: isPublicVal // 👻 連携
   };
 
   const result = await saveDiaryApi(payload); 
@@ -488,6 +492,11 @@ function editDiary(id) {
     if (document.getElementById('isBookmark')) document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
     if (document.getElementById('isDraft')) document.getElementById('isDraft').checked = false; 
 
+    // 👻 🆕 編集時にチェックボックスの公開状態を復元
+    if (document.getElementById('isPublicCheckbox')) {
+        document.getElementById('isPublicCheckbox').checked = (diary.is_public === 1);
+    }
+
     if (diary.weather_icon === "💭" || diary.weather_icon === "📦" || diary.weather_icon === "🚫") {
         if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
     } else if (diary.weather_icon) {
@@ -604,7 +613,8 @@ window.reportClosed = async function(shopId, shopName, lat, lng) {
         id: null, shopId: shopId && shopId !== 'null' ? shopId : null, shopName: shopName, comment: "",
         visitedAt: new Date().toISOString().split('T')[0], tags: "", imageBase64: null, lat: lat, lng: lng, temperature: null, weatherIcon: "🚫",
         userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
-        userUuid: localStorage.getItem('ezo_user_uuid')
+        userUuid: localStorage.getItem('ezo_user_uuid'),
+        isPublic: 0
     };
     await saveDiaryApi(payload);
     await fetchDiaries(); 
@@ -650,9 +660,6 @@ if (mapSearchInput) {
     });
 }
 
-// ==========================================
-// 👑 開発用：管理者昇格アクション
-// ==========================================
 window.upgradeToAdmin = async function() {
     if(!confirm("あなたのアカウントを管理者(Admin)に昇格させますか？")) return;
     const res = await upgradeToAdminApi();
