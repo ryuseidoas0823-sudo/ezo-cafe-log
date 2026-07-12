@@ -4,14 +4,13 @@
 let globalDiaries = []; 
 let editingDiaryId = null;
 let currentBase64 = null;
-let currentUser = null; // 👑 🆕 ユーザー権限の保持用
+let currentUser = null; 
 
 document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
   initUserUuid(); 
   
-  // 👑 🆕 初期化時に自分の権限情報を取得して保持
   currentUser = await fetchMe(); 
   
   await Promise.all([
@@ -21,7 +20,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   document.getElementById('tagFilter').addEventListener('change', filterDiaries);
 
-  // 🆕 マップのタグフィルターが変更されたら、ズームを維持したままピンを再描画！
   const mapTagFilterEl = document.getElementById('mapTagFilter');
   if (mapTagFilterEl) {
       mapTagFilterEl.addEventListener('change', () => {
@@ -153,90 +151,91 @@ async function extractExifAndWeather(file) {
   return { lat, lng, visitedAt, weatherIcon, temp };
 }
 
-// 📸 写真選択アクション
-document.getElementById('imageInput').addEventListener('change', async (e) => {
+// 📝 項目1: 通常日記用の写真選択アクション (1枚のみ)
+document.getElementById('imageInputSingle').addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files || files.length === 0) return;
 
+  const file = files[0];
   const statusEl = document.getElementById('gpsStatus');
   const dynamicForm = document.getElementById('dynamicFormFields');
 
-  if (files.length === 1) {
-    const file = files[0];
-    if(statusEl) {
-      statusEl.innerText = "📸 写真を解析＆最適化中...";
-      statusEl.style.color = "#3498db";
+  if(statusEl) {
+    statusEl.innerText = "📸 写真を解析＆最適化中...";
+    statusEl.style.color = "#3498db";
+  }
+
+  currentBase64 = await resizeImageAsync(file);
+  const imgPreview = document.getElementById('imagePreview');
+  imgPreview.src = currentBase64;
+  imgPreview.style.display = 'block';
+
+  const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
+  
+  document.getElementById('visitedAt').value = visitedAt;
+  if (weatherIcon !== "❓") {
+    const weatherSelect = document.getElementById('weatherSelect');
+    if (weatherSelect) weatherSelect.value = weatherIcon;
+  }
+  document.getElementById('temperature').value = temp !== null ? temp : "";
+  document.getElementById('latitude').value = lat;
+  document.getElementById('longitude').value = lng;
+
+  if (dynamicForm) dynamicForm.classList.add('show');
+
+  if(statusEl) {
+    if (lat !== null) {
+      statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
+      statusEl.style.color = "#27ae60";
+    } else {
+      statusEl.innerText = "ℹ️ 写真に位置情報がないため、天気の自動取得をスキップしました。";
+      statusEl.style.color = "#f39c12";
+    }
+  }
+});
+
+// 📦 項目2: 写真だけまとめて一括ストックのアクション (複数枚)
+document.getElementById('imageInputBulk').addEventListener('change', async (e) => {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+
+  if (!confirm(`${files.length}枚の写真が選択されました。\nすべて「未整理(📦)」として一括ストックしますか？`)) {
+    e.target.value = ''; return;
+  }
+
+  const bulkStatusEl = document.getElementById('bulkStatus');
+  e.target.disabled = true; // 多重動作防止
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if(bulkStatusEl) {
+      bulkStatusEl.innerText = `📦 一括登録中... (${i + 1} / ${files.length} 枚目)`;
+      bulkStatusEl.style.color = "#8e44ad";
     }
 
-    currentBase64 = await resizeImageAsync(file);
-    const imgPreview = document.getElementById('imagePreview');
-    imgPreview.src = currentBase64;
-    imgPreview.style.display = 'block';
-
+    const base64 = await resizeImageAsync(file);
     const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
-    
-    document.getElementById('visitedAt').value = visitedAt;
-    if (weatherIcon !== "❓") {
-      const weatherSelect = document.getElementById('weatherSelect');
-      if (weatherSelect) weatherSelect.value = weatherIcon;
-    }
-    document.getElementById('temperature').value = temp !== null ? temp : "";
-    document.getElementById('latitude').value = lat;
-    document.getElementById('longitude').value = lng;
 
-    if (dynamicForm) dynamicForm.classList.add('show');
+    const payload = {
+      id: null, shopId: null, shopName: "未整理の写真", comment: "", visitedAt: visitedAt, tags: "", 
+      imageBase64: base64, lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
+      userGender: localStorage.getItem('ezo_gender') || "未設定",
+      userAge: localStorage.getItem('ezo_age') || "未設定",
+      userUuid: localStorage.getItem('ezo_user_uuid')
+    };
+    await saveDiaryApi(payload);
+  }
 
-    if(statusEl) {
-      if (lat !== null) {
-        statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
-        statusEl.style.color = "#27ae60";
-      } else {
-        statusEl.innerText = "ℹ️ 写真に位置情報がないため、天気の自動取得をスキップしました。";
-        statusEl.style.color = "#f39c12";
-      }
-    }
-  } 
-  else {
-    if (!confirm(`${files.length}枚の写真が選択されました。\nすべて「未整理(📦)」として一括ストックしますか？`)) {
-      e.target.value = ''; return;
-    }
+  if(bulkStatusEl) { bulkStatusEl.innerText = "✅ 全ての一括登録が完了しました！"; bulkStatusEl.style.color = "#27ae60"; }
 
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.disabled = true;
+  e.target.value = '';
+  e.target.disabled = false;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if(statusEl) {
-        statusEl.innerText = `📦 一括登録中... (${i + 1} / ${files.length} 枚目)`;
-        statusEl.style.color = "#8e44ad";
-      }
-
-      const base64 = await resizeImageAsync(file);
-      const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
-
-      const payload = {
-        id: null, shopId: null, shopName: "未整理の写真", comment: "", visitedAt: visitedAt, tags: "", 
-        imageBase64: base64, lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
-        userGender: localStorage.getItem('ezo_gender') || "未設定",
-        userAge: localStorage.getItem('ezo_age') || "未設定",
-        userUuid: localStorage.getItem('ezo_user_uuid')
-      };
-      await saveDiaryApi(payload);
-    }
-
-    if(statusEl) { statusEl.innerText = "✅ 全ての一括登録が完了しました！"; statusEl.style.color = "#27ae60"; }
-
-    document.getElementById('recordForm').reset();
-    document.getElementById('imagePreview').style.display = 'none';
-    if (dynamicForm) dynamicForm.classList.remove('show'); 
-    currentBase64 = null;
-    resetDateToToday();
-    submitBtn.disabled = false;
-    e.target.value = '';
-
+  setTimeout(() => {
+    if (bulkStatusEl) bulkStatusEl.innerText = "";
     fetchDiaries();
     switchTab('history', document.querySelector('.bottom-nav .nav-item:nth-child(2)'));
-  }
+  }, 1200);
 });
 
 // ✍️ 写真なし記録ボタンのアクション
@@ -247,7 +246,7 @@ if (btnSkipPhoto) {
         const statusEl = document.getElementById('gpsStatus');
         
         currentBase64 = null;
-        document.getElementById('imageInput').value = '';
+        document.getElementById('imageInputSingle').value = '';
         document.getElementById('imagePreview').style.display = 'none';
         
         document.getElementById('latitude').value = "";
@@ -358,6 +357,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     
     alert(editingDiaryId ? "✨ 記録を更新しました！" : "✨ 記録が完了しました！");
     editingDiaryId = null; 
+    document.getElementById('submitBtn').innerHTML = "🚀 記録する";
     
     fetchDiaries();
     switchTab('history', document.querySelector('.bottom-nav .nav-item:nth-child(2)'));
@@ -367,7 +367,6 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   submitBtn.innerHTML = originalBtnText;
 });
 
-// 🎨 タイポグラフィカードの自動生成ジェネレーター（Canvas API）
 function generateTypographyBase64(shopName, tags, weatherIcon) {
     const canvas = document.createElement('canvas');
     canvas.width = 800;
@@ -379,25 +378,21 @@ function generateTypographyBase64(shopName, tags, weatherIcon) {
     const mainTag = manualTags.length > 0 ? manualTags[0] : (tagList[0] || "カフェ");
     const baseColor = getColorFromTag(mainTag);
 
-    // 背景塗りつぶし
     ctx.fillStyle = baseColor;
     ctx.fillRect(0, 0, 800, 450);
 
-    // エレガントなグラデーションのオーバーレイ
     const gradient = ctx.createLinearGradient(0, 0, 800, 450);
     gradient.addColorStop(0, 'rgba(255,255,255,0.25)');
     gradient.addColorStop(1, 'rgba(0,0,0,0.15)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 800, 450);
 
-    // 中央の透かし絵文字（ウォーターマーク）
     ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
     ctx.font = "200px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(weatherIcon && weatherIcon !== "❓" ? weatherIcon : "☕️", 400, 225);
 
-    // テキスト用の丸角背景ボックス
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     const rectX = 100, rectY = 125, rectW = 600, rectH = 200, r = 20;
     ctx.beginPath();
@@ -413,12 +408,10 @@ function generateTypographyBase64(shopName, tags, weatherIcon) {
     ctx.closePath();
     ctx.fill();
 
-    // 店舗名
     ctx.fillStyle = '#2c3e50';
     ctx.font = 'bold 36px sans-serif';
     ctx.fillText(shopName || '名前なし', 400, 200);
 
-    // タグ一覧（サブタイトル）
     ctx.fillStyle = '#7f8c8d';
     ctx.font = '22px sans-serif';
     const displayTags = manualTags.length > 0 ? manualTags.join(' / ') : '日常の記録';

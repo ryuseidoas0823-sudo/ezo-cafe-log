@@ -16,15 +16,16 @@
         <h1 style="position: relative; z-index: 10;">☕️ EzoCafe Log</h1>
 
         <div id="tab-record">
-            <div class="form-card">
+            <div class="form-card" style="margin-bottom: 25px;">
+                <h3 style="margin-top:0; color:#5d4037; font-size:1.1rem; border-bottom:2px solid #f8f5f2; padding-bottom:5px;">📝 カフェ日記を書く</h3>
                 <form id="recordForm">
                     
                     <div class="form-group" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px dashed #bdc3c7;">
-                        <label for="imageInput" style="color: #2980b9; font-weight: bold;">
-                            1. 写真を追加 📸<br>
-                            <span style="font-size: 0.8rem; color: #7f8c8d; font-weight: normal;">※複数枚を同時に選択すると、すべて「未整理」として一括ストックされます！</span>
+                        <label for="imageInputSingle" style="color: #2980b9; font-weight: bold; cursor: pointer;">
+                            📸 カフェの写真を1枚選ぶ<br>
+                            <span style="font-size: 0.8rem; color: #7f8c8d; font-weight: normal;">※写真から位置情報と天気を自動解析してフォームを展開します。</span>
                         </label>
-                        <input type="file" id="imageInput" accept="image/*" multiple>
+                        <input type="file" id="imageInputSingle" accept="image/*">
                         <img id="imagePreview" style="display: none;" alt="プレビュー">
 
                         <div style="margin-top: 15px; text-align: center; border-top: 1px dashed #ddd; padding-top: 10px;">
@@ -97,6 +98,18 @@
                     </div> 
                 </form>
             </div>
+
+            <div class="form-card">
+                <h3 style="margin-top:0; color:#5d4037; font-size:1.1rem; border-bottom:2px solid #f8f5f2; padding-bottom:5px;">📦 写真だけまとめてストック</h3>
+                <div class="form-group" style="background: #f4f0ec; padding: 15px; border-radius: 8px; border: 1px dashed #a1887f;">
+                    <label for="imageInputBulk" style="color: #8e44ad; font-weight: bold; cursor: pointer;">
+                        📸 写真を複数枚えらぶ（一括登録）<br>
+                        <span style="font-size: 0.8rem; color: #7f8c8d; font-weight: normal;">※選択された写真はすべて「📦未整理」の空日記として、バックグラウンドで一瞬で一括保存されます。</span>
+                    </label>
+                    <input type="file" id="imageInputBulk" accept="image/*" multiple>
+                    <p id="bulkStatus" style="font-size: 0.85em; color: #8e44ad; margin-top: 8px; font-weight: bold; text-align: center;"></p>
+                </div>
+            </div>
         </div>
 
         <div id="tab-history" class="hidden">
@@ -109,7 +122,6 @@
         </div>
 
         <div id="tab-map" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
-            
             <div id="mapView" style="flex-grow: 1; width: 100%; z-index: 1;"></div>
             
             <div class="floating-map-controls glass-effect">
@@ -135,8 +147,7 @@
 
             <div id="shopBottomSheet" class="bottom-sheet glass-effect">
                 <div class="bottom-sheet-handle"></div>
-                <div id="bottomSheetContent" class="bottom-sheet-content">
-                    </div>
+                <div id="bottomSheetContent" class="bottom-sheet-content"></div>
             </div>
         </div>
 
