@@ -91,3 +91,33 @@ async function deleteDiaryApi(id) {
     return { success: false, error: "通信エラーが発生しました。" };
   }
 }
+
+// 🆕 👑 自分のユーザー情報（権限）を取得する関数
+async function fetchMe() {
+  try {
+    const response = await fetch(`${API_URL}?action=get_me`, {
+      method: "GET",
+      headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    return data.error ? null : data;
+  } catch (error) {
+    console.error("ユーザー情報取得エラー:", error);
+    return null;
+  }
+}
+
+// 🆕 👑 管理者用：ローカル店フラグを切り替えるバックドア通信
+async function toggleLocalStatusApi(shopId, isLocal) {
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ action: "toggle_local", shopId: shopId, isLocal: isLocal })
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("ステータス更新エラー:", error);
+    return { success: false, error: "通信に失敗しました" };
+  }
+}

@@ -4,11 +4,15 @@
 let globalDiaries = []; 
 let editingDiaryId = null;
 let currentBase64 = null;
+let currentUser = null; // 👑 🆕 ユーザー権限の保持用
 
 document.addEventListener('DOMContentLoaded', async () => {
   resetDateToToday();
   loadSettings(); 
   initUserUuid(); 
+  
+  // 👑 🆕 初期化時に自分の権限情報を取得して保持
+  currentUser = await fetchMe(); 
   
   await Promise.all([
     fetchDiaries(),

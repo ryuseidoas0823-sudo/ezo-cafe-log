@@ -118,7 +118,8 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
         isMasterOnly: true, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: false,
         isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0,
         hasDining: false, hasTakeout: false, hasGoods: false,
-        allTagsSet: new Set() // 🆕 店舗が持つすべてのタグを記憶する箱
+        allTagsSet: new Set(),
+        isLocal: shop.is_local !== undefined ? shop.is_local : 1 // 👑 🆕 追加: ローカルフラグ
       };
     });
   }
@@ -148,7 +149,8 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
           isMasterOnly: false, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: isDraft,
           isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0,
           hasDining: false, hasTakeout: false, hasGoods: false,
-          allTagsSet: new Set()
+          allTagsSet: new Set(),
+          isLocal: 1 // 手動追加時は基本ローカル扱い
         };
         if (!isBookmark && !isDraft && !isClosedReport) totalValidVisits++;
       }
@@ -304,7 +306,22 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
     }
 
     popupHtml += `<p style="margin: 5px 0 0 0; font-size:0.85rem; color:#7f8c8d; font-weight:bold;">${statusText}</p>`;
-    popupHtml += actionBtn; popupHtml += `</div>`;
+    popupHtml += actionBtn; 
+
+    // 👑 🆕 管理者(Admin)用バックドアUI（チェーン店非表示ボタン）
+    if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin' && mainShop.shopId && mainShop.shopId.startsWith('node/')) {
+        const currentIsLocal = mainShop.isLocal !== 0; 
+        const toggleVal = currentIsLocal ? 0 : 1;
+        const toggleText = currentIsLocal ? '🚫 チェーン非表示化' : '✅ ローカル復活';
+        const toggleColor = currentIsLocal ? '#e74c3c' : '#27ae60';
+        
+        popupHtml += `<div style="margin-top:12px; padding: 10px; background: #fceceb; border-radius: 8px; border: 1px solid #f5b7b1;">
+            <p style="margin:0 0 8px 0; font-size:0.75rem; color:#c0392b; font-weight:bold;">👑 管理者バックドア</p>
+            <button onclick="toggleLocalStatus('${mainShop.shopId}', ${toggleVal})" style="background:${toggleColor}; width:100%; border:none; color:white; padding:8px; border-radius:5px; font-weight:bold; cursor:pointer; font-size: 0.8rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${toggleText}</button>
+        </div>`;
+    }
+
+    popupHtml += `</div>`;
     marker.bindPopup(popupHtml);
     
     if (!mainShop.isMasterOnly && !mainShop.isGracePeriod && !mainShop.isClosed) {
@@ -318,3 +335,20 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
       viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
   }
 }
+
+// 👑 🆕 管理者バックドア：店舗のローカル/チェーン状態を切り替える
+window.toggleLocalStatus = async function(shopId, isLocal) {
+    if (!confirm(`この店舗を「${isLocal === 1 ? 'ローカル店として表示' : 'チェーン店として非表示'}」に変更しますか？\n(一般ユーザーのマップから消去されます)`)) return;
+    
+    document.body.style.cursor = 'wait';
+    const result = await toggleLocalStatusApi(shopId, isLocal);
+    
+    if (result.success) {
+        // マスタデータを再取得してマップを再描画
+        await fetchMasterShopsApi(); 
+        updateViewMarkers(globalDiaries, false); 
+    } else {
+        alert("エラー: " + result.error);
+    }
+    document.body.style.cursor = 'default';
+};
