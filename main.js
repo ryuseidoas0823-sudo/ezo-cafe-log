@@ -1,5 +1,5 @@
 // ==========================================
-// 📱 main.js (UI制御・イベント管理 - `"null"`文字列クラッシュ防止版)
+// 📱 main.js (UI制御・イベント管理 - 自宅バレ防止アラート＆強力バリデーション版)
 // ==========================================
 let globalDiaries = []; 
 let editingDiaryId = null;
@@ -177,7 +177,6 @@ document.getElementById('imageInputSingle').addEventListener('change', async (e)
     if (weatherSelect) weatherSelect.value = weatherIcon;
   }
   
-  // 🛑 修正: nullの場合は必ず空文字をセットし、"null"という文字列化を防ぐ
   document.getElementById('temperature').value = temp !== null ? temp : "";
   document.getElementById('latitude').value = lat !== null ? lat : "";
   document.getElementById('longitude').value = lng !== null ? lng : "";
@@ -380,29 +379,59 @@ window.recordFromMap = function(shopId, shopName, lat, lng) {
 
 document.getElementById('recordForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  
+  const eatType = document.querySelector('input[name="eatType"]:checked').value;
+  let latVal = document.getElementById('latitude') ? document.getElementById('latitude').value : "";
+  let lngVal = document.getElementById('longitude') ? document.getElementById('longitude').value : "";
+  let locationSource = document.getElementById('locationSource') ? document.getElementById('locationSource').value : "";
+  const shopId = document.getElementById('shopId') ? document.getElementById('shopId').value : null;
+
+  // 🚨 【DXポカヨケ超強化】位置情報のチェックと、テイクアウト時のEXIFサイレント破棄に対する警告
+  if (eatType !== '🎪間借り・無店舗') {
+      
+      // 1. 位置情報が空の場合のガード
+      if (latVal === "" || lngVal === "" || latVal === "null" || lngVal === "null") {
+          alert("⚠️ 店舗の位置情報が設定されていません！\n新規店舗を登録する場合は、フォーム内の「📍 マップから手動で位置を指定する」ボタンから、お店の場所にピンを刺してください。");
+          const statusEl = document.getElementById('gpsStatus');
+          if (statusEl) {
+              statusEl.innerText = "❌ 位置情報が必須です。手動で指定してください。";
+              statusEl.style.color = "#e74c3c";
+          }
+          return; 
+      }
+      
+      // 2. 自宅バレ防止アラート（テイクアウト×写真EXIF の場合のサイレント破棄を対話型に変更）
+      if ((eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') && locationSource === 'exif') {
+          const confirmExif = confirm("⚠️ 自宅バレ防止アラート\n\nテイクアウトや物販の場合、ご自宅で撮影した写真の位置情報（EXIF）がそのままマップに登録されるのを防ぐため、通常はシステムが位置情報を破棄します。\n\nこの写真はお店で撮影したもので、マップに登録しても安全ですか？\n\n・「OK」: この位置でお店としてマップに登録する\n・「キャンセル」: 位置情報を破棄して履歴記録だけ残す");
+          
+          if (!confirmExif) {
+              // ユーザーが破棄を選んだ場合はNull化して進める（マップには乗らない）
+              document.getElementById('latitude').value = "";
+              document.getElementById('longitude').value = "";
+              latVal = ""; lngVal = "";
+          } else {
+              // OKした場合は locationSource を「手動確認済み(manual)」に書き換えて破棄ガードを安全に突破させる
+              document.getElementById('locationSource').value = 'manual';
+              locationSource = 'manual'; 
+          }
+      }
+  }
+
+  // 👇 以降は既存の正常な送信プロセス
   const submitBtn = document.getElementById('submitBtn');
   const originalBtnText = submitBtn.innerHTML;
   submitBtn.disabled = true;
   submitBtn.innerHTML = "🤖 通信中...";
 
-  const eatType = document.querySelector('input[name="eatType"]:checked').value;
   const userTags = document.getElementById('tags').value;
   const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;
 
-  // 🛑 修正: "null"という文字列が混入している場合は安全に null へ変換する
-  let latVal = document.getElementById('latitude') ? document.getElementById('latitude').value : "";
-  let lngVal = document.getElementById('longitude') ? document.getElementById('longitude').value : "";
-  
   let finalLat = (latVal === "" || latVal === "null") ? null : parseFloat(latVal);
   let finalLng = (lngVal === "" || lngVal === "null") ? null : parseFloat(lngVal);
 
-  const shopId = document.getElementById('shopId') ? document.getElementById('shopId').value : null;
-  const locationSource = document.getElementById('locationSource') ? document.getElementById('locationSource').value : "";
-  
   if (eatType === '🎪間借り・無店舗') {
       finalLat = null; finalLng = null;
   } else if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
-      // マスタ検索からでもなく、手動でピンを刺したわけでもない場合（写真EXIFのみの場合）は自宅バレ防止で破棄
       if (locationSource === 'exif' || (!shopId && locationSource !== 'manual')) {
           finalLat = null; finalLng = null;
       }
@@ -588,7 +617,6 @@ function editDiary(id) {
         if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
     }
 
-    // 🛑 修正: "null"文字列を排除
     document.getElementById('latitude').value = (diary.latitude !== null && diary.latitude !== "null") ? diary.latitude : "";
     document.getElementById('longitude').value = (diary.longitude !== null && diary.longitude !== "null") ? diary.longitude : "";
     document.getElementById('temperature').value = (diary.temperature !== null && diary.temperature !== "null") ? diary.temperature : "";
