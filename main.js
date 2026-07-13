@@ -1,5 +1,5 @@
 // ==========================================
-// 📱 main.js (UI制御・イベント管理 - 完全版)
+// 📱 main.js (UI制御・イベント管理 - 間借り・無店舗対応版)
 // ==========================================
 let globalDiaries = []; 
 let editingDiaryId = null;
@@ -60,7 +60,6 @@ function loadSettings() {
   if (a && document.getElementById('settingAge')) document.getElementById('settingAge').value = a;
 }
 
-// 🐛 修正: 前回のタイポ (document.getElementById) を修正
 function saveSettings() {
   const g = document.getElementById('settingGender') ? document.getElementById('settingGender').value : "";
   const a = document.getElementById('settingAge') ? document.getElementById('settingAge').value : "";
@@ -303,7 +302,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// 👑 🆕 マップのボトムシートから「このお店を記録する」ための直行関数
 window.recordFromMap = function(shopId, shopName, lat, lng) {
     switchTab('record', document.querySelector('.bottom-nav .nav-item:nth-child(1)'));
     document.getElementById('recordForm').reset();
@@ -346,8 +344,16 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
 
   let finalLat = document.getElementById('latitude') ? document.getElementById('latitude').value : null;
   let finalLng = document.getElementById('longitude') ? document.getElementById('longitude').value : null;
+  const shopId = document.getElementById('shopId') ? document.getElementById('shopId').value : null;
   
-  if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
+  // 🎪 🆕 間借りは常に位置情報を破棄（マップに出さない）
+  if (eatType === '🎪間借り・無店舗') {
+      finalLat = null; finalLng = null;
+      if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
+      if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
+  } 
+  // 🥡 🆕 テイクアウト・物販は、「店舗マスタ・マップからの登録ではない（shopIdがない）」場合のみ、自宅バレ防止のために破棄
+  else if ((eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') && !shopId) {
       finalLat = null; finalLng = null;
       if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
       if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
@@ -361,7 +367,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
 
   const payload = {
     id: editingDiaryId,
-    shopId: document.getElementById('shopId') ? document.getElementById('shopId').value : null,
+    shopId: shopId,
     shopName: document.getElementById('shopName').value,
     comment: document.getElementById('comment').value,
     visitedAt: document.getElementById('visitedAt').value,
@@ -406,7 +412,8 @@ function generateTypographyBase64(shopName, tags, weatherIcon) {
     const ctx = canvas.getContext('2d');
 
     const tagList = parseTags(tags);
-    const manualTags = tagList.filter(t => !t.startsWith('🤖') && !t.startsWith('🚨') && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ');
+    // 🎪 除外タグに「間借り」を追加
+    const manualTags = tagList.filter(t => !t.startsWith('🤖') && !t.startsWith('🚨') && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗');
     const mainTag = manualTags.length > 0 ? manualTags[0] : (tagList[0] || "カフェ");
     const baseColor = getColorFromTag(mainTag);
 
@@ -464,7 +471,8 @@ function renderDiariesList(diaries) {
 
     let tagsHTML = "";
     parseTags(diary.tags).forEach(tag => { 
-      if (!tag.startsWith("🤖") && !tag.startsWith("🚨")) {
+      // 🎪 除外タグに「間借り」を追加
+      if (!tag.startsWith("🤖") && !tag.startsWith("🚨") && tag !== '🎪間借り・無店舗') {
         tagsHTML += `<span class="tag-badge" style="background-color: ${getColorFromTag(tag)};">${escapeHTML(tag)}</span>`; 
       }
     });
@@ -537,15 +545,18 @@ function editDiary(id) {
     if (document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = "";
 
     const allTags = parseTags(diary.tags);
+    // 🎪 🆕 編集画面を開いた時に「間借り」を正しく復元する
     if (allTags.includes('🛍️豆・グッズ')) {
         document.querySelector('input[name="eatType"][value="🛍️豆・グッズ"]').checked = true;
     } else if (allTags.includes('🥡テイクアウト')) {
         document.querySelector('input[name="eatType"][value="🥡テイクアウト"]').checked = true;
+    } else if (allTags.includes('🎪間借り・無店舗')) {
+        document.querySelector('input[name="eatType"][value="🎪間借り・無店舗"]').checked = true;
     } else {
         document.querySelector('input[name="eatType"][value="☕️店内"]').checked = true;
     }
 
-    const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ').join(', ');
+    const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗').join(', ');
     document.getElementById('tags').value = manualTags;
 
     const imgPreview = document.getElementById('imagePreview');
@@ -585,7 +596,8 @@ function renderTagClouds() {
   const allTags = new Set();
   
   globalDiaries.forEach(d => parseTags(d.tags).forEach(t => {
-    if (!t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ') {
+    // 🎪 除外タグに「間借り」を追加
+    if (!t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗') {
         allTags.add(t);
     }
   }));

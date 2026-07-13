@@ -1,5 +1,5 @@
 // ==========================================
-// 🗺️ map.js (地図関係の処理まとめ - ゴーストピン統合版)
+// 🗺️ map.js (地図関係の処理まとめ - 間借り・無店舗対応版)
 // ==========================================
 const HOME_LAT = 43.0600;
 const HOME_LNG = 141.3500;
@@ -111,7 +111,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
         shopId: shop.shop_id, shopName: shop.shop_name,
         isMasterOnly: true, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: false,
         isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null,
-        hasDining: false, hasTakeout: false, hasGoods: false,
+        hasDining: false, hasTakeout: false, hasGoods: false, hasEvent: false, // 🎪 追加
         allTagsSet: new Set(),
         isLocal: shop.is_local !== undefined ? shop.is_local : 1
       };
@@ -141,7 +141,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
           shopId: diary.shop_id || null, shopName: isDraft ? '📦 未整理の写真' : s,
           isMasterOnly: false, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: isDraft,
           isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null,
-          hasDining: false, hasTakeout: false, hasGoods: false,
+          hasDining: false, hasTakeout: false, hasGoods: false, hasEvent: false, // 🎪 追加
           allTagsSet: new Set(),
           isLocal: 1
         };
@@ -174,9 +174,11 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
           shop.latestDiaryId = diary.id;
       }
       
+      // 🎪 判定に追加
       if (allTags.includes('☕️店内')) shop.hasDining = true;
       if (allTags.includes('🥡テイクアウト')) shop.hasTakeout = true;
       if (allTags.includes('🛍️豆・グッズ')) shop.hasGoods = true;
+      if (allTags.includes('🎪間借り・無店舗')) shop.hasEvent = true; 
 
       if (allTags.some(t => t.includes('テイクアウト廃止') || t.includes('テイクアウト終了') || t.includes('テイクアウトなし'))) shop.hasTakeout = false;
       if (allTags.some(t => t.includes('物販終了') || t.includes('豆販売終了'))) shop.hasGoods = false;
@@ -190,7 +192,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
       }
 
       if (!isBookmark && !isDraft && shop.mainTag === "") {
-          const aiOrManualTag = allTags.find(t => !t.startsWith('🚨') && !t.includes('🥡') && !t.includes('☕️店内') && !t.includes('🛍️'));
+          const aiOrManualTag = allTags.find(t => !t.startsWith('🚨') && !t.includes('🥡') && !t.includes('☕️店内') && !t.includes('🛍️') && !t.includes('🎪'));
           shop.mainTag = aiOrManualTag || "";
       }
     }
@@ -214,6 +216,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
             if (s.hasDining) existing.hasDining = true;
             if (s.hasTakeout) existing.hasTakeout = true;
             if (s.hasGoods) existing.hasGoods = true;
+            if (s.hasEvent) existing.hasEvent = true; // 🎪 追加
             s.allTagsSet.forEach(t => existing.allTagsSet.add(t));
             if (!existing.shopId && s.shopId) existing.shopId = s.shopId;
             existing.isClosed = existing.isClosed || s.isClosed;
@@ -296,11 +299,9 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
       viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
   }
 
-  // ゴーストピン描画
   if (window.currentUser && (window.currentUser.role === 'premium' || window.currentUser.role === 'admin')) {
       const drawGhostPins = (ghosts) => {
           ghosts.forEach(ghost => {
-              // 🛑 修正: 座標がないデータ（写真なしやテイクアウト等で登録されたもの）はスキップしてエラーを防ぐ
               if (!ghost.lat || !ghost.lng) return;
 
               if (selectedMoodTag !== "") {
@@ -358,11 +359,13 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     let html = `<div style="text-align:center;">`;
     html += `<h2 style="margin: 0 0 5px 0; color:#2c3e50; font-size: 1.4rem;">${escapeHTML(mainShop.shopName)}</h2>`;
     
+    // 🎪 🆕 ボトムシートの対応サービスに「無店舗」を追加表示
     let servicesHtml = '<div style="margin: 8px 0 15px 0; font-size: 0.9rem; color: #7f8c8d;">✨ 対応: ';
     if (mainShop.hasDining) servicesHtml += '☕️店内 ';
     if (mainShop.hasTakeout) servicesHtml += '🥡テイクアウト ';
     if (mainShop.hasGoods) servicesHtml += '🛍️豆・グッズ ';
-    if (!mainShop.hasDining && !mainShop.hasTakeout && !mainShop.hasGoods) servicesHtml += '🏳️ 未確認';
+    if (mainShop.hasEvent) servicesHtml += '🎪無店舗/イベント ';
+    if (!mainShop.hasDining && !mainShop.hasTakeout && !mainShop.hasGoods && !mainShop.hasEvent) servicesHtml += '🏳️ 未確認';
     servicesHtml += '</div>';
     html += servicesHtml;
 
@@ -426,7 +429,8 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         const tagsCount = {};
         shopDiaries.forEach(d => {
             parseTags(d.tags).forEach(t => {
-                if (!t.startsWith("🤖") && !t.startsWith("🚨") && t !== "☕️店内" && t !== "🥡テイクアウト" && t !== "🛍️豆・グッズ") {
+                // 🎪 アナリティクス用のAIタグ集計からも間借りタグを除外
+                if (!t.startsWith("🤖") && !t.startsWith("🚨") && t !== "☕️店内" && t !== "🥡テイクアウト" && t !== "🛍️豆・グッズ" && t !== "🎪間借り・無店舗") {
                     tagsCount[t] = (tagsCount[t] || 0) + 1;
                 }
             });
