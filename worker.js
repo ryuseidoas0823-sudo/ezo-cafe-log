@@ -95,8 +95,8 @@ export default {
           const auth = await checkAuthorization(request, env, ["premium", "admin"]);
           if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
-          // 自分以外の、公開許可が出ている(is_public = 1)日記を取得
-          const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude, visited_at, tags FROM diaries WHERE is_public = 1 AND user_uuid != ?").bind(auth.user.userUuid).all();
+          // 🛑 修正: 座標が存在する（IS NOT NULL）データのみを抽出するよう堅牢化
+          const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude, visited_at, tags FROM diaries WHERE is_public = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL AND user_uuid != ?").bind(auth.user.userUuid).all();
 
           // 🎭 文学的マスキング処理（時間の抽象化）
           const getAbstractTime = (dateStr) => {
@@ -122,7 +122,6 @@ export default {
           };
 
           const ghosts = results.map(r => {
-              // ユーザーの手動入力テキストは完全に削ぎ落とし、AIタグ（🤖）だけを残す
               const aiTags = r.tags ? r.tags.split(',').map(t => t.trim()).filter(t => t.startsWith("🤖")) : [];
               return {
                   shopId: r.shop_id,
@@ -214,16 +213,13 @@ export default {
       try {
         const data = await request.json();
         
-        // 👑 開発用特権: 自身をAdminに昇格するAPI
         if (data.action === "upgrade_admin") {
             const auth = await checkAuthorization(request, env, []); 
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
-            
             await env.DB.prepare("UPDATE users SET role = 'admin' WHERE user_uuid = ?").bind(auth.user.userUuid).run();
             return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
         }
         
-        // 👑 管理者バックドア用アクション（チェーン店非表示切替）
         if (data.action === "toggle_local") {
             const auth = await checkAuthorization(request, env, ["admin"]); 
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -245,14 +241,11 @@ export default {
         const userGender = data.userGender || "未設定";
         const userAge = data.userAge || "未設定";
         const userUuid = auth.user.userUuid;
-        
-        // 👻 フロントエンドから送られてきた公開フラグを取得（デフォルトは安全のため0）
         const isPublicVal = data.isPublic !== undefined ? data.isPublic : 0;
 
         let targetBase64 = data.imageBase64 || null;
         let moderationTag = ""; 
 
-        // 👁️ 画像のAIモデレーション
         if (env.AI && targetBase64) {
           try {
             const b64Data = targetBase64.split(',')[1] || targetBase64;
@@ -272,69 +265,39 @@ export default {
           } catch (err) { console.log("Vision AI Error:", err); }
         }
 
-        // 🤖 テキストのAIモデレーション ＆ 構造化タグ抽出
         let aiExtractedTags = "";
         let unclassifiedTags = [];
         
         if (env.AI && comment.length > 5 && moderationTag === "") {
-          const systemPrompt = `
-あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。
-厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。
-
-{
-  "moderation": "OK" または "🚨共有不可" または "🚨要確認",
-  "tags": {
-    "coffee": ["抽出したコーヒー関連のタグ(品種, 焙煎, 抽出方法など)"],
-    "food": ["抽出したフード関連のタグ(ランチ, ケーキなど)"],
-    "atmosphere": ["抽出した雰囲気や設備のタグ。なお、もし日記内にテイクアウトや物販が終了・廃止されたという記述があれば、それぞれ『テイクアウト廃止』や『物販終了』というキーワードをここに含めてください"]
-  },
-  "unclassified": ["上記に分類できないが重要そうなキーワード"]
-}`;
-
+          const systemPrompt = `あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。\n\n{\n  "moderation": "OK" または "🚨共有不可" または "🚨要確認",\n  "tags": {\n    "coffee": ["抽出したコーヒー関連のタグ(品種, 焙煎, 抽出方法など)"],\n    "food": ["抽出したフード関連のタグ(ランチ, ケーキなど)"],\n    "atmosphere": ["抽出した雰囲気や設備のタグ。なお、もし日記内にテイクアウトや物販が終了・廃止されたという記述があれば、それぞれ『テイクアウト廃止』や『物販終了』というキーワードをここに含めてください"]\n  },\n  "unclassified": ["上記に分類できないが重要そうなキーワード"]\n}`;
           try {
             const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: comment }
-              ]
+              messages: [{ role: "system", content: systemPrompt }, { role: "user", content: comment }]
             });
-            
             if (aiResponse && aiResponse.response) {
-              let rawText = aiResponse.response.trim();
-              rawText = rawText.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
-
+              let rawText = aiResponse.response.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
               const result = JSON.parse(rawText);
-              
-              if (result.moderation !== "OK") {
-                moderationTag = result.moderation;
-              } else {
+              if (result.moderation !== "OK") { moderationTag = result.moderation; } 
+              else {
                 const coffeeTags = (result.tags.coffee || []).map(t => `🤖☕️${t}`);
                 const foodTags = (result.tags.food || []).map(t => `🤖🍰${t}`);
                 const atmosphereTags = (result.tags.atmosphere || []).map(t => `🤖🛋️${t}`);
-                
                 aiExtractedTags = [...coffeeTags, ...foodTags, ...atmosphereTags].join(', ');
                 unclassifiedTags = result.unclassified || [];
               }
             }
-          } catch (err) { 
-            console.log("AI Text Extraction & Parse Error:", err); 
-            unclassifiedTags = ["AIパースエラー"];
-          }
+          } catch (err) { unclassifiedTags = ["AIパースエラー"]; }
         }
 
         let combinedTags = data.tags || "";
         if (moderationTag !== "") combinedTags = combinedTags ? `${combinedTags}, ${moderationTag}` : moderationTag;
         else if (aiExtractedTags) combinedTags = combinedTags ? `${combinedTags}, ${aiExtractedTags}` : aiExtractedTags;
 
-        // ▼ 🔄 ループエンジニアリング：未分類タグのGASエスカレーション
         if (unclassifiedTags && unclassifiedTags.length > 0) {
           const gasWebhookUrl = env.GAS_WEBHOOK_URL || ""; 
           if (gasWebhookUrl) {
             const errorReportData = { shopName: data.shopName || "名前なし", unclassified: unclassifiedTags, comment: comment };
-            ctx.waitUntil(
-              fetch(gasWebhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(errorReportData) })
-              .catch(err => console.log("GAS Webhook Error:", err))
-            );
+            ctx.waitUntil(fetch(gasWebhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(errorReportData) }).catch(err => console.log("GAS Webhook Error:", err)));
           }
         }
 
@@ -342,7 +305,6 @@ export default {
         const createdSystemAt = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')} ${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')}`;
         const visitedAt = data.visitedAt || createdSystemAt; 
 
-        // 📝 データの保存（is_public を確実に保存するよう UPDATE / INSERT クエリにカラムを追加）
         if (data.id) {
           if (targetBase64) {
             await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)

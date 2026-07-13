@@ -110,7 +110,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
       locationMap[locKey].shops[shop.shop_id] = {
         shopId: shop.shop_id, shopName: shop.shop_name,
         isMasterOnly: true, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: false,
-        isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null, // 🆕 追加
+        isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null,
         hasDining: false, hasTakeout: false, hasGoods: false,
         allTagsSet: new Set(),
         isLocal: shop.is_local !== undefined ? shop.is_local : 1
@@ -140,7 +140,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
         locationMap[locKey].shops[uniqueKey] = { 
           shopId: diary.shop_id || null, shopName: isDraft ? '📦 未整理の写真' : s,
           isMasterOnly: false, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: isDraft,
-          isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null, // 🆕 追加
+          isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null,
           hasDining: false, hasTakeout: false, hasGoods: false,
           allTagsSet: new Set(),
           isLocal: 1
@@ -171,7 +171,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
       const visitTime = new Date((diary.visited_at || "").replace(/-/g, '/')).getTime();
       if (visitTime >= shop.lastVisited) {
           shop.lastVisited = visitTime;
-          shop.latestDiaryId = diary.id; // 🆕 編集用に最新のIDを保持
+          shop.latestDiaryId = diary.id;
       }
       
       if (allTags.includes('☕️店内')) shop.hasDining = true;
@@ -209,7 +209,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
             existing.visitCount += s.visitCount;
             if (s.lastVisited >= existing.lastVisited) {
                 existing.lastVisited = s.lastVisited;
-                if (s.latestDiaryId) existing.latestDiaryId = s.latestDiaryId; // 🆕 最新IDをマージ
+                if (s.latestDiaryId) existing.latestDiaryId = s.latestDiaryId;
             }
             if (s.hasDining) existing.hasDining = true;
             if (s.hasTakeout) existing.hasTakeout = true;
@@ -300,6 +300,9 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   if (window.currentUser && (window.currentUser.role === 'premium' || window.currentUser.role === 'admin')) {
       const drawGhostPins = (ghosts) => {
           ghosts.forEach(ghost => {
+              // 🛑 修正: 座標がないデータ（写真なしやテイクアウト等で登録されたもの）はスキップしてエラーを防ぐ
+              if (!ghost.lat || !ghost.lng) return;
+
               if (selectedMoodTag !== "") {
                   let hasMatch = false;
                   if (ghost.tags) { ghost.tags.forEach(t => { if (t.includes(selectedMoodTag)) hasMatch = true; }); }
@@ -387,7 +390,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         else statusText = '💭 行きたいお店に登録中';
     }
 
-    // 👑 🆕 ボトムシートからの新規登録・編集導線の復活
     if (!mainShop.isClosed && !mainShop.isGracePeriod) {
         if (mainShop.isMasterOnly || mainShop.isBookmarkOnly) {
             actionBtn += `<button onclick="recordFromMap('${mainShop.shopId || ''}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng})" style="background:#27ae60; border:none; color:white; padding:12px; border-radius:8px; font-weight:bold; cursor:pointer;">📝 このお店を開拓・記録する</button>`;
@@ -396,7 +398,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         }
     }
 
-    // 閉店報告 / 取消 ボタン
     if (!mainShop.isClosed) {
         let closeBtnColor = mainShop.isGracePeriod ? "#e74c3c" : "#95a5a6";
         let closeBtnText = mainShop.isGracePeriod ? "🚨 閉店報告を取り消す" : "🚫 閉店・移転を報告する";
