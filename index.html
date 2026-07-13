@@ -26,7 +26,7 @@
                     <div class="form-group" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px dashed #bdc3c7;">
                         <label for="imageInputSingle" style="color: #2980b9; font-weight: bold; cursor: pointer;">
                             📸 カフェの写真を1枚選ぶ<br>
-                            <span style="font-size: 0.8rem; color: #7f8c8d; font-weight: normal;">※写真から位置情報と天気を自動解析してフォームを展開します。</span>
+                            <span style="font-size: 0.8rem; color: #7f8c8d; font-weight: normal;">※写真から位置情報と天気を自動解析します。</span>
                         </label>
                         <input type="file" id="imageInputSingle" accept="image/*">
                         <img id="imagePreview" style="display: none;" alt="プレビュー">
@@ -61,7 +61,6 @@
 
                         <div class="form-group">
                             <label>利用タイプは？</label>
-                            <!-- 🎪 🆕 間借り・無店舗の選択肢を追加し、折り返しを許可 -->
                             <div class="type-selector" style="flex-wrap: wrap;">
                                 <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
                                 <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイク</label>
@@ -76,7 +75,7 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="weatherSelect">天気（自動取得・手動変更可）</label>
+                            <label for="weatherSelect">天気・位置情報</label>
                             <select id="weatherSelect">
                                 <option value="❓">❓ 不明</option>
                                 <option value="☀️">☀️ 晴れ</option>
@@ -84,10 +83,19 @@
                                 <option value="☔️">☔️ 雨</option>
                                 <option value="❄️">❄️ 雪</option>
                             </select>
+                            
+                            <!-- 📍 状態表示と手動マップピッカー起動ボタン -->
                             <p id="gpsStatus" style="font-size: 0.85em; color: #e74c3c; margin-top: 8px; font-weight: bold; text-align: center;"></p>
+                            <div style="text-align: center; margin-top: 5px;">
+                                <button type="button" id="btnOpenMapPicker" style="background: transparent; color: #2980b9; border: 1px solid #2980b9; padding: 6px 15px; font-size: 0.8rem; border-radius: 20px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: auto; font-weight: bold;">
+                                    📍 マップから手動で位置を指定する
+                                </button>
+                            </div>
+
                             <input type="hidden" id="latitude">
                             <input type="hidden" id="longitude">
                             <input type="hidden" id="temperature">
+                            <input type="hidden" id="locationSource" value=""> <!-- 🆕 取得元トラッキング用 -->
                         </div>
                         
                         <div class="form-group">
@@ -100,7 +108,6 @@
                             <input type="text" id="tags" placeholder="例: 作業, 癒やし">
                         </div>
 
-                        <!-- 👻 🆕 オプトイン方式の共有チェックボックス -->
                         <div class="form-group" style="margin-top: 15px; background: rgba(142, 68, 173, 0.05); padding: 12px; border-radius: 8px; border: 1px solid rgba(142, 68, 173, 0.15);">
                             <label style="display: block; font-size: 0.85rem; color: #8e44ad; font-weight: bold; cursor: pointer; margin: 0;">
                                 <input type="checkbox" id="isPublicCheckbox" value="1">
@@ -242,6 +249,26 @@
                     <button type="button" id="btn-save-map-image" onclick="downloadMapImage()" style="width: 100%; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">📸 地図を画像としてエクスポート</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 📍 🆕 手動マップピッカー用モーダルUI -->
+    <!-- ========================================== -->
+    <div id="mapPickerModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: rgba(0,0,0,0.85); z-index: 3000; display: flex; flex-direction: column;">
+        <div style="background: white; padding: 15px; text-align: center; font-weight: bold; color: #2c3e50; position: relative;">
+            📍 地図を動かして「＋」をお店に合わせてください
+            <button type="button" onclick="closeMapPicker()" style="position: absolute; right: 10px; top: 8px; background: transparent; color: #e74c3c; width: auto; padding: 5px 10px; margin: 0; border: 1px solid #e74c3c; font-size: 0.8rem; border-radius: 8px;">✖ 閉じる</button>
+        </div>
+        <div style="position: relative; flex-grow: 1;">
+            <div id="pickerMap" style="width: 100%; height: 100%;"></div>
+            <!-- 画面中央固定の照準アイコン -->
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; pointer-events: none; font-size: 36px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+                ＋
+            </div>
+        </div>
+        <div style="background: white; padding: 15px 20px 25px 20px; box-shadow: 0 -4px 10px rgba(0,0,0,0.1);">
+            <button type="button" id="btnConfirmLocation" style="background: #27ae60; margin: 0; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(39, 174, 96, 0.3);">✅ ここを店舗の位置として決定</button>
         </div>
     </div>
 

@@ -1,5 +1,5 @@
 // ==========================================
-// 📱 main.js (UI制御・イベント管理 - 間借り・無店舗対応版)
+// 📱 main.js (UI制御・イベント管理 - 手動ピン・インテント対応版)
 // ==========================================
 let globalDiaries = []; 
 let editingDiaryId = null;
@@ -179,6 +179,11 @@ document.getElementById('imageInputSingle').addEventListener('change', async (e)
   document.getElementById('temperature').value = temp !== null ? temp : "";
   document.getElementById('latitude').value = lat;
   document.getElementById('longitude').value = lng;
+  
+  // 🆕 位置情報の取得元を記録
+  if (lat !== null) {
+      document.getElementById('locationSource').value = 'exif';
+  }
 
   if (dynamicForm) dynamicForm.classList.add('show');
 
@@ -187,7 +192,7 @@ document.getElementById('imageInputSingle').addEventListener('change', async (e)
       statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
       statusEl.style.color = "#27ae60";
     } else {
-      statusEl.innerText = "ℹ️ 写真に位置情報がないため、天気の自動取得をスキップしました。";
+      statusEl.innerText = "ℹ️ 写真に位置情報がありません。手動で位置を指定できます。";
       statusEl.style.color = "#f39c12";
     }
   }
@@ -251,11 +256,12 @@ if (btnSkipPhoto) {
         document.getElementById('longitude').value = "";
         document.getElementById('temperature').value = "";
         document.getElementById('weatherSelect').value = "❓";
+        document.getElementById('locationSource').value = "";
         
         if (dynamicForm) dynamicForm.classList.add('show');
         
         if (statusEl) {
-            statusEl.innerText = "ℹ️ 写真なしで記録します。\n店舗名で検索して選択すると、自動で位置情報がセットされます！";
+            statusEl.innerText = "ℹ️ 写真なしで記録します。\n店舗名で検索、またはマップから手動で位置を指定できます！";
             statusEl.style.color = "#3498db";
         }
     });
@@ -285,6 +291,7 @@ document.getElementById('shopName').addEventListener('input', (e) => {
           if (ev.target.dataset.lat && ev.target.dataset.lng) {
               document.getElementById('latitude').value = ev.target.dataset.lat;
               document.getElementById('longitude').value = ev.target.dataset.lng;
+              document.getElementById('locationSource').value = 'master'; // 🆕 取得元を記録
               const statusEl = document.getElementById('gpsStatus');
               if (statusEl) { statusEl.innerText = "📍 店舗マスタから位置情報をセットしました"; statusEl.style.color = "#27ae60"; }
           }
@@ -302,6 +309,49 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// ==========================================
+// 📍 🆕 手動マップピッカーの制御ロジック
+// ==========================================
+let pickerMap = null;
+const SAPPORO_CENTER = [43.0600, 141.3500];
+
+document.getElementById('btnOpenMapPicker').addEventListener('click', () => {
+    document.getElementById('mapPickerModal').classList.remove('hidden');
+    
+    if (!pickerMap) {
+        pickerMap = L.map('pickerMap').setView(SAPPORO_CENTER, 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(pickerMap);
+    }
+    
+    // 既存の座標があればそこに飛ぶ、なければ現在地か札幌中心部へ
+    const currentLat = document.getElementById('latitude').value;
+    const currentLng = document.getElementById('longitude').value;
+    if (currentLat && currentLng) {
+        pickerMap.setView([currentLat, currentLng], 17);
+    }
+    
+    setTimeout(() => { pickerMap.invalidateSize(); }, 200);
+});
+
+window.closeMapPicker = function() {
+    document.getElementById('mapPickerModal').classList.add('hidden');
+};
+
+document.getElementById('btnConfirmLocation').addEventListener('click', () => {
+    const center = pickerMap.getCenter();
+    document.getElementById('latitude').value = center.lat;
+    document.getElementById('longitude').value = center.lng;
+    document.getElementById('locationSource').value = 'manual'; // 🆕 意図的な手動指定として記録
+    
+    const statusEl = document.getElementById('gpsStatus');
+    if (statusEl) {
+        statusEl.innerText = "📍 マップから手動で店舗の位置を決定しました";
+        statusEl.style.color = "#27ae60";
+    }
+    closeMapPicker();
+});
+// ==========================================
+
 window.recordFromMap = function(shopId, shopName, lat, lng) {
     switchTab('record', document.querySelector('.bottom-nav .nav-item:nth-child(1)'));
     document.getElementById('recordForm').reset();
@@ -309,6 +359,7 @@ window.recordFromMap = function(shopId, shopName, lat, lng) {
     document.getElementById('shopName').value = shopName || "";
     document.getElementById('latitude').value = lat || "";
     document.getElementById('longitude').value = lng || "";
+    document.getElementById('locationSource').value = 'master'; // 🆕 マップからの登録も安全
     
     document.getElementById('imageInputSingle').value = '';
     document.getElementById('imagePreview').style.display = 'none';
@@ -345,18 +396,23 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   let finalLat = document.getElementById('latitude') ? document.getElementById('latitude').value : null;
   let finalLng = document.getElementById('longitude') ? document.getElementById('longitude').value : null;
   const shopId = document.getElementById('shopId') ? document.getElementById('shopId').value : null;
+  const locationSource = document.getElementById('locationSource') ? document.getElementById('locationSource').value : "";
   
-  // 🎪 🆕 間借りは常に位置情報を破棄（マップに出さない）
+  // 🎪 間借りは常に位置情報を破棄（マップに出さない）
   if (eatType === '🎪間借り・無店舗') {
       finalLat = null; finalLng = null;
       if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
       if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
   } 
-  // 🥡 🆕 テイクアウト・物販は、「店舗マスタ・マップからの登録ではない（shopIdがない）」場合のみ、自宅バレ防止のために破棄
-  else if ((eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') && !shopId) {
-      finalLat = null; finalLng = null;
-      if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
-      if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
+  // 🥡 🆕 スマート・テイクアウト判定（自宅バレ防止と意図的登録の両立）
+  else if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
+      // 🚨 「写真のEXIFから自動取得しただけの座標」なら、自宅の可能性が高いので破棄する
+      // ✅ それ以外（マスタから検索した、またはユーザーが手動マップでピンを刺した）なら、意図的な店舗位置なので保持する
+      if (locationSource === 'exif') {
+          finalLat = null; finalLng = null;
+          if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
+          if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
+      }
   }
 
   let finalStatusIcon = document.getElementById('weatherSelect').value;
@@ -388,6 +444,8 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     document.getElementById('recordForm').reset();
     document.getElementById('imagePreview').style.display = 'none';
     if(document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = ""; 
+    document.getElementById('locationSource').value = ""; // リセット
+    
     const dynamicForm = document.getElementById('dynamicFormFields');
     if (dynamicForm) dynamicForm.classList.remove('show');
     currentBase64 = null;
@@ -412,7 +470,6 @@ function generateTypographyBase64(shopName, tags, weatherIcon) {
     const ctx = canvas.getContext('2d');
 
     const tagList = parseTags(tags);
-    // 🎪 除外タグに「間借り」を追加
     const manualTags = tagList.filter(t => !t.startsWith('🤖') && !t.startsWith('🚨') && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗');
     const mainTag = manualTags.length > 0 ? manualTags[0] : (tagList[0] || "カフェ");
     const baseColor = getColorFromTag(mainTag);
@@ -471,7 +528,6 @@ function renderDiariesList(diaries) {
 
     let tagsHTML = "";
     parseTags(diary.tags).forEach(tag => { 
-      // 🎪 除外タグに「間借り」を追加
       if (!tag.startsWith("🤖") && !tag.startsWith("🚨") && tag !== '🎪間借り・無店舗') {
         tagsHTML += `<span class="tag-badge" style="background-color: ${getColorFromTag(tag)};">${escapeHTML(tag)}</span>`; 
       }
@@ -542,10 +598,13 @@ function editDiary(id) {
     if (document.getElementById('latitude')) document.getElementById('latitude').value = diary.latitude || "";
     if (document.getElementById('longitude')) document.getElementById('longitude').value = diary.longitude || "";
     if (document.getElementById('temperature')) document.getElementById('temperature').value = diary.temperature || "";
+    
+    // 編集時はすでに安全なデータと見なす
+    document.getElementById('locationSource').value = "manual"; 
+    
     if (document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = "";
 
     const allTags = parseTags(diary.tags);
-    // 🎪 🆕 編集画面を開いた時に「間借り」を正しく復元する
     if (allTags.includes('🛍️豆・グッズ')) {
         document.querySelector('input[name="eatType"][value="🛍️豆・グッズ"]').checked = true;
     } else if (allTags.includes('🥡テイクアウト')) {
@@ -596,7 +655,6 @@ function renderTagClouds() {
   const allTags = new Set();
   
   globalDiaries.forEach(d => parseTags(d.tags).forEach(t => {
-    // 🎪 除外タグに「間借り」を追加
     if (!t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗') {
         allTags.add(t);
     }
