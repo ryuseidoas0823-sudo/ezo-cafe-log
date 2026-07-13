@@ -1,5 +1,5 @@
 // ==========================================
-// 🗺️ map.js (地図関係の処理まとめ - 間借り・無店舗対応版)
+// 🗺️ map.js (地図関係の処理まとめ - `"null"`文字列クラッシュ防止版)
 // ==========================================
 const HOME_LAT = 43.0600;
 const HOME_LNG = 141.3500;
@@ -105,16 +105,22 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   
   if (typeof globalMasterShops !== 'undefined') {
     globalMasterShops.forEach(shop => {
-      const locKey = `${shop.latitude}_${shop.longitude}`;
-      if (!locationMap[locKey]) locationMap[locKey] = { lat: shop.latitude, lng: shop.longitude, shops: {} };
-      locationMap[locKey].shops[shop.shop_id] = {
-        shopId: shop.shop_id, shopName: shop.shop_name,
-        isMasterOnly: true, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: false,
-        isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null,
-        hasDining: false, hasTakeout: false, hasGoods: false, hasEvent: false, // 🎪 追加
-        allTagsSet: new Set(),
-        isLocal: shop.is_local !== undefined ? shop.is_local : 1
-      };
+      // 🛑 修正: マスタデータも確実に数値変換して安全に読み込む
+      const lat = parseFloat(shop.latitude);
+      const lng = parseFloat(shop.longitude);
+      
+      if (!isNaN(lat) && !isNaN(lng)) {
+          const locKey = `${lat}_${lng}`;
+          if (!locationMap[locKey]) locationMap[locKey] = { lat: lat, lng: lng, shops: {} };
+          locationMap[locKey].shops[shop.shop_id] = {
+            shopId: shop.shop_id, shopName: shop.shop_name,
+            isMasterOnly: true, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: false,
+            isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null,
+            hasDining: false, hasTakeout: false, hasGoods: false, hasEvent: false, 
+            allTagsSet: new Set(),
+            isLocal: shop.is_local !== undefined ? shop.is_local : 1
+          };
+      }
     });
   }
   
@@ -125,9 +131,13 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   });
   
   chronologicalDiaries.forEach(diary => {
-    if (diary.latitude && diary.longitude) {
-      const locKey = `${diary.latitude}_${diary.longitude}`;
-      if (!locationMap[locKey]) locationMap[locKey] = { lat: diary.latitude, lng: diary.longitude, shops: {} };
+    // 🛑 究極のポカヨケ: "null"という文字列が混入していても確実に弾き飛ばす
+    const lat = parseFloat(diary.latitude);
+    const lng = parseFloat(diary.longitude);
+
+    if (!isNaN(lat) && !isNaN(lng)) {
+      const locKey = `${lat}_${lng}`;
+      if (!locationMap[locKey]) locationMap[locKey] = { lat: lat, lng: lng, shops: {} };
 
       const s = diary.shop_name; 
       const isBookmark = diary.weather_icon === "💭";
@@ -141,7 +151,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
           shopId: diary.shop_id || null, shopName: isDraft ? '📦 未整理の写真' : s,
           isMasterOnly: false, mainTag: "", visitCount: 0, isBookmarkOnly: false, isDraftOnly: isDraft,
           isClosed: false, isGracePeriod: false, closedDiaryId: null, lastVisited: 0, latestDiaryId: null,
-          hasDining: false, hasTakeout: false, hasGoods: false, hasEvent: false, // 🎪 追加
+          hasDining: false, hasTakeout: false, hasGoods: false, hasEvent: false,
           allTagsSet: new Set(),
           isLocal: 1
         };
@@ -174,7 +184,6 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
           shop.latestDiaryId = diary.id;
       }
       
-      // 🎪 判定に追加
       if (allTags.includes('☕️店内')) shop.hasDining = true;
       if (allTags.includes('🥡テイクアウト')) shop.hasTakeout = true;
       if (allTags.includes('🛍️豆・グッズ')) shop.hasGoods = true;
@@ -216,7 +225,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
             if (s.hasDining) existing.hasDining = true;
             if (s.hasTakeout) existing.hasTakeout = true;
             if (s.hasGoods) existing.hasGoods = true;
-            if (s.hasEvent) existing.hasEvent = true; // 🎪 追加
+            if (s.hasEvent) existing.hasEvent = true; 
             s.allTagsSet.forEach(t => existing.allTagsSet.add(t));
             if (!existing.shopId && s.shopId) existing.shopId = s.shopId;
             existing.isClosed = existing.isClosed || s.isClosed;
@@ -302,7 +311,11 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   if (window.currentUser && (window.currentUser.role === 'premium' || window.currentUser.role === 'admin')) {
       const drawGhostPins = (ghosts) => {
           ghosts.forEach(ghost => {
-              if (!ghost.lat || !ghost.lng) return;
+              // 🛑 修正: ゴーストピンも確実に数値変換し、不正な文字列データを弾く
+              const gLat = parseFloat(ghost.lat);
+              const gLng = parseFloat(ghost.lng);
+
+              if (isNaN(gLat) || isNaN(gLng)) return;
 
               if (selectedMoodTag !== "") {
                   let hasMatch = false;
@@ -317,7 +330,7 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
                   iconAnchor: [12, 12] 
               });
               
-              const marker = L.marker([ghost.lat, ghost.lng], {
+              const marker = L.marker([gLat, gLng], {
                   icon: customIcon, 
                   zIndexOffset: -100 
               }).addTo(viewMap);
@@ -359,7 +372,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     let html = `<div style="text-align:center;">`;
     html += `<h2 style="margin: 0 0 5px 0; color:#2c3e50; font-size: 1.4rem;">${escapeHTML(mainShop.shopName)}</h2>`;
     
-    // 🎪 🆕 ボトムシートの対応サービスに「無店舗」を追加表示
     let servicesHtml = '<div style="margin: 8px 0 15px 0; font-size: 0.9rem; color: #7f8c8d;">✨ 対応: ';
     if (mainShop.hasDining) servicesHtml += '☕️店内 ';
     if (mainShop.hasTakeout) servicesHtml += '🥡テイクアウト ';
@@ -429,7 +441,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         const tagsCount = {};
         shopDiaries.forEach(d => {
             parseTags(d.tags).forEach(t => {
-                // 🎪 アナリティクス用のAIタグ集計からも間借りタグを除外
                 if (!t.startsWith("🤖") && !t.startsWith("🚨") && t !== "☕️店内" && t !== "🥡テイクアウト" && t !== "🛍️豆・グッズ" && t !== "🎪間借り・無店舗") {
                     tagsCount[t] = (tagsCount[t] || 0) + 1;
                 }

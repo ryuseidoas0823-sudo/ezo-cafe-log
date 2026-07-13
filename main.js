@@ -1,5 +1,5 @@
 // ==========================================
-// 📱 main.js (UI制御・イベント管理 - 手動ピン・インテント対応版)
+// 📱 main.js (UI制御・イベント管理 - `"null"`文字列クラッシュ防止版)
 // ==========================================
 let globalDiaries = []; 
 let editingDiaryId = null;
@@ -176,11 +176,12 @@ document.getElementById('imageInputSingle').addEventListener('change', async (e)
     const weatherSelect = document.getElementById('weatherSelect');
     if (weatherSelect) weatherSelect.value = weatherIcon;
   }
-  document.getElementById('temperature').value = temp !== null ? temp : "";
-  document.getElementById('latitude').value = lat;
-  document.getElementById('longitude').value = lng;
   
-  // 🆕 位置情報の取得元を記録
+  // 🛑 修正: nullの場合は必ず空文字をセットし、"null"という文字列化を防ぐ
+  document.getElementById('temperature').value = temp !== null ? temp : "";
+  document.getElementById('latitude').value = lat !== null ? lat : "";
+  document.getElementById('longitude').value = lng !== null ? lng : "";
+  
   if (lat !== null) {
       document.getElementById('locationSource').value = 'exif';
   }
@@ -291,7 +292,7 @@ document.getElementById('shopName').addEventListener('input', (e) => {
           if (ev.target.dataset.lat && ev.target.dataset.lng) {
               document.getElementById('latitude').value = ev.target.dataset.lat;
               document.getElementById('longitude').value = ev.target.dataset.lng;
-              document.getElementById('locationSource').value = 'master'; // 🆕 取得元を記録
+              document.getElementById('locationSource').value = 'master'; 
               const statusEl = document.getElementById('gpsStatus');
               if (statusEl) { statusEl.innerText = "📍 店舗マスタから位置情報をセットしました"; statusEl.style.color = "#27ae60"; }
           }
@@ -309,9 +310,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ==========================================
-// 📍 🆕 手動マップピッカーの制御ロジック
-// ==========================================
 let pickerMap = null;
 const SAPPORO_CENTER = [43.0600, 141.3500];
 
@@ -323,11 +321,10 @@ document.getElementById('btnOpenMapPicker').addEventListener('click', () => {
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(pickerMap);
     }
     
-    // 既存の座標があればそこに飛ぶ、なければ現在地か札幌中心部へ
     const currentLat = document.getElementById('latitude').value;
     const currentLng = document.getElementById('longitude').value;
-    if (currentLat && currentLng) {
-        pickerMap.setView([currentLat, currentLng], 17);
+    if (currentLat && currentLng && currentLat !== "null" && currentLng !== "null") {
+        pickerMap.setView([parseFloat(currentLat), parseFloat(currentLng)], 17);
     }
     
     setTimeout(() => { pickerMap.invalidateSize(); }, 200);
@@ -341,7 +338,7 @@ document.getElementById('btnConfirmLocation').addEventListener('click', () => {
     const center = pickerMap.getCenter();
     document.getElementById('latitude').value = center.lat;
     document.getElementById('longitude').value = center.lng;
-    document.getElementById('locationSource').value = 'manual'; // 🆕 意図的な手動指定として記録
+    document.getElementById('locationSource').value = 'manual'; 
     
     const statusEl = document.getElementById('gpsStatus');
     if (statusEl) {
@@ -350,7 +347,6 @@ document.getElementById('btnConfirmLocation').addEventListener('click', () => {
     }
     closeMapPicker();
 });
-// ==========================================
 
 window.recordFromMap = function(shopId, shopName, lat, lng) {
     switchTab('record', document.querySelector('.bottom-nav .nav-item:nth-child(1)'));
@@ -359,7 +355,7 @@ window.recordFromMap = function(shopId, shopName, lat, lng) {
     document.getElementById('shopName').value = shopName || "";
     document.getElementById('latitude').value = lat || "";
     document.getElementById('longitude').value = lng || "";
-    document.getElementById('locationSource').value = 'master'; // 🆕 マップからの登録も安全
+    document.getElementById('locationSource').value = 'master'; 
     
     document.getElementById('imageInputSingle').value = '';
     document.getElementById('imagePreview').style.display = 'none';
@@ -393,25 +389,22 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   const userTags = document.getElementById('tags').value;
   const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;
 
-  let finalLat = document.getElementById('latitude') ? document.getElementById('latitude').value : null;
-  let finalLng = document.getElementById('longitude') ? document.getElementById('longitude').value : null;
+  // 🛑 修正: "null"という文字列が混入している場合は安全に null へ変換する
+  let latVal = document.getElementById('latitude') ? document.getElementById('latitude').value : "";
+  let lngVal = document.getElementById('longitude') ? document.getElementById('longitude').value : "";
+  
+  let finalLat = (latVal === "" || latVal === "null") ? null : parseFloat(latVal);
+  let finalLng = (lngVal === "" || lngVal === "null") ? null : parseFloat(lngVal);
+
   const shopId = document.getElementById('shopId') ? document.getElementById('shopId').value : null;
   const locationSource = document.getElementById('locationSource') ? document.getElementById('locationSource').value : "";
   
-  // 🎪 間借りは常に位置情報を破棄（マップに出さない）
   if (eatType === '🎪間借り・無店舗') {
       finalLat = null; finalLng = null;
-      if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
-      if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
-  } 
-  // 🥡 🆕 スマート・テイクアウト判定（自宅バレ防止と意図的登録の両立）
-  else if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
-      // 🚨 「写真のEXIFから自動取得しただけの座標」なら、自宅の可能性が高いので破棄する
-      // ✅ それ以外（マスタから検索した、またはユーザーが手動マップでピンを刺した）なら、意図的な店舗位置なので保持する
-      if (locationSource === 'exif') {
+  } else if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
+      // マスタ検索からでもなく、手動でピンを刺したわけでもない場合（写真EXIFのみの場合）は自宅バレ防止で破棄
+      if (locationSource === 'exif' || (!shopId && locationSource !== 'manual')) {
           finalLat = null; finalLng = null;
-          if(document.getElementById('latitude')) document.getElementById('latitude').value = "";
-          if(document.getElementById('longitude')) document.getElementById('longitude').value = "";
       }
   }
 
@@ -444,7 +437,7 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
     document.getElementById('recordForm').reset();
     document.getElementById('imagePreview').style.display = 'none';
     if(document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = ""; 
-    document.getElementById('locationSource').value = ""; // リセット
+    document.getElementById('locationSource').value = ""; 
     
     const dynamicForm = document.getElementById('dynamicFormFields');
     if (dynamicForm) dynamicForm.classList.remove('show');
@@ -595,11 +588,11 @@ function editDiary(id) {
         if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
     }
 
-    if (document.getElementById('latitude')) document.getElementById('latitude').value = diary.latitude || "";
-    if (document.getElementById('longitude')) document.getElementById('longitude').value = diary.longitude || "";
-    if (document.getElementById('temperature')) document.getElementById('temperature').value = diary.temperature || "";
+    // 🛑 修正: "null"文字列を排除
+    document.getElementById('latitude').value = (diary.latitude !== null && diary.latitude !== "null") ? diary.latitude : "";
+    document.getElementById('longitude').value = (diary.longitude !== null && diary.longitude !== "null") ? diary.longitude : "";
+    document.getElementById('temperature').value = (diary.temperature !== null && diary.temperature !== "null") ? diary.temperature : "";
     
-    // 編集時はすでに安全なデータと見なす
     document.getElementById('locationSource').value = "manual"; 
     
     if (document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = "";
