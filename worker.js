@@ -90,15 +90,12 @@ export default {
       }
 
       try {
-        // 👻 B2Cプレミアム用: ゴーストピン（他者の足跡）の取得
         if (action === "get_ghost_pins") {
           const auth = await checkAuthorization(request, env, ["premium", "admin"]);
           if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
-          // 🛑 修正: 座標が存在する（IS NOT NULL）データのみを抽出するよう堅牢化
           const { results } = await env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude, visited_at, tags FROM diaries WHERE is_public = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL AND user_uuid != ?").bind(auth.user.userUuid).all();
 
-          // 🎭 文学的マスキング処理（時間の抽象化）
           const getAbstractTime = (dateStr) => {
               if (!dateStr) return "いつかの日";
               const date = new Date(dateStr.replace(/-/g, '/'));
@@ -124,19 +121,14 @@ export default {
           const ghosts = results.map(r => {
               const aiTags = r.tags ? r.tags.split(',').map(t => t.trim()).filter(t => t.startsWith("🤖")) : [];
               return {
-                  shopId: r.shop_id,
-                  shopName: r.shop_name,
-                  lat: r.latitude,
-                  lng: r.longitude,
-                  abstractTime: getAbstractTime(r.visited_at),
-                  tags: aiTags
+                  shopId: r.shop_id, shopName: r.shop_name, lat: r.latitude, lng: r.longitude,
+                  abstractTime: getAbstractTime(r.visited_at), tags: aiTags
               };
           });
 
           return new Response(JSON.stringify(ghosts), { headers: corsHeaders });
         }
 
-        // 👑 B2B用: 店舗全体の客層アナリティクス集計
         if (action === "get_shop_analytics") {
           const auth = await checkAuthorization(request, env, ["admin", "business"]);
           if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -146,25 +138,15 @@ export default {
 
           let query = "SELECT user_gender, user_age, tags FROM diaries WHERE ";
           let params = [];
-          if (shopId && shopId !== 'null') {
-             query += "shop_id = ?"; params.push(shopId);
-          } else {
-             query += "shop_name = ?"; params.push(shopName);
-          }
+          if (shopId && shopId !== 'null') { query += "shop_id = ?"; params.push(shopId); } 
+          else { query += "shop_name = ?"; params.push(shopName); }
 
           const { results } = await env.DB.prepare(query).bind(...params).all();
-          
-          let total = results.length;
-          let genders = {};
-          let ages = {};
-          let tagsCount = {};
+          let total = results.length; let genders = {}; let ages = {}; let tagsCount = {};
 
           results.forEach(r => {
-              const g = r.user_gender || '未設定';
-              const a = r.user_age || '未設定';
-              genders[g] = (genders[g] || 0) + 1;
-              ages[a] = (ages[a] || 0) + 1;
-              
+              const g = r.user_gender || '未設定'; const a = r.user_age || '未設定';
+              genders[g] = (genders[g] || 0) + 1; ages[a] = (ages[a] || 0) + 1;
               if (r.tags) {
                   r.tags.split(',').forEach(t => {
                       let cleanTag = t.trim();
@@ -179,7 +161,6 @@ export default {
           return new Response(JSON.stringify({ total, genders, ages, topTags }), { headers: corsHeaders });
         }
 
-        // 通常データの読み込み
         const auth = await checkAuthorization(request, env, ["free", "premium", "business"]);
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
@@ -233,11 +214,12 @@ export default {
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
         const comment = data.comment || "";
-        const lat = data.lat || null;
-        const lng = data.lng || null;
-        const temp = data.temperature || null;
-        const weatherIcon = data.weatherIcon || "❓"; 
+        // 🛑 安全な数値型への変換
+        const lat = data.lat !== undefined && data.lat !== null ? parseFloat(data.lat) : null;
+        const lng = data.lng !== undefined && data.lng !== null ? parseFloat(data.lng) : null;
+        const temp = data.temperature !== undefined && data.temperature !== null && data.temperature !== "" ? parseFloat(data.temperature) : null;
         
+        const weatherIcon = data.weatherIcon || "❓"; 
         const userGender = data.userGender || "未設定";
         const userAge = data.userAge || "未設定";
         const userUuid = auth.user.userUuid;
@@ -259,15 +241,12 @@ export default {
             });
 
             if (visionResponse && visionResponse.response && visionResponse.response.includes("🚨NG")) {
-               targetBase64 = null;
-               moderationTag = "🚨共有不可";
+               targetBase64 = null; moderationTag = "🚨共有不可";
             }
           } catch (err) { console.log("Vision AI Error:", err); }
         }
 
-        let aiExtractedTags = "";
-        let unclassifiedTags = [];
-        
+        let aiExtractedTags = ""; let unclassifiedTags = [];
         if (env.AI && comment.length > 5 && moderationTag === "") {
           const systemPrompt = `あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。\n\n{\n  "moderation": "OK" または "🚨共有不可" または "🚨要確認",\n  "tags": {\n    "coffee": ["抽出したコーヒー関連のタグ(品種, 焙煎, 抽出方法など)"],\n    "food": ["抽出したフード関連のタグ(ランチ, ケーキなど)"],\n    "atmosphere": ["抽出した雰囲気や設備のタグ。なお、もし日記内にテイクアウトや物販が終了・廃止されたという記述があれば、それぞれ『テイクアウト廃止』や『物販終了』というキーワードをここに含めてください"]\n  },\n  "unclassified": ["上記に分類できないが重要そうなキーワード"]\n}`;
           try {
@@ -306,12 +285,13 @@ export default {
         const visitedAt = data.visitedAt || createdSystemAt; 
 
         if (data.id) {
+          // 🛑 修正: UPDATEクエリに `shop_id = ?` の更新を追加！
           if (targetBase64) {
-            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
-              .bind(data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
+            await env.DB.prepare(`UPDATE diaries SET shop_id = ?, shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
+              .bind(data.shopId || null, data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
           } else {
-            await env.DB.prepare(`UPDATE diaries SET shop_name = ?, comment = ?, tags = ?, visited_at = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
-              .bind(data.shopName, comment, combinedTags, visitedAt, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
+            await env.DB.prepare(`UPDATE diaries SET shop_id = ?, shop_name = ?, comment = ?, tags = ?, visited_at = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
+              .bind(data.shopId || null, data.shopName, comment, combinedTags, visitedAt, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
           }
           return new Response(JSON.stringify({ success: true, id: data.id }), { headers: corsHeaders });
         } else {
