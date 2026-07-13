@@ -19,7 +19,7 @@ async function fetchDiaries() {
   try {
     const response = await fetch(`${API_URL}?_t=${Date.now()}`, {
       method: "GET",
-      headers: getAuthHeaders() // 🆕 門番に身分証を提示
+      headers: getAuthHeaders() 
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error);
@@ -32,12 +32,12 @@ async function fetchDiaries() {
   }
 }
 
-// 🆕 📥 GET: マスタ全件取得
+// 📥 GET: マスタ全件取得
 async function fetchMasterShopsApi() {
   try {
     const response = await fetch(`${API_URL}?action=get_all_master&_t=${Date.now()}`, {
       method: "GET",
-      headers: getAuthHeaders() // 🆕 門番に身分証を提示
+      headers: getAuthHeaders() 
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error);
@@ -52,7 +52,7 @@ async function saveDiaryApi(payload) {
   try {
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: getAuthHeaders(), // 🆕 門番に身分証を提示
+      headers: getAuthHeaders(), 
       body: JSON.stringify(payload)
     });
     return await response.json();
@@ -67,7 +67,7 @@ async function searchMasterApi(query) {
   try {
     const response = await fetch(`${API_URL}?action=search_master&query=${encodeURIComponent(query)}`, {
       method: "GET",
-      headers: getAuthHeaders() // 🆕 門番に身分証を提示
+      headers: getAuthHeaders() 
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error);
@@ -83,7 +83,7 @@ async function deleteDiaryApi(id) {
   try {
     const response = await fetch(`${API_URL}?id=${id}`, {
       method: 'DELETE',
-      headers: getAuthHeaders() // 🆕 門番に身分証を提示
+      headers: getAuthHeaders() 
     });
     return await response.json();
   } catch (error) {
@@ -92,7 +92,7 @@ async function deleteDiaryApi(id) {
   }
 }
 
-// 🆕 👑 自分のユーザー情報（権限）を取得する関数
+// 👑 自分のユーザー情報（権限）を取得する関数
 async function fetchMe() {
   try {
     const response = await fetch(`${API_URL}?action=get_me`, {
@@ -107,7 +107,7 @@ async function fetchMe() {
   }
 }
 
-// 🆕 👑 管理者用：ローカル店フラグを切り替えるバックドア通信
+// 👑 管理者用：ローカル店フラグを切り替えるバックドア通信
 async function toggleLocalStatusApi(shopId, isLocal) {
   try {
     const response = await fetch(API_URL, {
@@ -122,7 +122,7 @@ async function toggleLocalStatusApi(shopId, isLocal) {
   }
 }
 
-// 🆕 👑 B2B用：店舗全体の客層アナリティクスを取得する
+// 👑 B2B用：店舗全体の客層アナリティクスを取得する
 async function fetchShopAnalyticsApi(shopId, shopName) {
   try {
     const params = new URLSearchParams({ action: "get_shop_analytics" });
@@ -155,7 +155,9 @@ async function upgradeToAdminApi() {
   }
 }
 
-// 👻 🆕 GET: プレミアム用 ゴーストピン（他者の足跡）の取得
+// ==========================================
+// 👻 🆕 B2Cプレミアム用: ゴーストピン（他者の足跡）の取得
+// ==========================================
 async function fetchGhostPinsApi() {
   try {
     const response = await fetch(`${API_URL}?action=get_ghost_pins&_t=${Date.now()}`, {
