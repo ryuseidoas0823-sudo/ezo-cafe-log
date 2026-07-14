@@ -1,43 +1,297 @@
 // ==========================================
 // 📦 src/components/b2c/form.js
 // ==========================================
-import { saveDiaryApi } from '../../api.js';
+import { saveDiaryApi, searchMasterApi } from '../../api.js';
 import { refreshHistoryList } from './list.js';
-import { getters } from '../../state.js';           // 🌟 追加: stateを静的インポート
-import { parseTags } from '../../utils/text.js';    // 🌟 追加: タグパース用関数
+import { getters } from '../../state.js';
+import { parseTags, escapeHTML } from '../../utils/text.js';
 
 let currentBase64 = null;
 let editingDiaryId = null;
+let suggestTimeout = null;
+let pickerMap = null;
 
 export function initFormHandlers() {
+    // フォームの送信
     const recordForm = document.getElementById('recordForm');
-    if (recordForm) {
-        recordForm.addEventListener('submit', handleFormSubmit);
-    }
+    if (recordForm) recordForm.addEventListener('submit', handleFormSubmit);
+    
+    // 画像の選択（単体・一括）
+    const singleInput = document.getElementById('imageInputSingle');
+    if (singleInput) singleInput.addEventListener('change', handleSingleImageSelect);
     
     const bulkInput = document.getElementById('imageInputBulk');
-    if (bulkInput) {
-        bulkInput.addEventListener('change', handleBulkUpload);
-    }
+    if (bulkInput) bulkInput.addEventListener('change', handleBulkUpload);
 
-    // 🌟 list.js からの編集イベントを受け取り、フォームへ値をセットする
+    // 写真なしスキップ
+    const btnSkipPhoto = document.getElementById('btnSkipPhoto');
+    if (btnSkipPhoto) btnSkipPhoto.addEventListener('click', handleSkipPhoto);
+
+    // 店舗サジェストと手動マップピッカーの初期化
+    setupShopSuggest();
+    setupMapPicker();
+
+    // 履歴タブからの「編集」イベントを受け取る
     window.addEventListener('edit-diary', (e) => {
         setEditingData(e.detail.id);
     });
 }
 
-// フォームの外部操作用セッター (画像処理モジュールやマップ等から状態を受け取る用)
-export const formState = {
-    setCurrentBase64: (base64) => { currentBase64 = base64; },
-    setEditingDiaryId: (id) => { editingDiaryId = id; }
-};
+function resetDateToToday() {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const dateInput = document.getElementById('visitedAt');
+    if (dateInput) dateInput.value = `${yyyy}-${mm}-${dd}`;
+}
 
-/**
- * 通常日記の送信処理
- */
+// 📸 画像リサイズ処理
+function resizeImageAsync(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const MAX_SIZE = 800;
+                let width = img.width; let height = img.height;
+                if (width > height) {
+                    if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+                } else {
+                    if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            };
+            img.onerror = reject;
+            img.src = event.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+// ☁️ Exifと天気の自動取得
+async function extractExifAndWeather(file) {
+    let lat = null, lng = null, temp = null, weatherIcon = "❓";
+    let targetDate = new Date();
+    
+    try {
+        if (window.exifr) {
+            const exifData = await window.exifr.parse(file);
+            if (exifData) {
+                if (exifData.latitude && exifData.longitude) { lat = exifData.latitude; lng = exifData.longitude; }
+                if (exifData.DateTimeOriginal) { targetDate = new Date(exifData.DateTimeOriginal); }
+            }
+        }
+    } catch (err) { console.log("Exif error:", err); }
+
+    const yyyy = targetDate.getFullYear();
+    const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(targetDate.getDate()).padStart(2, '0');
+    const visitedAt = `${yyyy}-${mm}-${dd}`;
+    const hour = targetDate.getHours();
+
+    if (lat !== null && lng !== null) {
+        function getWeatherEmoji(code) {
+            if (code === 0) return "☀️"; if (code >= 1 && code <= 3) return "☁️";
+            if (code >= 51 && code <= 67 || code >= 80 && code <= 82 || code >= 95 && code <= 99) return "☔️";
+            if (code >= 71 && code <= 86) return "❄️";
+            return "❓";
+        }
+        try {
+            let url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&start_date=${visitedAt}&end_date=${visitedAt}&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo`;
+            let res = await fetch(url); let data = await res.json();
+            if (data.error || !data.hourly) {
+                url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${visitedAt}&end_date=${visitedAt}&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo`;
+                res = await fetch(url); data = await res.json();
+            }
+            if (data && data.hourly) {
+                temp = Math.round(data.hourly.temperature_2m[hour]);
+                weatherIcon = getWeatherEmoji(data.hourly.weather_code[hour]);
+            }
+        } catch (e) { console.log("Weather API error:", e); }
+    }
+    return { lat, lng, visitedAt, weatherIcon, temp };
+}
+
+// 📸 写真1枚選択時の処理
+async function handleSingleImageSelect(e) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const statusEl = document.getElementById('gpsStatus');
+    const dynamicForm = document.getElementById('dynamicFormFields');
+
+    if(statusEl) { statusEl.innerText = "📸 写真を解析中..."; statusEl.style.color = "#3498db"; }
+
+    currentBase64 = await resizeImageAsync(file);
+    const imgPreview = document.getElementById('imagePreview');
+    imgPreview.src = currentBase64; imgPreview.style.display = 'block';
+
+    const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
+    
+    document.getElementById('visitedAt').value = visitedAt;
+    if (weatherIcon !== "❓") document.getElementById('weatherSelect').value = weatherIcon;
+    document.getElementById('temperature').value = temp !== null ? temp : "";
+    document.getElementById('latitude').value = lat !== null ? lat : "";
+    document.getElementById('longitude').value = lng !== null ? lng : "";
+    if (lat !== null) document.getElementById('locationSource').value = 'exif';
+
+    if (dynamicForm) dynamicForm.classList.add('show');
+
+    if(statusEl) {
+        if (lat !== null) {
+            statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
+            statusEl.style.color = "#27ae60";
+        } else {
+            statusEl.innerText = "ℹ️ 写真に位置情報がありません。手動で位置を指定できます。";
+            statusEl.style.color = "#f39c12";
+        }
+    }
+}
+
+// 📦 一括アップロード
+async function handleBulkUpload(e) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    if (!confirm(`${files.length}枚の写真が選択されました。\nすべて「未整理(📦)」として一括ストックしますか？`)) {
+        e.target.value = ''; return;
+    }
+
+    const bulkStatusEl = document.getElementById('bulkStatus');
+    e.target.disabled = true; 
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if(bulkStatusEl) { bulkStatusEl.innerText = `📦 一括登録中... (${i + 1} / ${files.length} 枚目)`; bulkStatusEl.style.color = "#8e44ad"; }
+
+        const base64 = await resizeImageAsync(file);
+        const { lat, lng, visitedAt, temp } = await extractExifAndWeather(file);
+
+        const payload = {
+            id: null, shopId: null, shopName: "未整理の写真", comment: "", visitedAt: visitedAt, tags: "", 
+            imageBase64: base64, lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
+            userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
+            userUuid: localStorage.getItem('ezo_user_uuid'), isPublic: 0 
+        };
+        await saveDiaryApi(payload);
+    }
+
+    if(bulkStatusEl) { bulkStatusEl.innerText = "✅ 全ての一括登録が完了しました！"; bulkStatusEl.style.color = "#27ae60"; }
+    e.target.value = ''; e.target.disabled = false;
+    
+    setTimeout(() => {
+        if (bulkStatusEl) bulkStatusEl.innerText = "";
+        refreshHistoryList();
+        window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'history' } }));
+    }, 1200);
+}
+
+// ✍️ 写真スキップ処理
+function handleSkipPhoto() {
+    const dynamicForm = document.getElementById('dynamicFormFields');
+    const statusEl = document.getElementById('gpsStatus');
+    
+    currentBase64 = null;
+    document.getElementById('imageInputSingle').value = '';
+    document.getElementById('imagePreview').style.display = 'none';
+    
+    ['latitude', 'longitude', 'temperature', 'locationSource'].forEach(id => document.getElementById(id).value = "");
+    document.getElementById('weatherSelect').value = "❓";
+    
+    if (dynamicForm) dynamicForm.classList.add('show');
+    if (statusEl) {
+        statusEl.innerText = "ℹ️ 写真なしで記録します。\n店舗名で検索、またはマップから手動で位置を指定できます！";
+        statusEl.style.color = "#3498db";
+    }
+}
+
+// 🔍 店舗サジェスト機能
+function setupShopSuggest() {
+    const shopInput = document.getElementById('shopName');
+    if (!shopInput) return;
+
+    shopInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        const suggestList = document.getElementById('shopSuggestList');
+        document.getElementById('shopId').value = ""; 
+        if (suggestTimeout) clearTimeout(suggestTimeout); 
+        if (query.length === 0) { suggestList.style.display = 'none'; return; }
+
+        suggestTimeout = setTimeout(async () => {
+            const results = await searchMasterApi(query); 
+            if (results.length > 0) {
+                suggestList.innerHTML = results.map(shop => 
+                    `<li class="suggest-item" data-id="${shop.shop_id || ''}" data-lat="${shop.latitude || ''}" data-lng="${shop.longitude || ''}">${escapeHTML(shop.shop_name)}</li>`
+                ).join('');
+                suggestList.style.display = 'block';
+                
+                document.querySelectorAll('.suggest-item').forEach(item => {
+                    item.addEventListener('click', (ev) => {
+                        document.getElementById('shopName').value = ev.target.innerText;
+                        document.getElementById('shopId').value = ev.target.dataset.id;
+                        if (ev.target.dataset.lat && ev.target.dataset.lng) {
+                            document.getElementById('latitude').value = ev.target.dataset.lat;
+                            document.getElementById('longitude').value = ev.target.dataset.lng;
+                            document.getElementById('locationSource').value = 'master'; 
+                            const statusEl = document.getElementById('gpsStatus');
+                            if (statusEl) { statusEl.innerText = "📍 店舗マスタから位置情報をセットしました"; statusEl.style.color = "#27ae60"; }
+                        }
+                        suggestList.style.display = 'none';
+                    });
+                });
+            } else { suggestList.style.display = 'none'; }
+        }, 300);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.form-group.relative')) {
+            const suggestList = document.getElementById('shopSuggestList');
+            if (suggestList) suggestList.style.display = 'none';
+        }
+    });
+}
+
+// 📍 手動マップピッカー
+function setupMapPicker() {
+    document.getElementById('btnOpenMapPicker')?.addEventListener('click', () => {
+        document.getElementById('mapPickerModal').classList.remove('hidden');
+        if (!pickerMap) {
+            pickerMap = L.map('pickerMap').setView([43.0600, 141.3500], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(pickerMap);
+        }
+        const currentLat = document.getElementById('latitude').value;
+        const currentLng = document.getElementById('longitude').value;
+        if (currentLat && currentLng && currentLat !== "null" && currentLng !== "null") {
+            pickerMap.setView([parseFloat(currentLat), parseFloat(currentLng)], 17);
+        }
+        setTimeout(() => { pickerMap.invalidateSize(); }, 200);
+    });
+
+    window.closeMapPicker = function() {
+        document.getElementById('mapPickerModal').classList.add('hidden');
+    };
+
+    document.getElementById('btnConfirmLocation')?.addEventListener('click', () => {
+        const center = pickerMap.getCenter();
+        document.getElementById('latitude').value = center.lat;
+        document.getElementById('longitude').value = center.lng;
+        document.getElementById('locationSource').value = 'manual'; 
+        const statusEl = document.getElementById('gpsStatus');
+        if (statusEl) { statusEl.innerText = "📍 マップから手動で店舗の位置を決定しました"; statusEl.style.color = "#27ae60"; }
+        window.closeMapPicker();
+    });
+}
+
+// 🚀 記録送信
 async function handleFormSubmit(e) {
     e.preventDefault();
-    
     const eatType = document.querySelector('input[name="eatType"]:checked').value;
     let latVal = document.getElementById('latitude')?.value || "";
     let lngVal = document.getElementById('longitude')?.value || "";
@@ -52,8 +306,7 @@ async function handleFormSubmit(e) {
 
     const submitBtn = document.getElementById('submitBtn');
     const originalBtnText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = "🤖 通信中...";
+    submitBtn.disabled = true; submitBtn.innerHTML = "🤖 通信中...";
 
     const userTags = document.getElementById('tags').value;
     const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;
@@ -65,83 +318,39 @@ async function handleFormSubmit(e) {
     if (document.getElementById('isBookmark')?.checked) finalStatusIcon = "💭";
     if (document.getElementById('isDraft')?.checked) finalStatusIcon = "📦";
 
-    const isPublicVal = document.getElementById('isPublicCheckbox')?.checked ? 1 : 0;
-
     const payload = {
-        id: editingDiaryId,
-        shopId: shopId,
-        shopName: document.getElementById('shopName').value,
-        comment: document.getElementById('comment').value,
-        visitedAt: document.getElementById('visitedAt').value,
-        tags: combinedTags, 
-        imageBase64: currentBase64,
-        lat: finalLat, lng: finalLng,
-        temperature: document.getElementById('temperature')?.value || null,
-        weatherIcon: finalStatusIcon,
-        userGender: localStorage.getItem('ezo_gender') || "未設定",
-        userAge: localStorage.getItem('ezo_age') || "未設定",
-        userUuid: localStorage.getItem('ezo_user_uuid'),
-        isPublic: isPublicVal 
+        id: editingDiaryId, shopId: shopId, shopName: document.getElementById('shopName').value,
+        comment: document.getElementById('comment').value, visitedAt: document.getElementById('visitedAt').value,
+        tags: combinedTags, imageBase64: currentBase64, lat: finalLat, lng: finalLng,
+        temperature: document.getElementById('temperature')?.value || null, weatherIcon: finalStatusIcon,
+        userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
+        userUuid: localStorage.getItem('ezo_user_uuid'), isPublic: document.getElementById('isPublicCheckbox')?.checked ? 1 : 0 
     };
 
     const result = await saveDiaryApi(payload); 
-    
     if (result.success) {
         document.getElementById('recordForm').reset();
         document.getElementById('imagePreview').style.display = 'none';
         if(document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = ""; 
+        document.getElementById('dynamicFormFields')?.classList.remove('show');
         
-        const dynamicForm = document.getElementById('dynamicFormFields');
-        if (dynamicForm) dynamicForm.classList.remove('show');
-        
-        currentBase64 = null;
-        editingDiaryId = null;
+        currentBase64 = null; editingDiaryId = null;
         document.getElementById('submitBtn').innerHTML = "🚀 記録する";
-        
         alert("✨ 記録が保存されました！");
-        
         refreshHistoryList();
-        
-        // 記録成功後に自動で履歴タブへ遷移させる
         window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'history' } }));
-    } else { 
-        alert("エラー: " + result.error); 
-    }
-    
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = originalBtnText;
+    } else { alert("エラー: " + result.error); }
+    submitBtn.disabled = false; submitBtn.innerHTML = originalBtnText;
 }
 
-/**
- * 写真の一括ストック処理
- */
-async function handleBulkUpload(e) {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    if (!confirm(`${files.length}枚の写真が選択されました。\nすべて「未整理(📦)」として一括ストックしますか？`)) {
-        e.target.value = ''; return;
-    }
-
-    const bulkStatusEl = document.getElementById('bulkStatus');
-    e.target.disabled = true; 
-    alert("📦 モジュール移行完了後にバックグラウンド並列処理が最適化されます。");
-    e.target.disabled = false;
-}
-
-/**
- * 🌟 編集ボタンが押された際に、フォームへ既存データをセットする処理
- * （旧 main.js の editDiary の中身を完全移植）
- */
+// ✏️ 編集データをセット（履歴からの呼び出し）
 function setEditingData(id) {
     const diaries = getters.getAllDiaries();
     const diary = diaries.find(d => d.id === id);
     if (!diary) return;
 
-    // 1. 記録タブへ画面を切り替える
     window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'record' } }));
     
-    // 2. フォームへ値をセット
     document.getElementById('shopName').value = diary.shop_name === "未整理の写真" ? "" : (diary.shop_name || "");
     if (document.getElementById('shopId')) document.getElementById('shopId').value = diary.shop_id || "";
     document.getElementById('visitedAt').value = diary.visited_at ? diary.visited_at.split(' ')[0] : "";
@@ -149,10 +358,7 @@ function setEditingData(id) {
     
     if (document.getElementById('isBookmark')) document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
     if (document.getElementById('isDraft')) document.getElementById('isDraft').checked = false; 
-
-    if (document.getElementById('isPublicCheckbox')) {
-        document.getElementById('isPublicCheckbox').checked = (diary.is_public === 1);
-    }
+    if (document.getElementById('isPublicCheckbox')) document.getElementById('isPublicCheckbox').checked = (diary.is_public === 1);
 
     if (diary.weather_icon === "💭" || diary.weather_icon === "📦" || diary.weather_icon === "🚫") {
         if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
@@ -169,35 +375,22 @@ function setEditingData(id) {
     
     if (document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = "";
 
-    // タグの展開とラジオボタンの選択
     const allTags = parseTags(diary.tags);
-    if (allTags.includes('🛍️豆・グッズ')) {
-        document.querySelector('input[name="eatType"][value="🛍️豆・グッズ"]').checked = true;
-    } else if (allTags.includes('🥡テイクアウト')) {
-        document.querySelector('input[name="eatType"][value="🥡テイクアウト"]').checked = true;
-    } else if (allTags.includes('🎪間借り・無店舗')) {
-        document.querySelector('input[name="eatType"][value="🎪間借り・無店舗"]').checked = true;
-    } else {
-        document.querySelector('input[name="eatType"][value="☕️店内"]').checked = true;
-    }
+    if (allTags.includes('🛍️豆・グッズ')) document.querySelector('input[name="eatType"][value="🛍️豆・グッズ"]').checked = true;
+    else if (allTags.includes('🥡テイクアウト')) document.querySelector('input[name="eatType"][value="🥡テイクアウト"]').checked = true;
+    else if (allTags.includes('🎪間借り・無店舗')) document.querySelector('input[name="eatType"][value="🎪間借り・無店舗"]').checked = true;
+    else document.querySelector('input[name="eatType"][value="☕️店内"]').checked = true;
 
     const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗').join(', ');
     document.getElementById('tags').value = manualTags;
 
-    // 画像の表示
     const imgPreview = document.getElementById('imagePreview');
     if (diary.image_base64 || diary.image_url) {
-        imgPreview.src = diary.image_base64 || diary.image_url;
-        imgPreview.style.display = 'block';
-    } else { 
-        imgPreview.style.display = 'none'; 
-    }
+        imgPreview.src = diary.image_base64 || diary.image_url; imgPreview.style.display = 'block';
+    } else { imgPreview.style.display = 'none'; }
     
-    const dynamicForm = document.getElementById('dynamicFormFields');
-    if (dynamicForm) dynamicForm.classList.add('show');
-
-    currentBase64 = null; 
-    editingDiaryId = diary.id;
+    document.getElementById('dynamicFormFields')?.classList.add('show');
+    currentBase64 = null; editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";
     window.scrollTo(0, 0); 
 }
