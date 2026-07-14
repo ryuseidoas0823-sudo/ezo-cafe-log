@@ -21,8 +21,7 @@ export function initViewMap() {
             maxBounds: HOKKAIDO_BOUNDS, maxBoundsViscosity: 1.0, minZoom: 7, maxZoom: 19
         }).setView([HOME_LAT, HOME_LNG], 13);
         
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(viewMap);
-        viewMap.on('zoomend', () => { updateViewMarkers(false); });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(viewMap);        viewMap.on('zoomend', () => { updateViewMarkers(false); });
         viewMap.on('click', closeBottomSheet);
     }
     setTimeout(() => { viewMap.invalidateSize(); }, 200);

@@ -264,7 +264,7 @@ function setupMapPicker() {
         document.getElementById('mapPickerModal').classList.remove('hidden');
         if (!pickerMap) {
             pickerMap = L.map('pickerMap').setView([43.0600, 141.3500], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(pickerMap);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(pickerMap);
         }
         const currentLat = document.getElementById('latitude').value;
         const currentLng = document.getElementById('longitude').value;
