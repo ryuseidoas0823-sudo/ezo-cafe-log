@@ -7,6 +7,7 @@ import { mutators } from './state.js';
 import { initHistoryTab, refreshHistoryList } from './components/b2c/list.js';
 import { initFormHandlers } from './components/b2c/form.js';
 import { initViewMap, updateViewMarkers } from './components/b2c/map.js';
+import { renderAnalytics } from './components/b2c/analytics.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. 基本設定と認証の初期化
@@ -55,6 +56,7 @@ function switchTab(tabName) {
         initViewMap(); 
         updateViewMarkers(true); 
     }
+    if (tabName === 'analytics') renderAnalytics(); // 🌟 ← この行を追加！
 }
 
 // 🌟 設定（性別・年代）の読み込み
