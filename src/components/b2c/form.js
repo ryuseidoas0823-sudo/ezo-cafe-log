@@ -1,8 +1,10 @@
 // ==========================================
 // 📦 src/components/b2c/form.js
 // ==========================================
-import { saveDiaryApi, searchMasterApi } from '../../api.js';
+import { saveDiaryApi } from '../../api.js';
 import { refreshHistoryList } from './list.js';
+import { getters } from '../../state.js';           // 🌟 追加: stateを静的インポート
+import { parseTags } from '../../utils/text.js';    // 🌟 追加: タグパース用関数
 
 let currentBase64 = null;
 let editingDiaryId = null;
@@ -13,13 +15,12 @@ export function initFormHandlers() {
         recordForm.addEventListener('submit', handleFormSubmit);
     }
     
-    // 一括アップロードのトリガー設定
     const bulkInput = document.getElementById('imageInputBulk');
     if (bulkInput) {
         bulkInput.addEventListener('change', handleBulkUpload);
     }
 
-    // 編集イベントのグローバルリッスンを設定 (list.js からの伝播用)
+    // 🌟 list.js からの編集イベントを受け取り、フォームへ値をセットする
     window.addEventListener('edit-diary', (e) => {
         setEditingData(e.detail.id);
     });
@@ -99,10 +100,9 @@ async function handleFormSubmit(e) {
         
         alert("✨ 記録が保存されました！");
         
-        // 履歴一覧を即時更新
         refreshHistoryList();
         
-        // タブ切り替えイベントをトリガー（app.js側でリッスン可能にするためのカスタムイベント）
+        // 記録成功後に自動で履歴タブへ遷移させる
         window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'history' } }));
     } else { 
         alert("エラー: " + result.error); 
@@ -113,7 +113,7 @@ async function handleFormSubmit(e) {
 }
 
 /**
- * 写真の一括ストック（バルク保存）処理
+ * 写真の一括ストック処理
  */
 async function handleBulkUpload(e) {
     const files = e.target.files;
@@ -125,26 +125,79 @@ async function handleBulkUpload(e) {
 
     const bulkStatusEl = document.getElementById('bulkStatus');
     e.target.disabled = true; 
-
-    // main.js側に残る、または将来統合される画像圧縮・Exif解析処理と繋ぐための関数
-    // ※今回はインテント制御の移行のため枠組みを先行構築
     alert("📦 モジュール移行完了後にバックグラウンド並列処理が最適化されます。");
     e.target.disabled = false;
 }
 
 /**
- * 編集ボタンが押された際に、フォームへ既存データをセットする処理
+ * 🌟 編集ボタンが押された際に、フォームへ既存データをセットする処理
+ * （旧 main.js の editDiary の中身を完全移植）
  */
 function setEditingData(id) {
-    // 状態管理から直接該当する日記を検索（グローバル変数汚染の排除）
-    const { getters } = require('../../state.js'); // 動的インポート、または上部インポート
     const diaries = getters.getAllDiaries();
     const diary = diaries.find(d => d.id === id);
     if (!diary) return;
 
-    document.getElementById('shopName').value = diary.shop_name === "未整理の写真" ? "" : (diary.shop_name || "");
-    // (中略: main.js 内のフォームセット処理をそのまま移行)
+    // 1. 記録タブへ画面を切り替える
+    window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'record' } }));
     
+    // 2. フォームへ値をセット
+    document.getElementById('shopName').value = diary.shop_name === "未整理の写真" ? "" : (diary.shop_name || "");
+    if (document.getElementById('shopId')) document.getElementById('shopId').value = diary.shop_id || "";
+    document.getElementById('visitedAt').value = diary.visited_at ? diary.visited_at.split(' ')[0] : "";
+    document.getElementById('comment').value = diary.comment || "";
+    
+    if (document.getElementById('isBookmark')) document.getElementById('isBookmark').checked = (diary.weather_icon === "💭");
+    if (document.getElementById('isDraft')) document.getElementById('isDraft').checked = false; 
+
+    if (document.getElementById('isPublicCheckbox')) {
+        document.getElementById('isPublicCheckbox').checked = (diary.is_public === 1);
+    }
+
+    if (diary.weather_icon === "💭" || diary.weather_icon === "📦" || diary.weather_icon === "🚫") {
+        if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
+    } else if (diary.weather_icon) {
+        if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = diary.weather_icon;
+    } else {
+        if (document.getElementById('weatherSelect')) document.getElementById('weatherSelect').value = "❓";
+    }
+
+    document.getElementById('latitude').value = (diary.latitude !== null && diary.latitude !== "null") ? diary.latitude : "";
+    document.getElementById('longitude').value = (diary.longitude !== null && diary.longitude !== "null") ? diary.longitude : "";
+    document.getElementById('temperature').value = (diary.temperature !== null && diary.temperature !== "null") ? diary.temperature : "";
+    document.getElementById('locationSource').value = "manual"; 
+    
+    if (document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = "";
+
+    // タグの展開とラジオボタンの選択
+    const allTags = parseTags(diary.tags);
+    if (allTags.includes('🛍️豆・グッズ')) {
+        document.querySelector('input[name="eatType"][value="🛍️豆・グッズ"]').checked = true;
+    } else if (allTags.includes('🥡テイクアウト')) {
+        document.querySelector('input[name="eatType"][value="🥡テイクアウト"]').checked = true;
+    } else if (allTags.includes('🎪間借り・無店舗')) {
+        document.querySelector('input[name="eatType"][value="🎪間借り・無店舗"]').checked = true;
+    } else {
+        document.querySelector('input[name="eatType"][value="☕️店内"]').checked = true;
+    }
+
+    const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗').join(', ');
+    document.getElementById('tags').value = manualTags;
+
+    // 画像の表示
+    const imgPreview = document.getElementById('imagePreview');
+    if (diary.image_base64 || diary.image_url) {
+        imgPreview.src = diary.image_base64 || diary.image_url;
+        imgPreview.style.display = 'block';
+    } else { 
+        imgPreview.style.display = 'none'; 
+    }
+    
+    const dynamicForm = document.getElementById('dynamicFormFields');
+    if (dynamicForm) dynamicForm.classList.add('show');
+
+    currentBase64 = null; 
     editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";
+    window.scrollTo(0, 0); 
 }
