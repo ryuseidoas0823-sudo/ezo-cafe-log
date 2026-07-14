@@ -21,12 +21,11 @@ h1 { text-align: center; color: var(--accent-color); font-size: 1.5em; margin-bo
 
 .form-card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-bottom: 30px; }
 .form-group { margin-bottom: 18px; }
-.form-group.relative { position: relative; } /* 👈 サジェストリストの基準位置用に追加 */
+.form-group.relative { position: relative; } 
 
 label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 0.9em; color: var(--accent-color); }
 input[type="text"], input[type="date"], textarea, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; background-color: #fafafa; color: var(--text-color); }
 
-/* 🔍 サジェストリストのスタイルを追加！ */
 .suggest-list {
     position: absolute;
     width: 100%;
@@ -54,7 +53,6 @@ input[type="text"], input[type="date"], textarea, select { width: 100%; padding:
 textarea { resize: vertical; min-height: 100px; }
 input[type="file"] { margin-top: 5px; font-size: 0.9em; }
 
-/* ⛅️☕️🥡 追加・修正: 天候および利用タイプ選択UIのスタイルをまとめる */
 .weather-selector, .type-selector { display: flex; gap: 8px; margin-top: 5px; }
 .weather-selector label, .type-selector label { flex: 1; padding: 10px 5px; background: white; border: 2px solid #ddd; border-radius: 8px; text-align: center; cursor: pointer; font-weight: bold; font-size: 0.9rem; color: #7f8c8d; transition: 0.2s; }
 .weather-selector input[type="radio"], .type-selector input[type="radio"] { display: none; }
@@ -71,7 +69,6 @@ button:disabled { background-color: #a1887f; cursor: not-allowed; }
 .diary-date { font-size: 0.85em; color: #888; }
 .diary-shop { margin: 0; font-size: 1.25em; color: var(--text-color); font-weight: bold; }
 
-/* 🖼️ 見切れない画像 */
 .diary-image { 
     width: 100%; 
     max-height: 400px;
@@ -85,16 +82,13 @@ button:disabled { background-color: #a1887f; cursor: not-allowed; }
 .diary-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag-badge { padding: 4px 10px; border-radius: 12px; color: white; font-size: 0.75em; font-weight: bold; }
 
-/* ✏️ 編集・削除ボタン */
 .card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; padding-top: 12px; border-top: 1px dashed #eee; }
 .action-btn { background: #ecf0f1; border: none; font-size: 0.85rem; padding: 8px 12px; border-radius: 5px; cursor: pointer; width: auto; color: #2c3e50; font-weight: bold; margin: 0; }
 
-/* 🗺️ マップ */
 #mapView { width: 100%; height: 65vh; border-radius: 12px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 .emoji-pin { font-size: 20px; text-align: center; line-height: 36px; width: 36px; height: 36px; border-radius: 50%; box-shadow: 0 3px 6px rgba(0,0,0,0.4); border: 2px solid white; display: flex; align-items: center; justify-content: center; }
 .map-label { background-color: rgba(255, 255, 255, 0.95); border: 1px solid #5d4037; border-radius: 4px; color: #3e2723; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
-/* 📱 ボトムナビ */
 .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 65px; background-color: #ffffff; display: flex; justify-content: space-around; align-items: center; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05); z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
 .nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; text-decoration: none; color: #cccccc; flex: 1; padding: 5px 0; transition: color 0.2s; }
 .nav-item.active { color: var(--accent-color); }
@@ -103,12 +97,8 @@ button:disabled { background-color: #a1887f; cursor: not-allowed; }
 
 .hidden { display: none !important; }
 
-/* 🔍 検索バー下部固定 */
 .fixed-filter { position: fixed; bottom: calc(65px + env(safe-area-inset-bottom)); left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); padding: 10px 20px; box-shadow: 0 -4px 10px rgba(0,0,0,0.05); box-sizing: border-box; z-index: 999; backdrop-filter: blur(5px); border-top: 1px solid #f0f0f0; }
 
-/* =========================================
-   📊 アナリティクス・ダッシュボード関連
-========================================= */
 .dashboard-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
 .dashboard-card h3 { margin-top: 0; color: #2c3e50; font-size: 1.1rem; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
@@ -117,120 +107,22 @@ button:disabled { background-color: #a1887f; cursor: not-allowed; }
 .stat-label { font-size: 0.8rem; color: #7f8c8d; }
 .chart-container { position: relative; width: 100%; margin-top: 15px; }
 
-/* ==========================================
-   🆕 段階的開示 (Progressive Disclosure) 用スタイル
-   ========================================== */
-.hidden-fields {
-    opacity: 0;
-    max-height: 0;
-    overflow: hidden;
-    transform: translateY(20px);
-    transition: opacity 0.5s ease, max-height 0.6s cubic-bezier(0, 1, 0, 1), transform 0.5s ease;
-}
+.hidden-fields { opacity: 0; max-height: 0; overflow: hidden; transform: translateY(20px); transition: opacity 0.5s ease, max-height 0.6s cubic-bezier(0, 1, 0, 1), transform 0.5s ease; }
+.hidden-fields.show { opacity: 1; max-height: 2000px; transform: translateY(0); transition: opacity 0.5s ease, max-height 0.6s ease, transform 0.5s ease; margin-top: 20px; }
 
-.hidden-fields.show {
-    opacity: 1;
-    max-height: 2000px;
-    transform: translateY(0);
-    transition: opacity 0.5s ease, max-height 0.6s ease, transform 0.5s ease;
-    margin-top: 20px;
-}
+.glass-effect { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); }
 
-/* ========================================== */
-/* 📱 新規UI: ボトムフローティング & ボトムシート */
-/* ========================================== */
+.floating-map-controls { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); width: 92%; max-width: 400px; z-index: 1000; padding: 12px; border-radius: 20px; display: flex; flex-direction: column; }
+.filter-btn { flex: 1; background: rgba(255, 255, 255, 0.9); border: none; padding: 8px 0; border-radius: 12px; font-size: 0.85rem; font-weight: bold; color: #5d4037; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.filter-btn:active { transform: scale(0.95); }
+.filter-select { width: 100%; padding: 10px; border-radius: 12px; border: none; font-weight: bold; color: #2c3e50; background: rgba(255, 255, 255, 0.9); box-shadow: 0 2px 4px rgba(0,0,0,0.05); outline: none; }
 
-/* グラスモーフィズム（すりガラス効果）共通クラス */
-.glass-effect {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
+.bottom-sheet { position: absolute; bottom: -100%; left: 0; width: 100%; height: auto; max-height: 75vh; border-radius: 24px 24px 0 0; z-index: 2000; transition: bottom 0.4s cubic-bezier(0.3, 1, 0.3, 1); display: flex; flex-direction: column; }
+.bottom-sheet.active { bottom: 0; }
+.bottom-sheet-handle { width: 40px; height: 5px; background-color: #bdc3c7; border-radius: 3px; margin: 12px auto; }
+.bottom-sheet-content { padding: 0 20px 20px 20px; overflow-y: auto; max-height: calc(75vh - 30px); }
 
-/* フローティング・コントロール（画面下部に浮遊） */
-.floating-map-controls {
-  position: absolute;
-  bottom: 80px; /* ボトムナビゲーションを避ける高さ */
-  left: 50%;
-  transform: translateX(-50%);
-  width: 92%;
-  max-width: 400px;
-  z-index: 1000;
-  padding: 12px;
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-}
-
-.filter-btn {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  padding: 8px 0;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: bold;
-  color: #5d4037;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.filter-btn:active {
-  transform: scale(0.95);
-}
-
-.filter-select {
-  width: 100%;
-  padding: 10px;
-  border-radius: 12px;
-  border: none;
-  font-weight: bold;
-  color: #2c3e50;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  outline: none;
-}
-
-/* ボトムシート（スライドアップUI） */
-.bottom-sheet {
-  position: absolute;
-  bottom: -100%; /* 初期状態は画面外へ隠す */
-  left: 0;
-  width: 100%;
-  height: auto;
-  max-height: 75vh;
-  border-radius: 24px 24px 0 0;
-  z-index: 2000;
-  /* iOSライクな心地よいスプリングアニメーション */
-  transition: bottom 0.4s cubic-bezier(0.3, 1, 0.3, 1); 
-  display: flex;
-  flex-direction: column;
-}
-
-.bottom-sheet.active {
-  bottom: 0; /* アクティブ時に画面下部へピタッとくっつく */
-}
-
-.bottom-sheet-handle {
-  width: 40px;
-  height: 5px;
-  background-color: #bdc3c7;
-  border-radius: 3px;
-  margin: 12px auto;
-}
-
-.bottom-sheet-content {
-  padding: 0 20px 20px 20px;
-  overflow-y: auto;
-  max-height: calc(75vh - 30px);
-}
-
-/* ==========================================
-   👻 🆕 ゴーストピン用アニメーション
-========================================== */
+/* ゴーストピン用アニメーション */
 @keyframes ghostHeartbeat {
     0% { transform: scale(0.95); opacity: 0.4; box-shadow: 0 0 0 0 rgba(142, 68, 173, 0.4); }
     70% { transform: scale(1.1); opacity: 0.8; box-shadow: 0 0 10px 10px rgba(142, 68, 173, 0); }
@@ -245,7 +137,38 @@ button:disabled { background-color: #a1887f; cursor: not-allowed; }
     justify-content: center;
     font-size: 16px;
     color: rgba(255, 255, 255, 0.9);
-    animation: ghostHeartbeat 3s infinite ease-in-out; /* 3秒周期でゆっくり鼓動する */
+    animation: ghostHeartbeat 3s infinite ease-in-out;
     border: 1px solid rgba(255, 255, 255, 0.4);
     backdrop-filter: blur(2px);
+}
+
+/* ==========================================
+   🔥 🆕 リアルタイム（混雑）ピン用アニメーション
+========================================== */
+@keyframes hotHeartbeat {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+    50% { transform: scale(1.05); box-shadow: 0 0 15px 10px rgba(231, 76, 60, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+}
+
+.hot-status-pin {
+    animation: hotHeartbeat 1.5s infinite ease-in-out !important;
+    border-color: #e74c3c !important; 
+}
+
+.hot-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    z-index: 20;
+    border: 2px solid #e74c3c;
 }

@@ -1,5 +1,5 @@
 // ==========================================
-// 🗺️ map.js (地図関係の処理まとめ - `"null"`文字列クラッシュ防止版)
+// 🗺️ map.js (地図関係の処理まとめ - リアルタイムステータス統合版)
 // ==========================================
 const HOME_LAT = 43.0600;
 const HOME_LNG = 141.3500;
@@ -8,6 +8,10 @@ let mapMarkers = [];
 
 window.globalGhostPins = [];
 window.isFetchingGhosts = false;
+
+// 🔥 🆕 リアルタイムステータス用のグローバル状態
+window.globalActiveStatuses = [];
+window.isFetchingStatuses = false;
 
 let activeMapFilters = { dining: false, takeout: false, goods: false };
 const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
@@ -105,7 +109,6 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   
   if (typeof globalMasterShops !== 'undefined') {
     globalMasterShops.forEach(shop => {
-      // 🛑 修正: マスタデータも確実に数値変換して安全に読み込む
       const lat = parseFloat(shop.latitude);
       const lng = parseFloat(shop.longitude);
       
@@ -131,7 +134,6 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
   });
   
   chronologicalDiaries.forEach(diary => {
-    // 🛑 究極のポカヨケ: "null"という文字列が混入していても確実に弾き飛ばす
     const lat = parseFloat(diary.latitude);
     const lng = parseFloat(diary.longitude);
 
@@ -292,6 +294,9 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
     }
     
     const marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: opacity}).addTo(viewMap);
+    
+    // 🚨 🆕 マーカーに店舗データを紐付け（後でステータスエフェクトを付けるため）
+    marker.shopData = mainShop;
     mapMarkers.push(marker);
     
     marker.on('click', () => {
@@ -308,10 +313,53 @@ function updateViewMarkers(filteredDiaries = globalDiaries, autoFit = false) {
       viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
   }
 
+  // ==========================================
+  // 🔥 🆕 リアルタイムステータス（混雑ピン）の非同期描画
+  // ==========================================
+  const applyActiveStatuses = (statuses) => {
+      if (!statuses || statuses.length === 0) return;
+      
+      mapMarkers.forEach(marker => {
+          if (!marker.shopData) return; 
+          const isHot = statuses.some(st => 
+              (st.shop_id && st.shop_id === marker.shopData.shopId) || 
+              (!st.shop_id && st.shop_name === marker.shopData.shopName)
+          );
+          
+          if (isHot) {
+              const iconEl = marker.getElement();
+              if (iconEl) {
+                  const baseDiv = iconEl.querySelector('div'); 
+                  if (baseDiv && !baseDiv.classList.contains('hot-status-pin')) {
+                      baseDiv.classList.add('hot-status-pin');
+                      const badge = document.createElement('div');
+                      badge.className = 'hot-badge';
+                      badge.innerText = '🔥';
+                      baseDiv.appendChild(badge);
+                  }
+              }
+          }
+      });
+  };
+
+  // 1回APIを叩いたらキャッシュし、ズーム等で再描画されたらキャッシュから即適用する
+  if (!window.isFetchingStatuses) {
+      window.isFetchingStatuses = true;
+      if (typeof fetchActiveStatusesApi === 'function') {
+          fetchActiveStatusesApi().then(statuses => {
+              window.globalActiveStatuses = statuses;
+              applyActiveStatuses(window.globalActiveStatuses);
+          });
+      }
+  } else if (window.globalActiveStatuses && window.globalActiveStatuses.length > 0) {
+      // DOM生成待ちの微小遅延
+      setTimeout(() => applyActiveStatuses(window.globalActiveStatuses), 100);
+  }
+
+  // ゴーストピン描画
   if (window.currentUser && (window.currentUser.role === 'premium' || window.currentUser.role === 'admin')) {
       const drawGhostPins = (ghosts) => {
           ghosts.forEach(ghost => {
-              // 🛑 修正: ゴーストピンも確実に数値変換し、不正な文字列データを弾く
               const gLat = parseFloat(ghost.lat);
               const gLng = parseFloat(ghost.lng);
 
@@ -410,6 +458,16 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
             actionBtn += `<button onclick="recordFromMap('${mainShop.shopId || ''}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng})" style="background:#27ae60; border:none; color:white; padding:12px; border-radius:8px; font-weight:bold; cursor:pointer;">📝 このお店を開拓・記録する</button>`;
         } else if (mainShop.latestDiaryId && !mainShop.isDraftOnly) {
             actionBtn += `<button onclick="editDiary(${mainShop.latestDiaryId}); closeBottomSheet();" style="background:#f39c12; border:none; color:white; padding:12px; border-radius:8px; font-weight:bold; cursor:pointer;">✏️ 最新の記録を編集する</button>`;
+        }
+        
+        // 🚨 🆕 リアルタイムステータス報告ボタン (B2C全ユーザー)
+        if (!mainShop.isDraftOnly && !mainShop.isBookmarkOnly) {
+            actionBtn += `
+            <div style="margin-top:5px; background: rgba(231, 76, 60, 0.05); padding: 12px; border-radius: 12px; border: 1px solid rgba(231, 76, 60, 0.2); text-align: center;">
+                <p style="margin: 0 0 8px 0; font-size: 0.8rem; color: #c0392b; font-weight: bold;">👀 今ここにいて、混んでますか？</p>
+                <button onclick="reportShopStatus('${mainShop.shopId || ''}', '${escapeHTML(mainShop.shopName)}')" style="background:#e74c3c; border:none; color:white; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);">🔥 今、混んでる！と報告する</button>
+                <p style="margin: 6px 0 0 0; font-size: 0.7rem; color: #7f8c8d;">※報告は30分間マップに表示されます（連打防止機能つき）</p>
+            </div>`;
         }
     }
 
@@ -552,6 +610,28 @@ function openGhostBottomSheet(ghost) {
     content.innerHTML = html;
     sheet.classList.add('active');
 }
+
+// ==========================================
+// 🚨 🆕 リアルタイムステータスの送信アクション
+// ==========================================
+window.reportShopStatus = async function(shopId, shopName) {
+    if (!confirm(`「${shopName}」が現在混雑していることをマップに共有しますか？\n(30分間表示されます)`)) return;
+    
+    document.body.style.cursor = 'wait';
+    const result = await reportStatusApi(shopId, shopName, 'crowded');
+    document.body.style.cursor = 'default';
+    
+    if (result.success) {
+        alert("🔥 混雑状況を報告しました！\n（30分間マップにエフェクトが表示されます）");
+        
+        // 報告に成功したら、キャッシュをクリアして最新のステータスを取得し直す
+        window.isFetchingStatuses = false;
+        closeBottomSheet();
+        if (typeof updateViewMarkers === 'function') updateViewMarkers(globalDiaries, false);
+    } else {
+        alert("エラー: " + (result.error || "通信に失敗しました"));
+    }
+};
 
 window.loadShopAnalytics = async function(btnElement, shopId, shopName) {
     btnElement.innerHTML = "⏳ データを集計中...";
