@@ -1,5 +1,5 @@
 // ==========================================
-// 📱 main.js (UI制御・イベント管理 - 自宅バレ防止アラート＆強力バリデーション版)
+// 📱 main.js (UI制御・イベント管理 - 自宅ガード撤廃＆シンプル化版)
 // ==========================================
 let globalDiaries = []; 
 let editingDiaryId = null;
@@ -383,13 +383,11 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
   const eatType = document.querySelector('input[name="eatType"]:checked').value;
   let latVal = document.getElementById('latitude') ? document.getElementById('latitude').value : "";
   let lngVal = document.getElementById('longitude') ? document.getElementById('longitude').value : "";
-  let locationSource = document.getElementById('locationSource') ? document.getElementById('locationSource').value : "";
   const shopId = document.getElementById('shopId') ? document.getElementById('shopId').value : null;
 
-  // 🚨 【DXポカヨケ超強化】位置情報のチェックと、テイクアウト時のEXIFサイレント破棄に対する警告
+  // 🚨 【DXポカヨケ】位置情報必須のガード（間借り・無店舗以外）
+  // ※自宅ガードアラートは廃止し、ユーザーの意図をすべて尊重します。
   if (eatType !== '🎪間借り・無店舗') {
-      
-      // 1. 位置情報が空の場合のガード
       if (latVal === "" || lngVal === "" || latVal === "null" || lngVal === "null") {
           alert("⚠️ 店舗の位置情報が設定されていません！\n新規店舗を登録する場合は、フォーム内の「📍 マップから手動で位置を指定する」ボタンから、お店の場所にピンを刺してください。");
           const statusEl = document.getElementById('gpsStatus');
@@ -399,25 +397,9 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
           }
           return; 
       }
-      
-      // 2. 自宅バレ防止アラート（テイクアウト×写真EXIF の場合のサイレント破棄を対話型に変更）
-      if ((eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') && locationSource === 'exif') {
-          const confirmExif = confirm("⚠️ 自宅バレ防止アラート\n\nテイクアウトや物販の場合、ご自宅で撮影した写真の位置情報（EXIF）がそのままマップに登録されるのを防ぐため、通常はシステムが位置情報を破棄します。\n\nこの写真はお店で撮影したもので、マップに登録しても安全ですか？\n\n・「OK」: この位置でお店としてマップに登録する\n・「キャンセル」: 位置情報を破棄して履歴記録だけ残す");
-          
-          if (!confirmExif) {
-              // ユーザーが破棄を選んだ場合はNull化して進める（マップには乗らない）
-              document.getElementById('latitude').value = "";
-              document.getElementById('longitude').value = "";
-              latVal = ""; lngVal = "";
-          } else {
-              // OKした場合は locationSource を「手動確認済み(manual)」に書き換えて破棄ガードを安全に突破させる
-              document.getElementById('locationSource').value = 'manual';
-              locationSource = 'manual'; 
-          }
-      }
   }
 
-  // 👇 以降は既存の正常な送信プロセス
+  // 👇 以降は正常な送信プロセス
   const submitBtn = document.getElementById('submitBtn');
   const originalBtnText = submitBtn.innerHTML;
   submitBtn.disabled = true;
@@ -431,10 +413,6 @@ document.getElementById('recordForm').addEventListener('submit', async (e) => {
 
   if (eatType === '🎪間借り・無店舗') {
       finalLat = null; finalLng = null;
-  } else if (eatType === '🥡テイクアウト' || eatType === '🛍️豆・グッズ') {
-      if (locationSource === 'exif' || (!shopId && locationSource !== 'manual')) {
-          finalLat = null; finalLng = null;
-      }
   }
 
   let finalStatusIcon = document.getElementById('weatherSelect').value;

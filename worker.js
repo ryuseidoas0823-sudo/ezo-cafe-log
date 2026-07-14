@@ -90,6 +90,19 @@ export default {
       }
 
       try {
+        // 🚨 【新規追加】有効期限内のリアルタイムステータスを取得
+        if (action === "get_active_statuses") {
+            const auth = await checkAuthorization(request, env, ["free", "premium", "business", "admin"]);
+            if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
+
+            const now = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString();
+            const { results } = await env.DB.prepare(
+                "SELECT shop_id, shop_name, status_type, reported_at, expires_at FROM shop_statuses WHERE expires_at > ?"
+            ).bind(now).all();
+            
+            return new Response(JSON.stringify(results), { headers: corsHeaders });
+        }
+
         if (action === "get_ghost_pins") {
           const auth = await checkAuthorization(request, env, ["premium", "admin"]);
           if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -194,6 +207,40 @@ export default {
       try {
         const data = await request.json();
         
+        // 🚨 【新規追加】リアルタイムステータスの報告（連打防止のポカヨケ実装）
+        if (data.action === "report_status") {
+            const auth = await checkAuthorization(request, env, ["free", "premium"]);
+            if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
+
+            const shopId = data.shopId || null;
+            const shopName = data.shopName || "名前なし";
+            const statusType = data.statusType || "crowded"; // 将来のB2B拡張('available', 'baked')を見据えた設計
+            const userUuid = auth.user.userUuid;
+
+            const nowMs = Date.now() + 9 * 60 * 60 * 1000;
+            const nowStr = new Date(nowMs).toISOString();
+            const oneHourAgoStr = new Date(nowMs - 60 * 60 * 1000).toISOString();
+            const expiresAtStr = new Date(nowMs + 30 * 60 * 1000).toISOString(); // 有効期限は30分
+
+            // 🛡️ ポカヨケ: 同一UUIDから、同じ店舗への1時間以内の連続投稿をブロック
+            let recentReport;
+            if (shopId) {
+                recentReport = await env.DB.prepare("SELECT id FROM shop_statuses WHERE shop_id = ? AND user_uuid = ? AND reported_at > ?").bind(shopId, userUuid, oneHourAgoStr).first();
+            } else {
+                recentReport = await env.DB.prepare("SELECT id FROM shop_statuses WHERE shop_name = ? AND user_uuid = ? AND reported_at > ?").bind(shopName, userUuid, oneHourAgoStr).first();
+            }
+
+            if (recentReport) {
+                return new Response(JSON.stringify({ success: false, error: "連続報告ブロック: 短時間での連投はできません。" }), { status: 429, headers: corsHeaders });
+            }
+
+            await env.DB.prepare(
+                "INSERT INTO shop_statuses (shop_id, shop_name, status_type, user_uuid, reported_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
+            ).bind(shopId, shopName, statusType, userUuid, nowStr, expiresAtStr).run();
+
+            return new Response(JSON.stringify({ success: true, expiresAt: expiresAtStr }), { headers: corsHeaders });
+        }
+
         if (data.action === "upgrade_admin") {
             const auth = await checkAuthorization(request, env, []); 
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -214,7 +261,6 @@ export default {
         if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
         const comment = data.comment || "";
-        // 🛑 安全な数値型への変換
         const lat = data.lat !== undefined && data.lat !== null ? parseFloat(data.lat) : null;
         const lng = data.lng !== undefined && data.lng !== null ? parseFloat(data.lng) : null;
         const temp = data.temperature !== undefined && data.temperature !== null && data.temperature !== "" ? parseFloat(data.temperature) : null;
@@ -226,29 +272,10 @@ export default {
         const isPublicVal = data.isPublic !== undefined ? data.isPublic : 0;
 
         let targetBase64 = data.imageBase64 || null;
-        let moderationTag = ""; 
-
-        if (env.AI && targetBase64) {
-          try {
-            const b64Data = targetBase64.split(',')[1] || targetBase64;
-            const binaryStr = atob(b64Data);
-            const uint8Array = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) uint8Array[i] = binaryStr.charCodeAt(i);
-            
-            const visionResponse = await env.AI.run('@cf/meta/llama-3.2-11b-vision-instruct', {
-              prompt: "あなたは画像モデレーターです。この画像が、性的な内容・わいせつなもの、またはカフェと無関係な人物の自撮りである場合は「🚨NG」、通常の写真であれば「OK」とだけ出力してください。",
-              image: Array.from(uint8Array)
-            });
-
-            if (visionResponse && visionResponse.response && visionResponse.response.includes("🚨NG")) {
-               targetBase64 = null; moderationTag = "🚨共有不可";
-            }
-          } catch (err) { console.log("Vision AI Error:", err); }
-        }
 
         let aiExtractedTags = ""; let unclassifiedTags = [];
-        if (env.AI && comment.length > 5 && moderationTag === "") {
-          const systemPrompt = `あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。\n\n{\n  "moderation": "OK" または "🚨共有不可" または "🚨要確認",\n  "tags": {\n    "coffee": ["抽出したコーヒー関連のタグ(品種, 焙煎, 抽出方法など)"],\n    "food": ["抽出したフード関連のタグ(ランチ, ケーキなど)"],\n    "atmosphere": ["抽出した雰囲気や設備のタグ。なお、もし日記内にテイクアウトや物販が終了・廃止されたという記述があれば、それぞれ『テイクアウト廃止』や『物販終了』というキーワードをここに含めてください"]\n  },\n  "unclassified": ["上記に分類できないが重要そうなキーワード"]\n}`;
+        if (env.AI && comment.length > 5) {
+          const systemPrompt = `あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。\n\n{\n  "tags": {\n    "coffee": ["抽出したコーヒー・ドリンク関連のタグ(品種, 焙煎, 抽出方法など)"],\n    "food": ["抽出したフード関連のタグ(ランチ, ケーキ, スイーツなど)"],\n    "atmosphere": ["抽出した雰囲気や設備のタグ(作業向き, リラックス, 音楽, 景色など)。なお、もし日記内にテイクアウトや物販が終了・廃止されたという記述があれば、それぞれ『テイクアウト廃止』や『物販終了』というキーワードを含めてください"]\n  },\n  "unclassified": ["上記に分類できないが重要そうなキーワード"]\n}`;
           try {
             const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
               messages: [{ role: "system", content: systemPrompt }, { role: "user", content: comment }]
@@ -256,21 +283,18 @@ export default {
             if (aiResponse && aiResponse.response) {
               let rawText = aiResponse.response.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
               const result = JSON.parse(rawText);
-              if (result.moderation !== "OK") { moderationTag = result.moderation; } 
-              else {
-                const coffeeTags = (result.tags.coffee || []).map(t => `🤖☕️${t}`);
-                const foodTags = (result.tags.food || []).map(t => `🤖🍰${t}`);
-                const atmosphereTags = (result.tags.atmosphere || []).map(t => `🤖🛋️${t}`);
-                aiExtractedTags = [...coffeeTags, ...foodTags, ...atmosphereTags].join(', ');
-                unclassifiedTags = result.unclassified || [];
-              }
+              
+              const coffeeTags = (result.tags?.coffee || []).map(t => `🤖☕️${t}`);
+              const foodTags = (result.tags?.food || []).map(t => `🤖🍰${t}`);
+              const atmosphereTags = (result.tags?.atmosphere || []).map(t => `🤖🛋️${t}`);
+              aiExtractedTags = [...coffeeTags, ...foodTags, ...atmosphereTags].join(', ');
+              unclassifiedTags = result.unclassified || [];
             }
           } catch (err) { unclassifiedTags = ["AIパースエラー"]; }
         }
 
         let combinedTags = data.tags || "";
-        if (moderationTag !== "") combinedTags = combinedTags ? `${combinedTags}, ${moderationTag}` : moderationTag;
-        else if (aiExtractedTags) combinedTags = combinedTags ? `${combinedTags}, ${aiExtractedTags}` : aiExtractedTags;
+        if (aiExtractedTags) combinedTags = combinedTags ? `${combinedTags}, ${aiExtractedTags}` : aiExtractedTags;
 
         if (unclassifiedTags && unclassifiedTags.length > 0) {
           const gasWebhookUrl = env.GAS_WEBHOOK_URL || ""; 
@@ -285,7 +309,6 @@ export default {
         const visitedAt = data.visitedAt || createdSystemAt; 
 
         if (data.id) {
-          // 🛑 修正: UPDATEクエリに `shop_id = ?` の更新を追加！
           if (targetBase64) {
             await env.DB.prepare(`UPDATE diaries SET shop_id = ?, shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
               .bind(data.shopId || null, data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
