@@ -2,36 +2,27 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <!-- スマホでの不用意なズームを防止し、ネイティブアプリ感を出すビューポート設定 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>EzoCafe Log</title>
-
-    <!-- Leaflet CSS (マップ描画用) -->
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    
-    <!-- 🌟 キャッシュバスター: ?v=2 を付与し最新のCSSを強制読み込み -->
-    <link rel="stylesheet" href="./style.css?v=2">
+    <!-- 🌟 キャッシュバスター: ?v=3 に更新し強制読み込み -->
+    <link rel="stylesheet" href="./style.css?v=3">
 </head>
 <body>
     <div class="app-container">
         <!-- ==========================================
-             🏷️ アプリヘッダー & ナビゲーション
+             🏷️ アプリヘッダー
              ========================================== -->
         <header style="padding: 16px; text-align: center; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color);">
-            <h1>☕️ EzoCafe Log</h1>
-            <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
-                <button class="btn-secondary" onclick="window.dispatchEvent(new CustomEvent('switch-tab', {detail: {tab: 'record'}}))">✍️ 記録する</button>
-                <button class="btn-secondary" onclick="window.dispatchEvent(new CustomEvent('switch-tab', {detail: {tab: 'history'}}))">📚 履歴を見る</button>
-            </div>
+            <h1 style="margin: 0;">☕️ EzoCafe Log</h1>
         </header>
 
         <!-- ==========================================
-             ✍️ 記録タブ (フォーム領域)
+             ✍️ 1. 記録タブ (フォーム領域)
              ========================================== -->
-        <main id="tab-record" style="padding-top: 16px;">
+        <main id="tab-record" class="tab-content" style="padding-top: 16px;">
             <form id="recordForm">
-                
-                <!-- 1. 店舗名 & サジェスト機能 -->
                 <div class="form-group relative">
                     <label for="shopName">店舗名</label>
                     <input type="text" id="shopName" placeholder="店舗名を入力または検索" required autocomplete="off">
@@ -39,12 +30,10 @@
                     <ul id="shopSuggestList" style="display: none;"></ul>
                 </div>
 
-                <!-- 2. 手動マップピッカー起動ボタン -->
                 <div class="form-group" style="display: flex; gap: 8px;">
                     <button type="button" class="btn-secondary" id="btnOpenMapPicker" style="flex: 1;">📍 マップから手動選択</button>
                 </div>
 
-                <!-- 3. 画像アップロード (複数対応 & 一括ストック) -->
                 <div class="form-group">
                     <label>写真の追加 (複数可)</label>
                     <input type="file" id="imageInputSingle" accept="image/jpeg, image/png, image/webp" multiple style="margin-bottom: 8px;">
@@ -55,17 +44,11 @@
                     </div>
                 </div>
 
-                <!-- 4. 画像プレビューエリア -->
-                <img id="imagePreview" style="display: none;" alt="単一プレビュー">
                 <div id="photoPreviewContainer"></div>
-                
-                <!-- 5. ステータス通知 -->
                 <div id="gpsStatus"></div>
                 <div id="bulkStatus"></div>
 
-                <!-- 6. 動的フォームエリア (写真選択 or スキップで展開) -->
                 <div id="dynamicFormFields" class="hidden">
-                    
                     <div class="form-group">
                         <label>利用形態</label>
                         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -109,39 +92,103 @@
                     </div>
 
                     <div class="form-group" style="display: flex; gap: 16px;">
-                        <label style="display: flex; align-items: center; gap: 4px;">
-                            <input type="checkbox" id="isBookmark"> 💭 行きたい
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 4px;">
-                            <input type="checkbox" id="isDraft"> 📦 未整理
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 4px;">
-                            <input type="checkbox" id="isPublicCheckbox"> 🌍 公開する
-                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px;"><input type="checkbox" id="isBookmark"> 💭 行きたい</label>
+                        <label style="display: flex; align-items: center; gap: 4px;"><input type="checkbox" id="isDraft"> 📦 未整理</label>
+                        <label style="display: flex; align-items: center; gap: 4px;"><input type="checkbox" id="isPublicCheckbox"> 🌍 公開</label>
                     </div>
 
-                    <!-- 位置情報隠しフィールド -->
                     <input type="hidden" id="latitude">
                     <input type="hidden" id="longitude">
                     <input type="hidden" id="locationSource">
-
                     <button type="submit" id="submitBtn" class="btn-primary">🚀 記録する</button>
                 </div>
             </form>
         </main>
 
         <!-- ==========================================
-             📚 履歴タブ
+             📚 2. 履歴タブ
              ========================================== -->
-        <main id="tab-history" class="hidden" style="padding-top: 16px;">
+        <main id="tab-history" class="tab-content hidden" style="padding-top: 16px;">
             <div class="form-group">
                 <select id="tagFilter" class="form-group">
                     <option value="">すべてのタグ（全件表示）</option>
                 </select>
             </div>
-            <!-- ここにJS(list.js)からカードがレンダリングされます -->
             <div id="diariesList"></div>
         </main>
+
+        <!-- ==========================================
+             🗺️ 3. マップタブ
+             ========================================== -->
+        <main id="tab-map" class="tab-content hidden" style="padding-top: 16px; height: calc(100vh - 150px); display: flex; flex-direction: column;">
+            <div class="form-group">
+                <select id="mapTagFilter" style="width: 100%;">
+                    <option value="">🏷️ すべての気分・目的・タグ</option>
+                </select>
+            </div>
+            <div id="mainMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1;"></div>
+        </main>
+
+        <!-- ==========================================
+             📊 4. アナリティクスタブ
+             ========================================== -->
+        <main id="tab-analytics" class="tab-content hidden" style="padding: 16px;">
+            <h2 style="text-align: center; margin-bottom: 20px;">📊 記録の分析</h2>
+            <div id="analyticsContent">
+                <p style="text-align:center; color: var(--text-sub);">データを集計中...</p>
+            </div>
+        </main>
+
+        <!-- ==========================================
+             ⚙️ 5. 設定タブ
+             ========================================== -->
+        <main id="tab-settings" class="tab-content hidden" style="padding: 16px;">
+            <h2 style="margin-bottom: 20px;">⚙️ ユーザー設定</h2>
+            <div class="form-group">
+                <label>性別</label>
+                <select id="userGender">
+                    <option value="未設定">未設定</option>
+                    <option value="男性">男性</option>
+                    <option value="女性">女性</option>
+                    <option value="その他">その他</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>年代</label>
+                <select id="userAge">
+                    <option value="未設定">未設定</option>
+                    <option value="10代">10代</option>
+                    <option value="20代">20代</option>
+                    <option value="30代">30代</option>
+                    <option value="40代">40代</option>
+                    <option value="50代以上">50代以上</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-top: 24px;">
+                <button id="btnSaveSettings" class="btn-primary">💾 設定を保存する</button>
+            </div>
+        </main>
+
+        <!-- ==========================================
+             📱 ボトムナビゲーション (下部固定)
+             ========================================== -->
+        <nav style="position: fixed; bottom: 0; left: 0; right: 0; max-width: 600px; margin: 0 auto; background: var(--card-bg); border-top: 1px solid var(--border-color); display: flex; justify-content: space-around; padding: 10px 0; z-index: 1000; padding-bottom: calc(10px + env(safe-area-inset-bottom));">
+            <button class="nav-btn" data-tab="record" style="background:none; color:var(--primary-color); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+                <span style="font-size:20px; margin-bottom:4px;">✍️</span>記録
+            </button>
+            <button class="nav-btn" data-tab="history" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+                <span style="font-size:20px; margin-bottom:4px;">📚</span>履歴
+            </button>
+            <button class="nav-btn" data-tab="map" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+                <span style="font-size:20px; margin-bottom:4px;">🗺️</span>マップ
+            </button>
+            <button class="nav-btn" data-tab="analytics" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+                <span style="font-size:20px; margin-bottom:4px;">📊</span>分析
+            </button>
+            <button class="nav-btn" data-tab="settings" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+                <span style="font-size:20px; margin-bottom:4px;">⚙️</span>設定
+            </button>
+        </nav>
     </div>
 
     <!-- ==========================================
@@ -149,19 +196,13 @@
          ========================================== -->
     <div id="mapPickerModal" class="hidden">
         <div class="map-modal-content">
-            <!-- 🌟 ポカヨケ: map-modal-header-text クラスを付与し、✖ボタンとの被りを完全防止 -->
             <div class="map-modal-header">
                 <p class="map-modal-header-text">📍 地図を動かして「＋」をお店に合わせてください</p>
                 <button id="closeMapPicker">✖ 閉じる</button>
             </div>
-            
             <div id="pickerMap" style="position: relative;">
-                <!-- 画面中央の十字カーソル（CSSで絶対配置） -->
-                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; pointer-events: none; font-size: 24px;">
-                    ➕
-                </div>
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; pointer-events: none; font-size: 24px;">➕</div>
             </div>
-
             <div class="map-modal-footer">
                 <button id="btnConfirmLocation" class="btn-primary" style="margin: 0;">✅ ここを店舗の位置として決定</button>
             </div>
@@ -171,26 +212,38 @@
     <!-- ==========================================
          📦 外部スクリプト & メインロジック
          ========================================== -->
-    <!-- Leaflet.js -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-    
-    <!-- exifr (EXIFメタデータ抽出用) -->
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+    <!-- キャッシュバスターを v=3 に更新 -->
+    <script type="module" src="./src/app.js?v=3"></script>
     
-    <!-- 🌟 キャッシュバスター: ?v=2 を付与し最新のJSを強制読み込み -->
-    <script type="module" src="./src/app.js?v=2"></script>
-    
-    <!-- 簡易タブ切り替え用インラインスクリプト -->
+    <!-- 📱 ボトムナビゲーション＆タブ切り替え制御 -->
     <script>
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tabName = e.currentTarget.dataset.tab;
+                // app.js 等へタブ切り替えイベントを通知
+                window.dispatchEvent(new CustomEvent('switch-tab', {detail: {tab: tabName}}));
+            });
+        });
+
         window.addEventListener('switch-tab', (e) => {
             const tab = e.detail.tab;
-            if (tab === 'record') {
-                document.getElementById('tab-record').classList.remove('hidden');
-                document.getElementById('tab-history').classList.add('hidden');
-            } else if (tab === 'history') {
-                document.getElementById('tab-record').classList.add('hidden');
-                document.getElementById('tab-history').classList.remove('hidden');
-            }
+            
+            // 全タブを隠し、対象タブのみ表示
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            const target = document.getElementById('tab-' + tab);
+            if (target) target.classList.remove('hidden');
+            
+            // ナビゲーションのハイライト（色）を切り替え
+            document.querySelectorAll('.nav-btn').forEach(b => {
+                if(b.dataset.tab === tab) {
+                    b.style.color = 'var(--primary-color)';
+                } else {
+                    b.style.color = 'var(--text-sub)';
+                }
+            });
+            window.scrollTo(0, 0); // タブ切り替え時に一番上へ戻す
         });
     </script>
 </body>
