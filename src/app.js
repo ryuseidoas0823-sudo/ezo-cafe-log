@@ -2,7 +2,7 @@
 // 🚀 src/app.js (メインエントリポイント)
 // ==========================================
 import { getOrGenerateUserUuid } from './utils/crypto.js';
-import { fetchMeApi, fetchDiariesApi, fetchMasterShopsApi, upgradeToAdminApi } from './api.js'; // 🌟 upgradeToAdminApiを追加
+import { fetchMeApi, fetchDiariesApi, fetchMasterShopsApi, upgradeToAdminApi } from './api.js'; 
 import { mutators } from './state.js';
 import { initHistoryTab, refreshHistoryList } from './components/b2c/list.js';
 import { initFormHandlers } from './components/b2c/form.js';
@@ -12,7 +12,7 @@ import { renderAnalytics } from './components/b2c/analytics.js';
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. 基本設定と認証の初期化
     resetDateToToday();
-    loadSettings(); // 🌟 保存されている性別・年代を読み込む
+    loadSettings(); // 🌟 バグ修正: 保存されている性別・年代を正しいIDで読み込む
     getOrGenerateUserUuid(); 
     
     // 2. ユーザー情報と初期データの並列取得
@@ -31,45 +31,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     initFormHandlers();
     initHistoryTab();
 
+    // 🌟 設定保存ボタンのイベントリスナー（修正）
+    const saveSettingsBtn = document.getElementById('btnSaveSettings');
+    if (saveSettingsBtn) {
+        saveSettingsBtn.addEventListener('click', window.saveSettings);
+    }
+
     // 4. カスタムイベントのリスナー登録
     setupGlobalEventListeners();
 });
 
-// タブ切り替えロジック
-function switchTab(tabName) {
-    const tabs = ['record', 'history', 'map', 'analytics', 'settings'];
-    tabs.forEach(t => {
-        const el = document.getElementById(`tab-${t}`);
-        if(el) el.classList.add('hidden');
-    });
-
-    document.getElementById(`tab-${tabName}`)?.classList.remove('hidden');
-    
-    // ナビゲーションのハイライト変更
-    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
-    const activeNav = document.querySelector(`.nav-item[data-tab="${tabName}"]`);
-    if(activeNav) activeNav.classList.add('active');
-
+// 🌟 UIの表示切替は index.html 側で行うため、ここではデータ更新とJSレンダリングのみを担当
+function switchTabLogic(tabName) {
     // タブごとの遅延初期化
     if (tabName === 'history') refreshHistoryList();
     if (tabName === 'map') { 
         initViewMap(); 
         updateViewMarkers(true); 
     }
-    if (tabName === 'analytics') renderAnalytics(); // 🌟 ← この行を追加！
+    if (tabName === 'analytics') renderAnalytics(); // 🌟 アナリティクス描画機能を追加
 }
 
-// 🌟 設定（性別・年代）の読み込み
+// 🌟 バグ修正: HTML側のIDに合わせて 'userGender' と 'userAge' に変更
 function loadSettings() {
     const g = localStorage.getItem('ezo_gender');
     const a = localStorage.getItem('ezo_age');
-    if (g && document.getElementById('settingGender')) document.getElementById('settingGender').value = g;
-    if (a && document.getElementById('settingAge')) document.getElementById('settingAge').value = a;
+    if (g && document.getElementById('userGender')) document.getElementById('userGender').value = g;
+    if (a && document.getElementById('userAge')) document.getElementById('userAge').value = a;
 }
 
 function setupGlobalEventListeners() {
     window.addEventListener('switch-tab', (e) => {
-        switchTab(e.detail.tab);
+        switchTabLogic(e.detail.tab);
     });
 
     window.addEventListener('set-form-from-map', (e) => {
@@ -98,14 +91,14 @@ function resetDateToToday() {
 // 🌐 HTMLの onclick から呼ばれるグローバル関数の公開
 // ==========================================
 
-// タブ切り替え
-window.switchTab = (tabName, element) => switchTab(tabName);
+// 万が一HTML側に onclick="window.switchTab(...)" が残っていた場合のポカヨケ
+window.switchTab = (tabName) => window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: tabName } }));
 
-// 🌟 設定の保存（エラー修正済み）
+// 🌟 バグ修正: 保存ロジック内のIDも統一
 window.saveSettings = function() {
-    const g = document.getElementById('settingGender')?.value || "";
-    const a = document.getElementById('settingAge')?.value || "";
-    if (!g || !a) { 
+    const g = document.getElementById('userGender')?.value || "";
+    const a = document.getElementById('userAge')?.value || "";
+    if (!g || !a || g === "未設定" || a === "未設定") { 
         alert("性別と年代を両方選択してください。"); 
         return; 
     }
@@ -114,11 +107,11 @@ window.saveSettings = function() {
     alert("✨ 設定を保存しました！");
 };
 
-// 🌟 管理者権限への昇格（復活）
+// 🌟 管理者権限への昇格
 window.upgradeToAdmin = async function() {
     if(!confirm("あなたのアカウントを管理者(Admin)に昇格させますか？")) return;
     const res = await upgradeToAdminApi();
-    if(res.success) {
+    if(res && res.success) {
         alert("👑 管理者に昇格しました！画面をリロードします。");
         window.location.reload();
     } else {
@@ -126,29 +119,36 @@ window.upgradeToAdmin = async function() {
     }
 };
 
-// 🌟 地図の画像ダウンロード機能（復活）
+// 🌟 復旧: 地図の画像ダウンロード機能（html2canvas）
 window.downloadMapImage = function() {
-    const mapContainer = document.getElementById('mapView');
+    const mapContainer = document.getElementById('viewMap'); // IDを viewMap に修正
     const template = document.getElementById('map-watermark-template');
     const saveBtn = document.getElementById('btn-save-map-image');
     
-    if (!mapContainer || !template) return;
+    if (!mapContainer) return;
 
-    const originalBtnText = saveBtn.innerHTML;
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = "📸 画像を生成中...";
+    let originalBtnText = "";
+    if (saveBtn) {
+        originalBtnText = saveBtn.innerHTML;
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = "📸 画像を生成中...";
+    }
 
-    const validShopsCount = document.getElementById('stat-unique-shops')?.innerText || "0";
-    document.getElementById('watermark-shop-count').innerText = validShopsCount;
+    // ウォーターマークがある場合は表示
+    let watermarkClone = null;
+    if (template) {
+        const validShopsCount = document.getElementById('stat-unique-shops')?.innerText || "0";
+        const countSpan = document.getElementById('watermark-shop-count');
+        if(countSpan) countSpan.innerText = validShopsCount;
 
-    const watermarkClone = template.cloneNode(true);
-    watermarkClone.style.display = 'block';
-    mapContainer.appendChild(watermarkClone);
+        watermarkClone = template.cloneNode(true);
+        watermarkClone.style.display = 'block';
+        mapContainer.appendChild(watermarkClone);
+    }
 
     if (typeof html2canvas === 'undefined') {
         alert("画像生成ライブラリが読み込まれていません。");
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = originalBtnText;
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = originalBtnText; }
         return;
     }
 
@@ -162,14 +162,12 @@ window.downloadMapImage = function() {
         link.href = canvas.toDataURL('image/png');
         link.click();
         
-        mapContainer.removeChild(watermarkClone);
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = originalBtnText;
+        if (watermarkClone) mapContainer.removeChild(watermarkClone);
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = originalBtnText; }
     }).catch(err => {
         console.error("Map Image Export Error:", err);
-        mapContainer.removeChild(watermarkClone);
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = originalBtnText;
+        if (watermarkClone) mapContainer.removeChild(watermarkClone);
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = originalBtnText; }
         alert("画像の生成に失敗しました。時間をおいて再度お試しください。");
     });
 };

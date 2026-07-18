@@ -1,35 +1,51 @@
 // ==========================================
-// 📊 src/components/b2c/analytics.js (データ分析・Chart.js制御)
+// 📊 src/components/b2c/analytics.js (Vanilla JS + CSS 軽量・完全版)
 // ==========================================
 import { getters } from '../../state.js';
-import { parseTags, getColorFromTag } from '../../utils/text.js';
-
-let tagsChartInstance = null;
-let eatTypeChartInstance = null; 
+import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
 
 export function renderAnalytics() {
-    const diaries = getters.getAllDiaries();
-    if (!diaries || diaries.length === 0) return;
+    const container = document.getElementById('analyticsContent');
+    if (!container) return;
 
-    // ▼ 🎯 DX機能: 「行きたい(💭)」「未整理(📦)」「閉店(🚫)」を分析対象から完全に除外する
+    const diaries = getters.getAllDiaries();
+    
+    // ▼ 🎯 DX機能: 「行きたい(💭)」「未整理(📦)」「閉店(🚫)」を分析対象から完全に除外
     const validDiaries = diaries.filter(d => 
         d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫"
     );
 
-    // 1. 基本統計の計算
+    if (validDiaries.length === 0) {
+        container.innerHTML = `<p style="text-align:center; color: var(--text-sub); margin-top: 40px; line-height: 1.8;">まだ訪問記録がありません。<br>記録をつけると、ここに分析データが表示されます☕️</p>`;
+        return;
+    }
+
+    // ==========================================
+    // 1. 基本統計の計算とID割り当て（マップ画像連携用）
+    // ==========================================
     const totalVisits = validDiaries.length;
     const uniqueShops = new Set(validDiaries.map(d => d.shop_name)).size;
 
-    const statTotalEl = document.getElementById('stat-total-visits');
-    const statUniqueEl = document.getElementById('stat-unique-shops');
-    if (statTotalEl) statTotalEl.innerText = totalVisits;
-    if (statUniqueEl) statUniqueEl.innerText = uniqueShops;
+    let html = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 24px; animation: fadeIn 0.4s ease;">
+            <div style="background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;">
+                <p style="font-size: 0.8rem; color: var(--text-sub); margin: 0; font-weight: bold;">累計訪問数</p>
+                <p style="font-size: 2rem; color: var(--text-main); font-weight: 900; margin: 5px 0 0 0;"><span id="stat-total-visits">${totalVisits}</span><span style="font-size:1rem; font-weight:bold;"> 回</span></p>
+            </div>
+            <div style="background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); text-align: center;">
+                <p style="font-size: 0.8rem; color: var(--text-sub); margin: 0; font-weight: bold;">開拓した店舗数</p>
+                <p style="font-size: 2rem; color: var(--primary-color); font-weight: 900; margin: 5px 0 0 0;"><span id="stat-unique-shops">${uniqueShops}</span><span style="font-size:1rem; font-weight:bold;"> 店</span></p>
+            </div>
+        </div>
+    `;
 
+    // ==========================================
+    // 2. 実データでのタグ・利用形態の集計
+    // ==========================================
     const tagCounts = {};
     const eatTypeCounts = {};
     const eatTypeKeywords = ['☕️店内', '🥡テイクアウト', '🛍️豆・グッズ', '🎪間借り・無店舗'];
 
-    // 2. フィルタリング後の実データのみでタグを集計
     validDiaries.forEach(d => {
         parseTags(d.tags).forEach(tag => {
             if (eatTypeKeywords.includes(tag)) {
@@ -41,77 +57,72 @@ export function renderAnalytics() {
     });
 
     // ==========================================
-    // 📊 チャート1：利用タイプの割合
+    // 📊 チャート1：利用タイプの割合 (CSS描画に置換)
     // ==========================================
-    const eatLabels = Object.keys(eatTypeCounts);
-    const eatData = eatLabels.map(tag => eatTypeCounts[tag]);
-    
-    const getEatTypeColor = (type) => {
-        if(type === '☕️店内') return '#e67e22'; 
-        if(type === '🥡テイクアウト') return '#27ae60'; 
-        if(type === '🛍️豆・グッズ') return '#8e44ad'; 
-        if(type === '🎪間借り・無店舗') return '#f39c12';
-        return '#95a5a6';
-    };
-    const eatColors = eatLabels.map(tag => getEatTypeColor(tag));
+    const eatLabels = Object.keys(eatTypeCounts).sort((a, b) => eatTypeCounts[b] - eatTypeCounts[a]);
+    if (eatLabels.length > 0) {
+        html += `<div style="background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; animation: fadeIn 0.5s ease;">
+                    <h3 style="font-size: 1rem; color: var(--text-main); margin: 0 0 15px 0; border-bottom: 2px solid #e67e22; display: inline-block; padding-bottom: 4px;">🍽️ 利用タイプの割合</h3>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">`;
+        
+        const maxEatCount = Math.max(...eatLabels.map(tag => eatTypeCounts[tag]));
+        const getEatTypeColor = (type) => {
+            if(type === '☕️店内') return '#e67e22'; 
+            if(type === '🥡テイクアウト') return '#27ae60'; 
+            if(type === '🛍️豆・グッズ') return '#8e44ad'; 
+            if(type === '🎪間借り・無店舗') return '#f39c12';
+            return '#95a5a6';
+        };
 
-    const ctxEatEl = document.getElementById('eatTypeChart');
-    if (ctxEatEl) {
-        const ctxEat = ctxEatEl.getContext('2d');
-        if (eatTypeChartInstance) eatTypeChartInstance.destroy(); 
-
-        eatTypeChartInstance = new Chart(ctxEat, {
-            type: 'doughnut',
-            data: {
-                labels: eatLabels,
-                datasets: [{
-                    data: eatData,
-                    backgroundColor: eatColors,
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    title: { display: true, text: '利用タイプの割合', font: { size: 14, color: '#5d4037' } }
-                }
-            }
+        eatLabels.forEach(tag => {
+            const count = eatTypeCounts[tag];
+            const percent = Math.max(5, Math.round((count / maxEatCount) * 100));
+            html += `
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; font-weight: bold; color: var(--text-main);">
+                        <span>${escapeHTML(tag)}</span>
+                        <span>${count} 回</span>
+                    </div>
+                    <div style="background: #ecf0f1; height: 10px; border-radius: 5px; overflow: hidden;">
+                        <div style="width: ${percent}%; height: 100%; background-color: ${getEatTypeColor(tag)}; border-radius: 5px; transition: width 1s ease;"></div>
+                    </div>
+                </div>
+            `;
         });
+        html += `</div></div>`;
     }
 
     // ==========================================
-    // 📊 チャート2：よく記録するタグ（ユーザーの嗜好）
+    // 📊 チャート2：よく記録するタグ (CSS描画に置換)
     // ==========================================
     const sortedTags = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]).slice(0, 6);
-    const chartLabels = sortedTags;
-    const chartData = sortedTags.map(tag => tagCounts[tag]);
-    const chartColors = sortedTags.map(tag => getColorFromTag(tag));
+    
+    if (sortedTags.length > 0) {
+        html += `<div style="background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; animation: fadeIn 0.6s ease;">
+                    <h3 style="font-size: 1rem; color: var(--text-main); margin: 0 0 15px 0; border-bottom: 2px solid var(--primary-color); display: inline-block; padding-bottom: 4px;">🏷️ よく記録するタグ（上位）</h3>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">`;
+        
+        const maxTagCount = tagCounts[sortedTags[0]];
 
-    const ctxTagsEl = document.getElementById('tagsChart');
-    if (ctxTagsEl) {
-        const ctxTags = ctxTagsEl.getContext('2d');
-        if (tagsChartInstance) tagsChartInstance.destroy(); 
+        sortedTags.forEach(tag => {
+            const count = tagCounts[tag];
+            const percent = Math.max(5, Math.round((count / maxTagCount) * 100));
+            const color = getColorFromTag(tag); // utilsの既存関数を活用
 
-        tagsChartInstance = new Chart(ctxTags, {
-            type: 'doughnut',
-            data: {
-                labels: chartLabels,
-                datasets: [{
-                    data: chartData,
-                    backgroundColor: chartColors,
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    title: { display: true, text: 'よく記録するタグ（上位）', font: { size: 14, color: '#5d4037' } }
-                }
-            }
+            html += `
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; font-weight: bold; color: var(--text-main);">
+                        <span>${escapeHTML(tag)}</span>
+                        <span>${count} 回</span>
+                    </div>
+                    <div style="background: #ecf0f1; height: 10px; border-radius: 5px; overflow: hidden;">
+                        <div style="width: ${percent}%; height: 100%; background-color: ${color}; border-radius: 5px; transition: width 1s ease;"></div>
+                    </div>
+                </div>
+            `;
         });
+        html += `</div></div>`;
     }
+
+    container.innerHTML = html;
 }
