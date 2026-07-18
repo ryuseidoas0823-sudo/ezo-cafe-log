@@ -1,5 +1,5 @@
 // ==========================================
-// 📦 src/components/b2c/form.js (完全修正・堅牢化版)
+// 📦 src/components/b2c/form.js (マップ検索＆ピン追従 完全版)
 // ==========================================
 import { saveDiaryApi, searchMasterApi } from '../../api.js';
 import { refreshHistoryList } from './list.js';
@@ -10,6 +10,7 @@ let currentImageBase64Array = [];
 let editingDiaryId = null;
 let suggestTimeout = null;
 let pickerMap = null;
+let pickerMarker = null; // 🌟 追記: マップの中心に常に表示するピン
 
 export function initFormHandlers() {
     const recordForm = document.getElementById('recordForm');
@@ -79,7 +80,7 @@ function resizeImageAsync(file) {
 async function extractExifAndWeather(file) {
     let lat = null, lng = null, temp = null, weatherIcon = "❓";
     let targetDate = new Date();
-    let hasExifDate = false; // 🌟 追記: 日付がExifから取得できたかの判定フラグ
+    let hasExifDate = false;
     
     try {
         if (window.exifr) {
@@ -88,7 +89,7 @@ async function extractExifAndWeather(file) {
                 if (exifData.latitude && exifData.longitude) { lat = exifData.latitude; lng = exifData.longitude; }
                 if (exifData.DateTimeOriginal) { 
                     targetDate = new Date(exifData.DateTimeOriginal); 
-                    hasExifDate = true; // 🌟 追記: Exifから取得成功
+                    hasExifDate = true;
                 }
             }
         }
@@ -120,7 +121,6 @@ async function extractExifAndWeather(file) {
             }
         } catch (e) { console.log("Weather API error:", e); }
     }
-    // 🌟 追記: フラグも一緒に返す
     return { lat, lng, visitedAt, weatherIcon, temp, hasExifDate };
 }
 
@@ -157,7 +157,6 @@ async function handlePhotoSelection(e) {
     try {
         const { lat, lng, visitedAt, weatherIcon, temp, hasExifDate } = await extractExifAndWeather(files[0]);
         
-        // 🌟 修正: 写真から撮影日時が取れた場合のみ上書きする（既存の手入力日付や、編集時の日付を壊さないため）
         if (hasExifDate) {
             document.getElementById('visitedAt').value = visitedAt;
         }
@@ -310,19 +309,33 @@ function setupShopSuggest() {
     });
 }
 
-// 📍 手動マップピッカーと住所検索機能
+// 📍 手動マップピッカーと住所検索機能 (完全版)
 function setupMapPicker() {
     document.getElementById('btnOpenMapPicker')?.addEventListener('click', () => {
         document.getElementById('mapPickerModal').classList.remove('hidden');
+        
         if (!pickerMap) {
             pickerMap = L.map('pickerMap').setView([43.0600, 141.3500], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(pickerMap);
+            
+            // 🌟 追加: 画面中央に常に追従するピンを作成（視覚的な分かりやすさ向上）
+            pickerMarker = L.marker(pickerMap.getCenter()).addTo(pickerMap);
+            
+            // マップが動くたびにピンを常に中央に保つ
+            pickerMap.on('move', () => {
+                pickerMarker.setLatLng(pickerMap.getCenter());
+            });
         }
+
+        // 現在フォームに入力されている座標があれば、そこにマップとピンを合わせる
         const currentLat = document.getElementById('latitude').value;
         const currentLng = document.getElementById('longitude').value;
         if (currentLat && currentLng && currentLat !== "null" && currentLng !== "null") {
-            pickerMap.setView([parseFloat(currentLat), parseFloat(currentLng)], 17);
+            const latlng = [parseFloat(currentLat), parseFloat(currentLng)];
+            pickerMap.setView(latlng, 17);
+            if (pickerMarker) pickerMarker.setLatLng(latlng);
         }
+        
         setTimeout(() => { pickerMap.invalidateSize(); }, 200);
     });
 
@@ -330,6 +343,7 @@ function setupMapPicker() {
         document.getElementById('mapPickerModal').classList.add('hidden');
     });
 
+    // 「決定」ボタン
     document.getElementById('btnConfirmLocation')?.addEventListener('click', () => {
         const center = pickerMap.getCenter();
         document.getElementById('latitude').value = center.lat;
@@ -340,7 +354,7 @@ function setupMapPicker() {
         document.getElementById('mapPickerModal').classList.add('hidden');
     });
 
-    // 🌟 追記: 住所検索機能 (Nominatim API)
+    // 🌟 修正: 住所検索機能 (Nominatim API + グイッとアニメーション)
     const btnSearch = document.getElementById('btnMapPickerSearch');
     const inputSearch = document.getElementById('mapPickerSearchInput');
 
@@ -353,27 +367,30 @@ function setupMapPicker() {
             btnSearch.disabled = true;
 
             try {
+                // OpenStreetMapのAPIを使用して住所から座標を取得
                 const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=jp`);
                 const data = await res.json();
                 
                 if (data.length > 0) {
                     const lat = parseFloat(data[0].lat);
                     const lon = parseFloat(data[0].lon);
+                    
                     if (pickerMap) {
-                        pickerMap.setView([lat, lon], 14); 
+                        // 🌟 修正: setViewから flyTo に変更し、グイッと滑らかに移動する演出を追加
+                        pickerMap.flyTo([lat, lon], 17, { duration: 1.5 });
                     }
                 } else {
                     alert("指定された場所が見つかりませんでした。別のキーワードでお試しください。");
                 }
             } catch (e) {
-                alert("検索に失敗しました。");
+                alert("通信エラーにより検索に失敗しました。");
             } finally {
                 btnSearch.textContent = "検索";
                 btnSearch.disabled = false;
             }
         });
         
-        // Enterキーでも検索できるようにする
+        // Enterキーでも検索を実行
         inputSearch.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
