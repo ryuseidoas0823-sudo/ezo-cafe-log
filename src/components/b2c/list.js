@@ -1,5 +1,5 @@
 // ==========================================
-// 📚 src/components/b2c/list.js (フリックUI＆PC両端クリック 完全対応版)
+// 📚 src/components/b2c/list.js (未整理フィルター対応版)
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
@@ -16,6 +16,13 @@ export function initHistoryTab() {
     if (tagFilterEl) {
         tagFilterEl.addEventListener('change', filterDiaries);
     }
+    
+    // 🌟 追加: 未整理フィルターのイベントリスナー
+    const unorganizedFilterEl = document.getElementById('unorganizedFilter');
+    if (unorganizedFilterEl) {
+        unorganizedFilterEl.addEventListener('change', filterDiaries);
+    }
+
     refreshHistoryList();
 }
 
@@ -27,7 +34,9 @@ export async function refreshHistoryList() {
     mutators.setDiaries(diaries);
     
     renderTagClouds();
-    renderDiariesList(getters.getAllDiaries());
+    
+    // 取得直後も現在のフィルター状態を反映させる
+    filterDiaries();
 }
 
 /**
@@ -70,18 +79,27 @@ export function renderTagClouds() {
 }
 
 /**
- * ドロップダウンの選択に応じてリストをフィルタリングする
+ * 🌟 修正: ドロップダウンとチェックボックスの選択に応じてリストをフィルタリングする
  */
 function filterDiaries() {
-    const selectedTag = document.getElementById('tagFilter').value;
+    const selectedTag = document.getElementById('tagFilter')?.value || "";
+    const isUnorganizedOnly = document.getElementById('unorganizedFilter')?.checked || false;
+    
     mutators.setTagFilter(selectedTag);
     
-    if (selectedTag === "") {
-        renderDiariesList(getters.getAllDiaries());
-    } else {
-        const filtered = getters.getAllDiaries().filter(diary => parseTags(diary.tags).includes(selectedTag));
-        renderDiariesList(filtered);
+    let filtered = getters.getAllDiaries();
+
+    // 1. 「未整理のみ」の絞り込み
+    if (isUnorganizedOnly) {
+        filtered = filtered.filter(diary => diary.weather_icon === "📦");
     }
+
+    // 2. タグの絞り込み
+    if (selectedTag !== "") {
+        filtered = filtered.filter(diary => parseTags(diary.tags).includes(selectedTag));
+    }
+
+    renderDiariesList(filtered);
 }
 
 /**

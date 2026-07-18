@@ -34,7 +34,7 @@ export function initFormHandlers() {
         setEditingData(e.detail.id);
     });
 
-    // 🌟 修正2: アプリ起動時に「今日の日付」を確実にセットする
+    // 🌟 アプリ起動時に「今日の日付」を確実にセットする
     resetDateToToday();
 }
 
@@ -79,13 +79,17 @@ function resizeImageAsync(file) {
 async function extractExifAndWeather(file) {
     let lat = null, lng = null, temp = null, weatherIcon = "❓";
     let targetDate = new Date();
+    let hasExifDate = false; // 🌟 追記: 日付がExifから取得できたかの判定フラグ
     
     try {
         if (window.exifr) {
             const exifData = await window.exifr.parse(file);
             if (exifData) {
                 if (exifData.latitude && exifData.longitude) { lat = exifData.latitude; lng = exifData.longitude; }
-                if (exifData.DateTimeOriginal) { targetDate = new Date(exifData.DateTimeOriginal); }
+                if (exifData.DateTimeOriginal) { 
+                    targetDate = new Date(exifData.DateTimeOriginal); 
+                    hasExifDate = true; // 🌟 追記: Exifから取得成功
+                }
             }
         }
     } catch (err) { console.log("Exif error:", err); }
@@ -116,7 +120,8 @@ async function extractExifAndWeather(file) {
             }
         } catch (e) { console.log("Weather API error:", e); }
     }
-    return { lat, lng, visitedAt, weatherIcon, temp };
+    // 🌟 追記: フラグも一緒に返す
+    return { lat, lng, visitedAt, weatherIcon, temp, hasExifDate };
 }
 
 // 📸 複数写真選択時の処理
@@ -150,16 +155,20 @@ async function handlePhotoSelection(e) {
     }
 
     try {
-        const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(files[0]);
+        const { lat, lng, visitedAt, weatherIcon, temp, hasExifDate } = await extractExifAndWeather(files[0]);
         
-        document.getElementById('visitedAt').value = visitedAt;
+        // 🌟 修正: 写真から撮影日時が取れた場合のみ上書きする（既存の手入力日付や、編集時の日付を壊さないため）
+        if (hasExifDate) {
+            document.getElementById('visitedAt').value = visitedAt;
+        }
+
         if (weatherIcon !== "❓") document.getElementById('weatherSelect').value = weatherIcon;
         document.getElementById('temperature').value = temp !== null ? temp : "";
         document.getElementById('latitude').value = lat !== null ? lat : "";
         document.getElementById('longitude').value = lng !== null ? lng : "";
         if (lat !== null) document.getElementById('locationSource').value = 'exif';
 
-        if (dynamicForm) dynamicForm.classList.remove('hidden'); // hiddenを解除
+        if (dynamicForm) dynamicForm.classList.remove('hidden');
         if (dynamicForm) dynamicForm.classList.add('show');
 
         if(statusEl) {
@@ -244,9 +253,9 @@ function handleSkipPhoto() {
     
     ['latitude', 'longitude', 'temperature', 'locationSource'].forEach(id => document.getElementById(id).value = "");
     document.getElementById('weatherSelect').value = "❓";
-    resetDateToToday(); // スキップ時も念のため今日の日付にリセット
+    resetDateToToday(); 
     
-    if (dynamicForm) dynamicForm.classList.remove('hidden'); // hiddenを解除
+    if (dynamicForm) dynamicForm.classList.remove('hidden');
     if (dynamicForm) dynamicForm.classList.add('show');
     
     if (statusEl) {
@@ -301,7 +310,7 @@ function setupShopSuggest() {
     });
 }
 
-// 📍 手動マップピッカー
+// 📍 手動マップピッカーと住所検索機能
 function setupMapPicker() {
     document.getElementById('btnOpenMapPicker')?.addEventListener('click', () => {
         document.getElementById('mapPickerModal').classList.remove('hidden');
@@ -317,7 +326,6 @@ function setupMapPicker() {
         setTimeout(() => { pickerMap.invalidateSize(); }, 200);
     });
 
-    // 🌟 修正1: 閉じるボタンに正しくイベントリスナーを紐付け
     document.getElementById('closeMapPicker')?.addEventListener('click', () => {
         document.getElementById('mapPickerModal').classList.add('hidden');
     });
@@ -331,6 +339,48 @@ function setupMapPicker() {
         if (statusEl) { statusEl.innerText = "📍 マップから手動で店舗の位置を決定しました"; statusEl.style.color = "#27ae60"; }
         document.getElementById('mapPickerModal').classList.add('hidden');
     });
+
+    // 🌟 追記: 住所検索機能 (Nominatim API)
+    const btnSearch = document.getElementById('btnMapPickerSearch');
+    const inputSearch = document.getElementById('mapPickerSearchInput');
+
+    if (btnSearch && inputSearch) {
+        btnSearch.addEventListener('click', async () => {
+            const query = inputSearch.value.trim();
+            if (!query) return;
+            
+            btnSearch.textContent = "検索中...";
+            btnSearch.disabled = true;
+
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=jp`);
+                const data = await res.json();
+                
+                if (data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lon = parseFloat(data[0].lon);
+                    if (pickerMap) {
+                        pickerMap.setView([lat, lon], 14); 
+                    }
+                } else {
+                    alert("指定された場所が見つかりませんでした。別のキーワードでお試しください。");
+                }
+            } catch (e) {
+                alert("検索に失敗しました。");
+            } finally {
+                btnSearch.textContent = "検索";
+                btnSearch.disabled = false;
+            }
+        });
+        
+        // Enterキーでも検索できるようにする
+        inputSearch.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                btnSearch.click();
+            }
+        });
+    }
 }
 
 // 🚀 記録送信
@@ -382,11 +432,10 @@ async function handleFormSubmit(e) {
         if(previewContainer) previewContainer.innerHTML = '';
         if(document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = ""; 
         
-        // 🌟 修正3: 送信成功後、フォームをリセットした直後に「今日の日付」を入れ直す
         resetDateToToday();
         
         document.getElementById('dynamicFormFields')?.classList.remove('show');
-        document.getElementById('dynamicFormFields')?.classList.add('hidden'); // フォームを再度隠す
+        document.getElementById('dynamicFormFields')?.classList.add('hidden'); 
         
         currentImageBase64Array = []; editingDiaryId = null;
         document.getElementById('submitBtn').innerHTML = "🚀 記録する";
@@ -481,7 +530,7 @@ function setEditingData(id) {
         });
     }
     
-    document.getElementById('dynamicFormFields')?.classList.remove('hidden'); // hiddenを解除
+    document.getElementById('dynamicFormFields')?.classList.remove('hidden');
     document.getElementById('dynamicFormFields')?.classList.add('show');
     editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";

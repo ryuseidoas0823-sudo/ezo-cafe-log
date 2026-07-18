@@ -1,5 +1,5 @@
 // ==========================================
-// 🗺️ src/components/b2c/map.js
+// 🗺️ src/components/b2c/map.js (マップ画像ダウンロード対応版)
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
@@ -514,3 +514,71 @@ window.cancelCloseReport = async function(diaryId) {
 };
 
 window.toggleMapFilter = toggleMapFilter;
+
+// ==========================================
+// 📸 🌟追加: マップ画像をダウンロードする機能
+// ==========================================
+window.downloadMapImage = async function() {
+    const btn = document.getElementById('btn-save-map-image');
+    if (!btn) return;
+
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "⏳ 画像を生成中...";
+    btn.disabled = true;
+
+    try {
+        const mapEl = document.getElementById('viewMap');
+        const watermarkTemplate = document.getElementById('map-watermark-template');
+        
+        // 1. ウォーターマークを複製してマップ内部に配置（撮影用）
+        const watermark = watermarkTemplate.cloneNode(true);
+        watermark.id = "temp-watermark";
+        watermark.style.display = "block";
+        
+        // 2. 開拓済みの店舗数を計算して反映（未整理・行きたい・閉店を除く）
+        const validDiaries = getters.getAllDiaries().filter(d => 
+            d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫"
+        );
+        const uniqueShops = new Set(validDiaries.map(d => d.shop_id || d.shop_name));
+        watermark.querySelector('#watermark-shop-count').textContent = uniqueShops.size;
+        
+        mapEl.appendChild(watermark);
+
+        // 3. LeafletのズームボタンなどのUIを撮影時だけ非表示にする
+        const controls = mapEl.querySelectorAll('.leaflet-control-container');
+        controls.forEach(c => c.style.display = 'none');
+
+        // 4. html2canvas で描画処理
+        const canvas = await html2canvas(mapEl, {
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: null, // 背景を透過させる
+            scale: 2 // 高解像度で出力
+        });
+
+        // 5. 非表示にしたUIと追加したウォーターマークを元に戻す
+        controls.forEach(c => c.style.display = '');
+        mapEl.removeChild(watermark);
+
+        // 6. 出来上がった画像をダウンロード
+        const dataUrl = canvas.toDataURL("image/png");
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        
+        // ファイル名を日付付きに設定
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        a.download = `EzoCafeMap_${dateStr}.png`;
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+    } catch (error) {
+        console.error("Map Image Generation Error:", error);
+        alert("画像の生成に失敗しました。");
+    } finally {
+        // ボタンを元の状態に戻す
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+};

@@ -13,8 +13,8 @@
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
-    <!-- キャッシュバスター: ?v=6 に更新 -->
-    <link rel="stylesheet" href="./style.css?v=6">
+    <!-- キャッシュバスター: ?v=8 に更新 -->
+    <link rel="stylesheet" href="./style.css?v=8">
     
     <style>
         /* 🌟 マップ用ボトムシートのCSS（オリジナル復旧） */
@@ -65,7 +65,7 @@
         </header>
 
         <!-- ==========================================
-             ✍️ 1. 記録タブ (フォーム領域) 🌟オリジナル復旧
+             ✍️ 1. 記録タブ (フォーム領域) 
              ========================================== -->
         <main id="tab-record" class="tab-content" style="padding-top: 16px;">
             <form id="recordForm">
@@ -152,19 +152,25 @@
         </main>
 
         <!-- ==========================================
-             📚 2. 履歴タブ
+             📚 2. 履歴タブ 🌟「未整理フィルター」追加済
              ========================================== -->
         <main id="tab-history" class="tab-content hidden" style="padding-top: 16px;">
-            <div class="form-group">
-                <select id="tagFilter" class="form-group" style="width: 100%; padding: 8px;">
+            <div class="form-group" style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px;">
+                <select id="tagFilter" class="form-group" style="flex: 1; padding: 8px; margin-bottom: 0;">
                     <option value="">すべてのタグ（全件表示）</option>
                 </select>
+                <!-- 🌟 追加: 未整理フィルター用チェックボックス -->
+                <label style="display: flex; align-items: center; gap: 4px; padding: 8px 12px; background: rgba(0,0,0,0.05); border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: var(--text-main); white-space: nowrap;">
+                    <input type="checkbox" id="unorganizedFilter"> 📦 未整理のみ
+                </label>
             </div>
+            
+            <!-- 🌟 ここで履歴が描画されます。一切消していません -->
             <div id="diariesList"></div>
         </main>
 
         <!-- ==========================================
-             🗺️ 3. マップタブ 🌟新機能追加済み
+             🗺️ 3. マップタブ 
              ========================================== -->
         <main id="tab-map" class="tab-content hidden" style="padding-top: 16px; height: calc(100vh - 150px); display: flex; flex-direction: column;">
             <div class="form-group" style="margin-bottom: 8px;">
@@ -241,7 +247,7 @@
         </main>
 
         <!-- ==========================================
-             📱 ボトムナビゲーション 🌟オリジナル復旧
+             📱 ボトムナビゲーション 
              ========================================== -->
         <nav style="position: fixed; bottom: 0; left: 0; right: 0; max-width: 600px; margin: 0 auto; background: var(--card-bg); border-top: 1px solid var(--border-color); display: flex; justify-content: space-around; padding: 10px 0; z-index: 1000; padding-bottom: calc(10px + env(safe-area-inset-bottom));">
             <button class="nav-btn" data-tab="record" style="background:none; color:var(--primary-color); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold; border:none; cursor:pointer;">
@@ -271,13 +277,20 @@
     </div>
 
     <!-- ==========================================
-         🗺️ 手動マップピッカー モーダル 🌟オリジナル復旧
+         🗺️ 手動マップピッカー モーダル 🌟住所検索バー追加済
          ========================================== -->
     <div id="mapPickerModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 3000; display: flex; flex-direction: column;">
         <div style="background: white; padding: 15px; text-align: center; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
             <span>📍 地図を動かして「＋」をお店に</span>
             <button id="closeMapPicker" style="background: none; border: none; font-size: 20px; cursor: pointer;">✖</button>
         </div>
+        
+        <!-- 🌟 追加：住所・市区町村検索機能 -->
+        <div style="background: white; padding: 10px 15px; border-bottom: 1px solid #ddd; display: flex; gap: 8px;">
+            <input type="text" id="mapPickerSearchInput" placeholder="🔍 市区町村・住所を入力" autocomplete="off" style="flex: 1; border: 1px solid #ccc; border-radius: 8px; padding: 8px; font-size: 14px;">
+            <button type="button" id="btnMapPickerSearch" class="btn-secondary" style="margin: 0; padding: 8px 15px;">検索</button>
+        </div>
+
         <div id="pickerMap" style="flex-grow: 1; position: relative; width: 100%;">
             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; pointer-events: none; font-size: 32px; text-shadow: 0 0 5px white;">➕</div>
         </div>
@@ -289,9 +302,9 @@
     <!-- ==========================================
          📦 外部スクリプト & メインロジック
          ========================================== -->
-    <script type="module" src="./src/app.js?v=6"></script>
+    <script type="module" src="./src/app.js?v=8"></script>
     
-    <!-- 📱 ボトムナビゲーション＆タブ切り替え制御 -->
+    <!-- 📱 ボトムナビゲーション＆タブ切り替え制御 🌟管理者昇格ロジック完全復旧 -->
     <script>
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -315,6 +328,43 @@
             });
             window.scrollTo(0, 0);
         });
+
+        // 🌟 追加・復旧：管理者（Admin）昇格コマンド
+        window.upgradeToAdmin = async function() {
+            if (!confirm("裏コマンド：管理者（Admin）権限を取得しますか？")) return;
+            
+            try {
+                // api.js側でAPIのベースURLが設定されている想定ですが、ここで直接取得します
+                const API_BASE_URL = window.API_BASE_URL || "https://cafe-log-api.m-6cf.workers.dev"; // ※必要に応じてWorkerのURLに変更してください
+                const userUuid = localStorage.getItem('ezo_user_uuid');
+                
+                if (!userUuid) {
+                    alert("ユーザーIDが見つかりません。一度履歴などを読み込んでからお試しください。");
+                    return;
+                }
+                
+                const response = await fetch(API_BASE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Ezo-User-UUID': userUuid
+                    },
+                    body: JSON.stringify({ action: 'upgrade_admin' })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert("👑 管理者権限を取得しました！設定を反映させるためページを再読み込みします。");
+                    location.reload(); 
+                } else {
+                    alert("昇格エラー: " + (result.error || "不明なエラー"));
+                }
+            } catch (error) {
+                console.error("Admin Upgrade Error:", error);
+                alert("通信エラーが発生しました。Cloudflare WorkerのURLが正しいか確認してください。");
+            }
+        };
     </script>
 </body>
 </html>
