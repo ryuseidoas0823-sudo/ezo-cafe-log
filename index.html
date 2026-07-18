@@ -6,8 +6,47 @@
     <title>EzoCafe Log</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    <!-- 🌟 キャッシュバスター: ?v=4 に更新 -->
-    <link rel="stylesheet" href="./style.css?v=4">
+    <!-- キャッシュバスター: ?v=5 に更新 -->
+    <link rel="stylesheet" href="./style.css?v=5">
+    
+    <style>
+        /* 🌟 追記: マップ用ボトムシートのCSS（style.cssに無かったためここに追加） */
+        .bottom-sheet {
+            position: fixed;
+            bottom: -100%;
+            left: 0;
+            right: 0;
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--card-bg, #ffffff);
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            transition: bottom 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 2000;
+            padding: 24px 20px;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .bottom-sheet.active {
+            bottom: 0;
+        }
+        .close-sheet-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.05);
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #7f8c8d;
+        }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -126,7 +165,7 @@
                     <option value="">🏷️ すべての気分・目的・タグ</option>
                 </select>
             </div>
-            <!-- 🌟 重大バグ修正: mainMap を viewMap に変更しJSのクラッシュを解消 -->
+            <!-- 重大バグ修正: viewMap を確実に表示 -->
             <div id="viewMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1;"></div>
         </main>
 
@@ -168,6 +207,13 @@
             <div class="form-group" style="margin-top: 24px;">
                 <button id="btnSaveSettings" class="btn-primary">💾 設定を保存する</button>
             </div>
+            
+            <!-- 🌟 追記: 管理者昇格のための隠しボタン -->
+            <div style="text-align: center; margin-top: 40px; padding-bottom: 20px;">
+                <button onclick="window.upgradeToAdmin()" class="btn-secondary" style="opacity: 0.3; font-size: 0.75rem; border: none; background: transparent;">
+                    🔑 Admin Mode (管理者昇格)
+                </button>
+            </div>
         </main>
 
         <!-- ==========================================
@@ -193,6 +239,16 @@
     </div>
 
     <!-- ==========================================
+         🌟 追記: 🗺️ マップ用 店舗詳細ボトムシート
+         ========================================== -->
+    <div id="shopBottomSheet" class="bottom-sheet">
+        <button class="close-sheet-btn" onclick="document.getElementById('shopBottomSheet').classList.remove('active')">✖</button>
+        <div id="bottomSheetContent">
+            <!-- map.js によって中身が動的に生成されます -->
+        </div>
+    </div>
+
+    <!-- ==========================================
          🗺️ 手動マップピッカー モーダル
          ========================================== -->
     <div id="mapPickerModal" class="hidden">
@@ -215,11 +271,13 @@
          ========================================== -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
-    <!-- キャッシュバスターを v=4 に更新 -->
-    <script type="module" src="./src/app.js?v=4"></script>
     
-    <!-- 📱 ボトムナビゲーション＆タブ切り替え制御 -->
+    <!-- キャッシュバスターを v=5 に更新 -->
+    <script type="module" src="./src/app.js?v=5"></script>
+    
+    <!-- 📱 ボトムナビゲーション＆タブ切り替え・管理者API呼び出し制御 -->
     <script>
+        // タブ切り替え処理
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const tabName = e.currentTarget.dataset.tab;
@@ -242,6 +300,43 @@
             });
             window.scrollTo(0, 0);
         });
+
+        // 🌟 管理者昇格コマンド (worker.js へPOST)
+        window.upgradeToAdmin = async function() {
+            if (!confirm("裏コマンド：管理者（Admin）権限を取得しますか？")) return;
+            
+            try {
+                // api.js側でAPIのベースURLが設定されている想定ですが、ここで直接取得します
+                const API_BASE_URL = window.API_BASE_URL || "https://cafe-log-api.m-6cf.workers.dev"; // ※必要に応じてWorkerのURLに変更してください
+                const userUuid = localStorage.getItem('ezo_user_uuid');
+                
+                if (!userUuid) {
+                    alert("ユーザーIDが見つかりません。一度履歴などを読み込んでからお試しください。");
+                    return;
+                }
+                
+                const response = await fetch(API_BASE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Ezo-User-UUID': userUuid
+                    },
+                    body: JSON.stringify({ action: 'upgrade_admin' })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert("👑 管理者権限を取得しました！設定を反映させるためページを再読み込みします。");
+                    location.reload(); 
+                } else {
+                    alert("昇格エラー: " + (result.error || "不明なエラー"));
+                }
+            } catch (error) {
+                console.error("Admin Upgrade Error:", error);
+                alert("通信エラーが発生しました。Cloudflare WorkerのURLが正しいか確認してください。");
+            }
+        };
     </script>
 </body>
 </html>
