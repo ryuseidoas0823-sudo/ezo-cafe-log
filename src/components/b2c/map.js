@@ -16,15 +16,27 @@ let isFetchingStatuses = false;
 const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
 
 export function initViewMap() {
+    // 🌟 修正ポイント1: コンテナが存在するか確認し、なければ中断（エラー回避）
+    const container = document.getElementById('viewMap');
+    if (!container) return;
+
     if (!viewMap) {
-        viewMap = L.map('mapView', {
+        // 🌟 修正ポイント2: 'mapView' を 'viewMap' に変更
+        viewMap = L.map('viewMap', {
             maxBounds: HOKKAIDO_BOUNDS, maxBoundsViscosity: 1.0, minZoom: 7, maxZoom: 19
         }).setView([HOME_LAT, HOME_LNG], 13);
         
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(viewMap);        viewMap.on('zoomend', () => { updateViewMarkers(false); });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(viewMap);
+        viewMap.on('zoomend', () => { updateViewMarkers(false); });
         viewMap.on('click', closeBottomSheet);
     }
-    setTimeout(() => { viewMap.invalidateSize(); }, 200);
+    
+    // 🌟 修正ポイント3: タブ表示後、地図のサイズを正確に再計算させる（少し長めの300ms）
+    setTimeout(() => { 
+        if (viewMap) {
+            viewMap.invalidateSize(); 
+        }
+    }, 300);
 }
 
 export function toggleMapFilter(type) {
@@ -255,7 +267,6 @@ function closeBottomSheet() {
     if (sheet) sheet.classList.remove('active');
 }
 
-// ボトムシートの完全復元（編集ボタンを除外）
 function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     const sheet = document.getElementById('shopBottomSheet');
     const content = document.getElementById('bottomSheetContent');
@@ -298,7 +309,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     }
 
     if (!mainShop.isClosed && !mainShop.isGracePeriod) {
-        // 🌟 編集ボタン(editDiary)の生成部分を削除し、記録ボタンのみ残す
         if (mainShop.isMasterOnly || mainShop.isBookmarkOnly) {
             actionBtn += `<button onclick="window.recordFromMap('${mainShop.shopId || ''}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng})" style="background:#27ae60; border:none; color:white; padding:12px; border-radius:8px; font-weight:bold; cursor:pointer;">📝 このお店を開拓・記録する</button>`;
         }
@@ -321,7 +331,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
 
     html += `<p style="margin: 10px 0; font-weight:bold; color:#34495e;">${statusText}</p>`;
     
-    // 個人アナリティクスの復元
     let analyticsHtml = "";
     const allDiaries = getters.getAllDiaries();
     const shopDiaries = allDiaries.filter(d =>
@@ -355,7 +364,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
 
     html += analyticsHtml;
 
-    // B2B店舗アナリティクスの復元
     if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'business')) {
         const safeShopId = mainShop.shopId ? `'${mainShop.shopId}'` : 'null';
         const safeShopName = `'${mainShop.shopName.replace(/'/g, "\\'")}'`;
@@ -403,7 +411,6 @@ window.loadShopAnalytics = async function(btnElement, shopId, shopName) {
     if (!data || data.total === 0) { btnElement.innerHTML = "❌ データがありません"; return; }
 
     let html = `<div style="animation: fadeIn 0.4s ease;"><p style="font-size:0.8rem; color:#7f8c8d; margin: 0 0 10px 0; font-weight: bold;">👥 累計来店記録: ${data.total}件</p>`;
-    // (B2Bチャート生成ロジックの簡易復元)
     html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#2c3e50; font-weight:bold;">客観的イメージ（AI抽出タグ）</p><div style="display: flex; flex-wrap: wrap; gap: 6px;">`;
     data.topTags.forEach(t => {
         let bgColor = t[0].startsWith('🚨') ? '#e74c3c' : (t[0].startsWith('🤖') ? '#8e44ad' : '#f39c12');
