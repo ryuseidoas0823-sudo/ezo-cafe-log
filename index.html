@@ -2,77 +2,88 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <!-- スマホでの不用意なズームを防止し、ネイティブアプリ感を出すビューポート設定 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>EzoCafe Log</title>
-    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <link rel="stylesheet" href="style.css">
+
+    <!-- Leaflet CSS (マップ描画用) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    
+    <!-- 🌟 キャッシュバスター: ?v=2 を付与し最新のCSSを強制読み込み -->
+    <link rel="stylesheet" href="./style.css?v=2">
 </head>
 <body>
-    <div class="container" id="main-content">
-        <h1 style="position: relative; z-index: 10;">☕️ EzoCafe Log</h1>
+    <div class="app-container">
+        <!-- ==========================================
+             🏷️ アプリヘッダー & ナビゲーション
+             ========================================== -->
+        <header style="padding: 16px; text-align: center; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color);">
+            <h1>☕️ EzoCafe Log</h1>
+            <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
+                <button class="btn-secondary" onclick="window.dispatchEvent(new CustomEvent('switch-tab', {detail: {tab: 'record'}}))">✍️ 記録する</button>
+                <button class="btn-secondary" onclick="window.dispatchEvent(new CustomEvent('switch-tab', {detail: {tab: 'history'}}))">📚 履歴を見る</button>
+            </div>
+        </header>
 
-        <div id="tab-record">
-            <div class="form-card" style="margin-bottom: 25px;">
-                <h3 style="margin-top:0; color:#5d4037; font-size:1.1rem; border-bottom:2px solid #f8f5f2; padding-bottom:5px;">📝 カフェ日記を書く</h3>
-                <form id="recordForm">
+        <!-- ==========================================
+             ✍️ 記録タブ (フォーム領域)
+             ========================================== -->
+        <main id="tab-record" style="padding-top: 16px;">
+            <form id="recordForm">
+                
+                <!-- 1. 店舗名 & サジェスト機能 -->
+                <div class="form-group relative">
+                    <label for="shopName">店舗名</label>
+                    <input type="text" id="shopName" placeholder="店舗名を入力または検索" required autocomplete="off">
+                    <input type="hidden" id="shopId">
+                    <ul id="shopSuggestList" style="display: none;"></ul>
+                </div>
+
+                <!-- 2. 手動マップピッカー起動ボタン -->
+                <div class="form-group" style="display: flex; gap: 8px;">
+                    <button type="button" class="btn-secondary" id="btnOpenMapPicker" style="flex: 1;">📍 マップから手動選択</button>
+                </div>
+
+                <!-- 3. 画像アップロード (複数対応 & 一括ストック) -->
+                <div class="form-group">
+                    <label>写真の追加 (複数可)</label>
+                    <input type="file" id="imageInputSingle" accept="image/jpeg, image/png, image/webp" multiple style="margin-bottom: 8px;">
+                    <div style="display: flex; gap: 8px;">
+                        <input type="file" id="imageInputBulk" accept="image/jpeg, image/png, image/webp" multiple style="display:none;">
+                        <button type="button" class="btn-secondary" onclick="document.getElementById('imageInputBulk').click()" style="flex: 1;">📦 一括未整理ストック</button>
+                        <button type="button" class="btn-secondary" id="btnSkipPhoto" style="flex: 1;">⏩ 写真なしで進む</button>
+                    </div>
+                </div>
+
+                <!-- 4. 画像プレビューエリア -->
+                <img id="imagePreview" style="display: none;" alt="単一プレビュー">
+                <div id="photoPreviewContainer"></div>
+                
+                <!-- 5. ステータス通知 -->
+                <div id="gpsStatus"></div>
+                <div id="bulkStatus"></div>
+
+                <!-- 6. 動的フォームエリア (写真選択 or スキップで展開) -->
+                <div id="dynamicFormFields" class="hidden">
                     
-                    <div class="form-group" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px dashed #bdc3c7;">
-                        <label for="imageInputSingle" style="color: #2980b9; font-weight: bold; cursor: pointer;">
-                            📸 カフェの写真を1枚選ぶ<br>
-                            <span style="font-size: 0.8rem; color: #7f8c8d; font-weight: normal;">※写真から位置情報と天気を自動解析します。</span>
-                        </label>
-                        <input type="file" id="imageInputSingle" accept="image/*">
-                        <img id="imagePreview" style="display: none;" alt="プレビュー">
-
-                        <div style="margin-top: 15px; text-align: center; border-top: 1px dashed #ddd; padding-top: 10px;">
-                            <button type="button" id="btnSkipPhoto" style="background: transparent; border: 2px solid #bdc3c7; color: #7f8c8d; padding: 8px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; transition: all 0.3s; font-size: 0.85rem;">
-                                ✍️ 写真なしでテキストのみ記録する
-                            </button>
+                    <div class="form-group">
+                        <label>利用形態</label>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <label><input type="radio" name="eatType" value="☕️店内" checked> ☕️店内</label>
+                            <label><input type="radio" name="eatType" value="🥡テイクアウト"> 🥡テイクアウト</label>
+                            <label><input type="radio" name="eatType" value="🛍️豆・グッズ"> 🛍️豆・グッズ</label>
+                            <label><input type="radio" name="eatType" value="🎪間借り・無店舗"> 🎪間借り・無店舗</label>
                         </div>
                     </div>
 
-                    <div id="dynamicFormFields" class="hidden-fields">
-                        
-                        <div class="form-group">
-                            <label style="display: block; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
-                                <input type="checkbox" id="isDraft" value="📦">
-                                📦 この1枚を「未整理」として仮保存する
-                            </label>
-                        </div>
+                    <div class="form-group">
+                        <label for="visitedAt">訪問日</label>
+                        <input type="date" id="visitedAt" required>
+                    </div>
 
-                        <div class="form-group relative">
-                            <label for="shopName">お店の名前</label>
-                            <input type="text" id="shopName" placeholder="例: サッポロ珈琲館" autocomplete="off">
-                            <input type="hidden" id="shopId">
-                            <ul id="shopSuggestList" class="suggest-list"></ul>
-                            
-                            <label style="display: block; margin-top: 8px; font-size: 0.85rem; color: #7f8c8d; cursor: pointer;">
-                                <input type="checkbox" id="isBookmark" value="💭">
-                                💭 まだ行ってないけど「行きたいお店」として登録する
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label>利用タイプは？</label>
-                            <div class="type-selector" style="flex-wrap: wrap;">
-                                <label><input type="radio" name="eatType" value="☕️店内" checked>☕️ 店内</label>
-                                <label><input type="radio" name="eatType" value="🥡テイクアウト">🥡 テイク</label>
-                                <label><input type="radio" name="eatType" value="🛍️豆・グッズ">🛍️ 物販</label>
-                                <label><input type="radio" name="eatType" value="🎪間借り・無店舗">🎪 無店舗</label>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="visitedAt">訪問日</label>
-                            <input type="date" id="visitedAt" required>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="weatherSelect">天気・位置情報</label>
+                    <div class="form-group" style="display: flex; gap: 8px;">
+                        <div style="flex: 1;">
+                            <label for="weatherSelect">天気</label>
                             <select id="weatherSelect">
                                 <option value="❓">❓ 不明</option>
                                 <option value="☀️">☀️ 晴れ</option>
@@ -80,199 +91,107 @@
                                 <option value="☔️">☔️ 雨</option>
                                 <option value="❄️">❄️ 雪</option>
                             </select>
-                            
-                            <p id="gpsStatus" style="font-size: 0.85em; color: #e74c3c; margin-top: 8px; font-weight: bold; text-align: center;"></p>
-                            <div style="text-align: center; margin-top: 5px;">
-                                <button type="button" id="btnOpenMapPicker" style="background: transparent; color: #2980b9; border: 1px solid #2980b9; padding: 6px 15px; font-size: 0.8rem; border-radius: 20px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: auto; font-weight: bold;">
-                                    📍 マップから手動で位置を指定する
-                                </button>
-                            </div>
-
-                            <input type="hidden" id="latitude">
-                            <input type="hidden" id="longitude">
-                            <input type="hidden" id="temperature">
-                            <input type="hidden" id="locationSource" value=""> </div>
-                        
-                        <div class="form-group">
-                            <label for="comment">感想やメモ</label>
-                            <textarea id="comment" placeholder="コロンビア・ロスノガレスのデカフェを飲みました。"></textarea>
                         </div>
-                        
-                        <div class="form-group">
-                            <label for="tags">自分でつけるタグ（任意）</label>
-                            <input type="text" id="tags" placeholder="例: 作業, 癒やし">
+                        <div style="flex: 1;">
+                            <label for="temperature">気温 (℃)</label>
+                            <input type="number" id="temperature" placeholder="例: 20">
                         </div>
+                    </div>
 
-                        <div class="form-group" style="margin-top: 15px; background: rgba(142, 68, 173, 0.05); padding: 12px; border-radius: 8px; border: 1px solid rgba(142, 68, 173, 0.15);">
-                            <label style="display: block; font-size: 0.85rem; color: #8e44ad; font-weight: bold; cursor: pointer; margin: 0;">
-                                <input type="checkbox" id="isPublicCheckbox" value="1">
-                                👻 匿名でこの街の足跡（ゴーストピン）として共有する
-                            </label>
-                            <span style="font-size: 0.75rem; color: #7f8c8d; display: block; margin-top: 6px; font-weight: normal; line-height: 1.4;">
-                                ※チェックを入れると、写真や感想文は完全にマスキングされ、「抽象化された訪問時期」と「AIタグ」だけが他のPremiumユーザーのマップに匿名で共有されます（デフォルトは安全のため非公開です）。
-                            </span>
-                        </div>
+                    <div class="form-group">
+                        <label for="comment">コメント・メモ</label>
+                        <textarea id="comment" rows="3" placeholder="味の感想や店内の雰囲気など"></textarea>
+                    </div>
 
-                        <button type="submit" id="submitBtn">🚀 記録する</button>
-                    </div> 
-                </form>
-            </div>
+                    <div class="form-group">
+                        <label for="tags">タグ (カンマ区切り)</label>
+                        <input type="text" id="tags" placeholder="例: 作業向け, 浅煎り">
+                    </div>
 
-            <div class="form-card">
-                <h3 style="margin-top:0; color:#5d4037; font-size:1.1rem; border-bottom:2px solid #f8f5f2; padding-bottom:5px;">📦 写真だけまとめてストック</h3>
-                <div class="form-group" style="background: #f4f0ec; padding: 15px; border-radius: 8px; border: 1px dashed #a1887f;">
-                    <label for="imageInputBulk" style="color: #8e44ad; font-weight: bold; cursor: pointer;">
-                        📸 写真を複数枚えらぶ（一括登録）<br>
-                        <span style="font-size: 0.8rem; color: #7f8c8d; font-weight: normal;">※選択された写真はすべて「📦未整理」の空日記として、バックグラウンドで一瞬で一括保存されます。</span>
-                    </label>
-                    <input type="file" id="imageInputBulk" accept="image/*" multiple>
-                    <p id="bulkStatus" style="font-size: 0.85em; color: #8e44ad; margin-top: 8px; font-weight: bold; text-align: center;"></p>
+                    <div class="form-group" style="display: flex; gap: 16px;">
+                        <label style="display: flex; align-items: center; gap: 4px;">
+                            <input type="checkbox" id="isBookmark"> 💭 行きたい
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px;">
+                            <input type="checkbox" id="isDraft"> 📦 未整理
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px;">
+                            <input type="checkbox" id="isPublicCheckbox"> 🌍 公開する
+                        </label>
+                    </div>
+
+                    <!-- 位置情報隠しフィールド -->
+                    <input type="hidden" id="latitude">
+                    <input type="hidden" id="longitude">
+                    <input type="hidden" id="locationSource">
+
+                    <button type="submit" id="submitBtn" class="btn-primary">🚀 記録する</button>
                 </div>
-            </div>
-        </div>
+            </form>
+        </main>
 
-        <div id="tab-history" class="hidden">
-            <div id="diariesList" style="padding-bottom: 70px;"></div>
-            <div class="fixed-filter">
-                <select id="tagFilter">
+        <!-- ==========================================
+             📚 履歴タブ
+             ========================================== -->
+        <main id="tab-history" class="hidden" style="padding-top: 16px;">
+            <div class="form-group">
+                <select id="tagFilter" class="form-group">
                     <option value="">すべてのタグ（全件表示）</option>
                 </select>
             </div>
-        </div>
+            <!-- ここにJS(list.js)からカードがレンダリングされます -->
+            <div id="diariesList"></div>
+        </main>
+    </div>
 
-        <div id="tab-map" class="hidden" style="position: absolute; top: 0; left: 0; width: 100%; height: 100vh; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
-            <div id="mapView" style="flex-grow: 1; width: 100%; z-index: 1;"></div>
+    <!-- ==========================================
+         🗺️ 手動マップピッカー モーダル
+         ========================================== -->
+    <div id="mapPickerModal" class="hidden">
+        <div class="map-modal-content">
+            <!-- 🌟 ポカヨケ: map-modal-header-text クラスを付与し、✖ボタンとの被りを完全防止 -->
+            <div class="map-modal-header">
+                <p class="map-modal-header-text">📍 地図を動かして「＋」をお店に合わせてください</p>
+                <button id="closeMapPicker">✖ 閉じる</button>
+            </div>
             
-            <div class="floating-map-controls glass-effect">
-                <input type="text" id="mapSearchInput" placeholder="🔍 店舗名でマップを検索..." autocomplete="off" style="width: 100%; padding: 10px 15px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.1); font-size: 14px; box-sizing: border-box; margin-bottom: 8px; background: rgba(255,255,255,0.8);">
-                <ul id="mapSearchSuggestList" class="suggest-list" style="margin-top: -8px; border-radius: 12px; max-height: 200px; margin-bottom: 10px;"></ul>
-                
-                <div style="display: flex; gap: 8px; justify-content: center; width: 100%; margin-bottom: 8px;">
-                    <button type="button" id="btn-filter-dining" onclick="toggleMapFilter('dining')" class="filter-btn">☕️ 店内</button>
-                    <button type="button" id="btn-filter-takeout" onclick="toggleMapFilter('takeout')" class="filter-btn">🥡 テイク</button>
-                    <button type="button" id="btn-filter-goods" onclick="toggleMapFilter('goods')" class="filter-btn">🛍️ 物販</button>
-                </div>
-                
-                <select id="mapTagFilter" class="filter-select glass-input">
-                    <option value="">🏷️ すべての気分・目的・タグ</option>
-                </select>
-            </div>
-
-            <div id="map-watermark-template" style="display: none; position: absolute; bottom: 20px; right: 20px; z-index: 999; background: rgba(255,255,255,0.85); padding: 10px 15px; border-radius: 8px; border: 1px solid #5d4037; font-family: sans-serif; text-align: right;">
-                <div style="font-size: 12px; color: #7f8c8d; font-weight: bold;">Hokkaido Cafe Map</div>
-                <div style="font-size: 16px; color: #5d4037; font-weight: bold;">☕️ EzoCafe Log</div>
-                <div style="font-size: 11px; color: #e67e22; font-weight: bold; margin-top: 3px;">総開拓店舗数: <span id="watermark-shop-count">0</span> 店舗</div>
-            </div>
-
-            <div id="shopBottomSheet" class="bottom-sheet glass-effect">
-                <div class="bottom-sheet-handle"></div>
-                <div id="bottomSheetContent" class="bottom-sheet-content"></div>
-            </div>
-        </div>
-
-        <div id="tab-analytics" class="hidden">
-            <div class="dashboard-card" style="position: relative; z-index: 10;">
-                <h3>☕️ あなたのカフェ開拓データ</h3>
-                <div class="stat-grid">
-                    <div class="stat-box">
-                        <div class="stat-value" id="stat-total-visits">0</div>
-                        <div class="stat-label">総記録数</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value" id="stat-unique-shops">0</div>
-                        <div class="stat-label">開拓店舗数</div>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <canvas id="eatTypeChart"></canvas>
-                </div>
-                <div class="chart-container" style="margin-top: 30px;">
-                    <canvas id="tagsChart"></canvas>
+            <div id="pickerMap" style="position: relative;">
+                <!-- 画面中央の十字カーソル（CSSで絶対配置） -->
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; pointer-events: none; font-size: 24px;">
+                    ➕
                 </div>
             </div>
-        </div>
 
-        <div id="tab-settings" class="hidden">
-            <div class="dashboard-card" style="position: relative; z-index: 10;">
-                <h3>👤 アナリティクス用属性設定</h3>
-                <p style="font-size: 0.85rem; color: #7f8c8d; margin-bottom: 15px;">※ここで設定した属性は将来の統計データにのみ利用されます。</p>
-                
-                <div class="form-group">
-                    <label>性別</label>
-                    <select id="settingGender">
-                        <option value="">選択してください</option>
-                        <option value="男性">男性</option>
-                        <option value="女性">女性</option>
-                        <option value="その他">その他</option>
-                        <option value="回答しない">回答しない</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>年代</label>
-                    <select id="settingAge">
-                        <option value="">選択してください</option>
-                        <option value="10代">10代</option>
-                        <option value="20代">20代</option>
-                        <option value="30代">30代</option>
-                        <option value="40代">40代</option>
-                        <option value="50代">50代</option>
-                        <option value="60代以上">60代以上</option>
-                    </select>
-                </div>
-
-                <button type="button" onclick="window.saveSettings()" style="background-color: #3498db; margin-top: 15px;">💾 設定をスマホに保存</button>
-                
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ddd;">
-                    <button type="button" onclick="window.upgradeToAdmin()" style="width: 100%; background: #9b59b6; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem;">👑 開発用: 自分を管理者に昇格する</button>
-                </div>
-                
-                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-                    <button type="button" id="btn-save-map-image" onclick="window.downloadMapImage()" style="width: 100%; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">📸 地図を画像としてエクスポート</button>
-                </div>
+            <div class="map-modal-footer">
+                <button id="btnConfirmLocation" class="btn-primary" style="margin: 0;">✅ ここを店舗の位置として決定</button>
             </div>
         </div>
     </div>
 
-    <div id="mapPickerModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: rgba(0,0,0,0.85); z-index: 3000; display: flex; flex-direction: column;">
-        <div style="background: white; padding: 15px; text-align: center; font-weight: bold; color: #2c3e50; position: relative;">
-            📍 地図を動かして「＋」をお店に合わせてください
-            <button type="button" onclick="window.closeMapPicker()" style="position: absolute; right: 10px; top: 8px; background: transparent; color: #e74c3c; width: auto; padding: 5px 10px; margin: 0; border: 1px solid #e74c3c; font-size: 0.8rem; border-radius: 8px;">✖ 閉じる</button>
-        </div>
-        <div style="position: relative; flex-grow: 1;">
-            <div id="pickerMap" style="width: 100%; height: 100%;"></div>
-            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; pointer-events: none; font-size: 36px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
-                ＋
-            </div>
-        </div>
-        <div style="background: white; padding: 15px 20px 25px 20px; box-shadow: 0 -4px 10px rgba(0,0,0,0.1);">
-            <button type="button" id="btnConfirmLocation" style="background: #27ae60; margin: 0; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(39, 174, 96, 0.3);">✅ ここを店舗の位置として決定</button>
-        </div>
-    </div>
-
-    <div class="bottom-nav">
-        <a href="#" class="nav-item active" data-tab="record" onclick="switchTab('record', this)">
-            <span class="nav-icon">📝</span>
-            <span class="nav-label">記録</span>
-        </a>
-        <a href="#" class="nav-item" data-tab="history" onclick="switchTab('history', this)">
-            <span class="nav-icon">📚</span>
-            <span class="nav-label">履歴</span>
-        </a>
-        <a href="#" class="nav-item" data-tab="map" onclick="switchTab('map', this)">
-            <span class="nav-icon">🗺️</span>
-            <span class="nav-label">マップ</span>
-        </a>
-        <a href="#" class="nav-item" data-tab="analytics" onclick="switchTab('analytics', this)">
-            <span class="nav-icon">📊</span>
-            <span class="nav-label">分析</span>
-        </a>
-        <a href="#" class="nav-item" data-tab="settings" onclick="switchTab('settings', this)">
-            <span class="nav-icon">⚙️</span>
-            <span class="nav-label">設定</span>
-        </a>
-    </div>
-
-    <script type="module" src="./src/app.js"></script>
+    <!-- ==========================================
+         📦 外部スクリプト & メインロジック
+         ========================================== -->
+    <!-- Leaflet.js -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    
+    <!-- exifr (EXIFメタデータ抽出用) -->
+    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+    
+    <!-- 🌟 キャッシュバスター: ?v=2 を付与し最新のJSを強制読み込み -->
+    <script type="module" src="./src/app.js?v=2"></script>
+    
+    <!-- 簡易タブ切り替え用インラインスクリプト -->
+    <script>
+        window.addEventListener('switch-tab', (e) => {
+            const tab = e.detail.tab;
+            if (tab === 'record') {
+                document.getElementById('tab-record').classList.remove('hidden');
+                document.getElementById('tab-history').classList.add('hidden');
+            } else if (tab === 'history') {
+                document.getElementById('tab-record').classList.add('hidden');
+                document.getElementById('tab-history').classList.remove('hidden');
+            }
+        });
+    </script>
 </body>
 </html>

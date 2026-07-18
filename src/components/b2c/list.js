@@ -1,5 +1,5 @@
 // ==========================================
-// 📚 src/components/b2c/list.js (フリック連動カウンター対応版)
+// 📚 src/components/b2c/list.js (インスタ風ドットUI＆フリック連動対応版)
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
@@ -116,21 +116,24 @@ export function renderDiariesList(diaries) {
 
         let imageHTML = "";
         if (imageUrls.length > 1) {
-            // 🌟 画像が2枚以上の場合はフリックコンテナとカウンターを展開
+            // 🌟 複数画像：フリックコンテナとインスタ風ドットを展開
             imageHTML = `<div class="flick-wrapper">`;
             imageHTML += `<div class="flick-container">`;
             imageUrls.forEach(url => {
                 imageHTML += `<img src="${url}" class="flick-item" loading="lazy" alt="カフェの写真">`;
             });
             imageHTML += `</div>`;
-            // カウンターバッジ（1 / N）
-            imageHTML += `<div class="flick-counter"><span class="current-idx">1</span> / ${imageUrls.length}</div>`;
+            
+            // インスタ風のドット（・）インジケーターを生成
+            imageHTML += `<div class="flick-dots">`;
+            imageUrls.forEach((_, idx) => {
+                imageHTML += `<span class="dot ${idx === 0 ? 'active' : ''}" data-idx="${idx}"></span>`;
+            });
+            imageHTML += `</div>`;
             imageHTML += `</div>`;
         } else if (imageUrls.length === 1) {
-            // 🌟 画像が1枚だけの場合はカウンター不要なのでシンプルなimgタグ
             imageHTML = `<img src="${imageUrls[0]}" class="diary-image" loading="lazy" alt="カフェの写真">`;
         } else {
-            // 画像がない場合は美しいタイポグラフィを生成
             const typoBase64 = generateTypographyBase64(diary.shop_name, diary.tags, diary.weather_icon);
             imageHTML = `<img src="${typoBase64}" class="diary-image" loading="lazy" alt="タイポグラフィカード">`;
         }
@@ -169,18 +172,20 @@ export function renderDiariesList(diaries) {
             window.dispatchEvent(event);
         });
 
-        // 2. 🌟 複数画像のフリックスクロール連動カウンター処理
+        // 2. 🌟 複数画像のフリックスクロール連動処理（ドット切り替え）
         const flickContainer = card.querySelector('.flick-container');
-        const counterSpan = card.querySelector('.current-idx');
+        const dots = card.querySelectorAll('.dot');
         
-        if (flickContainer && counterSpan) {
+        if (flickContainer && dots.length > 0) {
             flickContainer.addEventListener('scroll', () => {
-                // 画像1枚あたりの幅（gap含む）を取得して、スクロール量から現在のインデックスを計算
-                // ※Math.roundを使うことで、画面の半分を超えたら次の数字に切り替わる自然なUXを実現
                 const itemWidth = flickContainer.children[0].offsetWidth;
                 const scrollPos = flickContainer.scrollLeft;
-                const currentIndex = Math.round(scrollPos / itemWidth) + 1;
-                counterSpan.textContent = currentIndex;
+                const currentIndex = Math.round(scrollPos / itemWidth);
+                
+                // 現在の画像に合わせてドットの色（active）を切り替える
+                dots.forEach((dot, idx) => {
+                    dot.classList.toggle('active', idx === currentIndex);
+                });
             });
         }
 

@@ -241,10 +241,8 @@ button:active {
     display: none;
 }
 
-/* 🌟 フリックカウンターとコンテナの統合設計 */
 .flick-wrapper {
     position: relative;
-    /* 下部の余白は .diary-image 等の既存の仕様に合わせる */
     margin-bottom: 12px; 
 }
 
@@ -254,7 +252,7 @@ button:active {
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
     gap: 8px;
-    padding: 0 16px; /* ラッパーと余白を調整 */
+    padding: 0 16px;
     scrollbar-width: none;
 }
 
@@ -271,20 +269,27 @@ button:active {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-.flick-counter {
-    position: absolute;
-    top: 12px;
-    right: 28px; /* 右端のパディングを加味した位置 */
-    background: rgba(0, 0, 0, 0.65);
-    color: #ffffff;
-    font-size: 11px;
-    font-weight: bold;
-    padding: 4px 10px;
-    border-radius: 14px;
-    backdrop-filter: blur(4px);
-    z-index: 2;
-    pointer-events: none;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+/* 🌟 インスタ風：フリックドットインジケーター */
+.flick-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    margin-bottom: 12px;
+}
+
+.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #bdc3c7;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.dot.active {
+    background-color: var(--primary-color);
+    transform: scale(1.2);
 }
 
 /* 単一画像の場合 */
