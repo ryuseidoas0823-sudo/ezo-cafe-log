@@ -1,5 +1,5 @@
 // ==========================================
-// 📚 src/components/b2c/list.js
+// 📚 src/components/b2c/list.js (複数画像フリックUI対応版)
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
@@ -101,12 +101,40 @@ export function renderDiariesList(diaries) {
             }
         });
 
+        // 🌟 【改修ポイント】複数画像のパースとフリックUIの描画
+        let imageUrls = [];
+        const rawImageData = diary.image_base64 || diary.image_url;
+        
+        if (rawImageData) {
+            try {
+                // 新仕様（JSON配列文字列）のパースを試みる
+                imageUrls = JSON.parse(rawImageData);
+                if (!Array.isArray(imageUrls)) {
+                    imageUrls = [rawImageData]; // パースできたが配列でなければ単一URL扱い
+                }
+            } catch (e) {
+                // パースエラーの場合は旧仕様（単一のURL文字列）とみなす（ポカヨケ）
+                imageUrls = [rawImageData];
+            }
+        }
+
         let imageHTML = "";
-        if (diary.image_base64 || diary.image_url) {
-            imageHTML = `<img src="${diary.image_base64 || diary.image_url}" class="diary-image" alt="カフェの写真">`;
+        if (imageUrls.length > 0) {
+            if (imageUrls.length === 1) {
+                // 1枚のみの場合は既存のシンプルな img タグ
+                imageHTML = `<img src="${imageUrls[0]}" class="diary-image" loading="lazy" alt="カフェの写真">`;
+            } else {
+                // 複数枚の場合はフリック（カルーセル）コンテナを展開
+                imageHTML = `<div class="flick-container">`;
+                imageUrls.forEach(url => {
+                    imageHTML += `<img src="${url}" class="flick-item" loading="lazy" alt="カフェの写真">`;
+                });
+                imageHTML += `</div>`;
+            }
         } else {
+            // 画像がない場合は美しいタイポグラフィを生成（既存機能維持）
             const typoBase64 = generateTypographyBase64(diary.shop_name, diary.tags, diary.weather_icon);
-            imageHTML = `<img src="${typoBase64}" class="diary-image" alt="タイポグラフィカード">`;
+            imageHTML = `<img src="${typoBase64}" class="diary-image" loading="lazy" alt="タイポグラフィカード">`;
         }
 
         const displayDate = diary.visited_at ? diary.visited_at.split(' ')[0] : '日付不明';

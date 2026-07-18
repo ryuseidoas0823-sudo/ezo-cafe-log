@@ -172,3 +172,28 @@ button:disabled { background-color: #a1887f; cursor: not-allowed; }
     z-index: 20;
     border: 2px solid #e74c3c;
 }
+
+/* ==========================================
+   📸 複数画像のフリック（カルーセル）UI
+   ========================================== */
+.flick-container {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 8px;
+    padding-bottom: 8px;
+    /* スクロールバーを隠す（スマートな見た目） */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.flick-container::-webkit-scrollbar {
+    display: none;
+}
+.flick-item {
+    flex: 0 0 100%; /* 1枚ずつ画面幅に合わせる */
+    scroll-snap-align: center;
+    border-radius: 8px;
+    object-fit: cover;
+    width: 100%;
+    max-height: 300px;
+}

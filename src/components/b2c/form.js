@@ -1,12 +1,13 @@
 // ==========================================
-// 📦 src/components/b2c/form.js
+// 📦 src/components/b2c/form.js (複数画像対応 ＆ 編集・一括機能統合版)
 // ==========================================
 import { saveDiaryApi, searchMasterApi } from '../../api.js';
 import { refreshHistoryList } from './list.js';
 import { getters } from '../../state.js';
 import { parseTags, escapeHTML } from '../../utils/text.js';
 
-let currentBase64 = null;
+// 🌟 複数画像格納用の配列に変更
+let currentImageBase64Array = [];
 let editingDiaryId = null;
 let suggestTimeout = null;
 let pickerMap = null;
@@ -16,10 +17,14 @@ export function initFormHandlers() {
     const recordForm = document.getElementById('recordForm');
     if (recordForm) recordForm.addEventListener('submit', handleFormSubmit);
     
-    // 画像の選択（単体・一括）
+    // 画像の選択（単体入力UIを再利用しつつ multiple 化）
     const singleInput = document.getElementById('imageInputSingle');
-    if (singleInput) singleInput.addEventListener('change', handleSingleImageSelect);
+    if (singleInput) {
+        singleInput.setAttribute('multiple', 'multiple'); // HTMLを触らず複数選択を有効化
+        singleInput.addEventListener('change', handlePhotoSelection);
+    }
     
+    // 一括ストック
     const bulkInput = document.getElementById('imageInputBulk');
     if (bulkInput) bulkInput.addEventListener('change', handleBulkUpload);
 
@@ -46,14 +51,14 @@ function resetDateToToday() {
     if (dateInput) dateInput.value = `${yyyy}-${mm}-${dd}`;
 }
 
-// 📸 画像リサイズ処理
+// 📸 画像リサイズ処理 (Promise化)
 function resizeImageAsync(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
-                const MAX_SIZE = 800;
+                const MAX_SIZE = 800; // R2用に800pxで統一
                 let width = img.width; let height = img.height;
                 if (width > height) {
                     if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
@@ -118,44 +123,84 @@ async function extractExifAndWeather(file) {
     return { lat, lng, visitedAt, weatherIcon, temp };
 }
 
-// 📸 写真1枚選択時の処理
-async function handleSingleImageSelect(e) {
+// 📸 複数写真選択時の処理（配列化＆プレビュー生成）
+async function handlePhotoSelection(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
     const statusEl = document.getElementById('gpsStatus');
     const dynamicForm = document.getElementById('dynamicFormFields');
-
-    if(statusEl) { statusEl.innerText = "📸 写真を解析中..."; statusEl.style.color = "#3498db"; }
-
-    currentBase64 = await resizeImageAsync(file);
-    const imgPreview = document.getElementById('imagePreview');
-    imgPreview.src = currentBase64; imgPreview.style.display = 'block';
-
-    const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(file);
+    const submitBtn = document.getElementById('submitBtn');
     
-    document.getElementById('visitedAt').value = visitedAt;
-    if (weatherIcon !== "❓") document.getElementById('weatherSelect').value = weatherIcon;
-    document.getElementById('temperature').value = temp !== null ? temp : "";
-    document.getElementById('latitude').value = lat !== null ? lat : "";
-    document.getElementById('longitude').value = lng !== null ? lng : "";
-    if (lat !== null) document.getElementById('locationSource').value = 'exif';
+    if(statusEl) { statusEl.innerText = "📸 写真を解析中..."; statusEl.style.color = "#3498db"; }
+    if(submitBtn) submitBtn.disabled = true;
 
-    if (dynamicForm) dynamicForm.classList.add('show');
-
-    if(statusEl) {
-        if (lat !== null) {
-            statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
-            statusEl.style.color = "#27ae60";
-        } else {
-            statusEl.innerText = "ℹ️ 写真に位置情報がありません。手動で位置を指定できます。";
-            statusEl.style.color = "#f39c12";
+    // 配列とプレビュー領域の初期化
+    currentImageBase64Array = [];
+    let previewContainer = document.getElementById('photoPreviewContainer');
+    
+    // もしプレビューコンテナが無ければ、既存のimagePreviewの親要素に作成する
+    if (!previewContainer) {
+        const oldPreview = document.getElementById('imagePreview');
+        if (oldPreview) {
+            previewContainer = document.createElement('div');
+            previewContainer.id = 'photoPreviewContainer';
+            previewContainer.style.display = 'flex';
+            previewContainer.style.gap = '8px';
+            previewContainer.style.overflowX = 'auto';
+            oldPreview.parentNode.insertBefore(previewContainer, oldPreview);
+            oldPreview.style.display = 'none'; // 古い単体プレビューは隠す
         }
+    } else {
+        previewContainer.innerHTML = '';
+    }
+
+    try {
+        // 🌟 Exifと天気は最初の1枚目からのみ抽出
+        const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(files[0]);
+        
+        document.getElementById('visitedAt').value = visitedAt;
+        if (weatherIcon !== "❓") document.getElementById('weatherSelect').value = weatherIcon;
+        document.getElementById('temperature').value = temp !== null ? temp : "";
+        document.getElementById('latitude').value = lat !== null ? lat : "";
+        document.getElementById('longitude').value = lng !== null ? lng : "";
+        if (lat !== null) document.getElementById('locationSource').value = 'exif';
+
+        if (dynamicForm) dynamicForm.classList.add('show');
+
+        if(statusEl) {
+            if (lat !== null) {
+                statusEl.innerText = `✅ 写真から位置と天気を自動取得しました！\n${weatherIcon} ${temp !== null ? temp + '℃' : ''}`;
+                statusEl.style.color = "#27ae60";
+            } else {
+                statusEl.innerText = "ℹ️ 写真に位置情報がありません。手動で位置を指定できます。";
+                statusEl.style.color = "#f39c12";
+            }
+        }
+
+        // 🌟 すべての画像をリサイズして配列に格納
+        for (let i = 0; i < files.length; i++) {
+            const base64 = await resizeImageAsync(files[i]);
+            currentImageBase64Array.push(base64);
+
+            if (previewContainer) {
+                const img = document.createElement('img');
+                img.src = base64;
+                img.style.width = '80px';
+                img.style.height = '80px';
+                img.style.objectFit = 'cover';
+                img.style.borderRadius = '8px';
+                previewContainer.appendChild(img);
+            }
+        }
+    } catch (err) {
+        console.error("画像処理エラー:", err);
+    } finally {
+        if(submitBtn) submitBtn.disabled = false;
     }
 }
 
-// 📦 一括アップロード
+// 📦 一括アップロード (バックエンド側でR2へ並列アップロードされるようになります)
 async function handleBulkUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -176,7 +221,8 @@ async function handleBulkUpload(e) {
 
         const payload = {
             id: null, shopId: null, shopName: "未整理の写真", comment: "", visitedAt: visitedAt, tags: "", 
-            imageBase64: base64, lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
+            imageBase64: [base64], // 🌟 配列化してバックエンドへ渡す
+            lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
             userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
             userUuid: localStorage.getItem('ezo_user_uuid'), isPublic: 0 
         };
@@ -198,9 +244,10 @@ function handleSkipPhoto() {
     const dynamicForm = document.getElementById('dynamicFormFields');
     const statusEl = document.getElementById('gpsStatus');
     
-    currentBase64 = null;
+    currentImageBase64Array = []; // 配列を空に
     document.getElementById('imageInputSingle').value = '';
-    document.getElementById('imagePreview').style.display = 'none';
+    const previewContainer = document.getElementById('photoPreviewContainer');
+    if (previewContainer) previewContainer.innerHTML = '';
     
     ['latitude', 'longitude', 'temperature', 'locationSource'].forEach(id => document.getElementById(id).value = "");
     document.getElementById('weatherSelect').value = "❓";
@@ -292,7 +339,9 @@ function setupMapPicker() {
 // 🚀 記録送信
 async function handleFormSubmit(e) {
     e.preventDefault();
-    const eatType = document.querySelector('input[name="eatType"]:checked').value;
+    const eatTypeEl = document.querySelector('input[name="eatType"]:checked');
+    const eatType = eatTypeEl ? eatTypeEl.value : '☕️店内';
+    
     let latVal = document.getElementById('latitude')?.value || "";
     let lngVal = document.getElementById('longitude')?.value || "";
     const shopId = document.getElementById('shopId')?.value || null;
@@ -306,13 +355,14 @@ async function handleFormSubmit(e) {
 
     const submitBtn = document.getElementById('submitBtn');
     const originalBtnText = submitBtn.innerHTML;
-    submitBtn.disabled = true; submitBtn.innerHTML = "🤖 通信中...";
+    submitBtn.disabled = true; submitBtn.innerHTML = "🤖 複数画像をアップロード中...";
 
     const userTags = document.getElementById('tags').value;
     const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;
 
-    let finalLat = (latVal === "" || latVal === "null" || eatType === '🎪間借り・無店舗') ? null : parseFloat(latVal);
-    let finalLng = (lngVal === "" || lngVal === "null" || eatType === '🎪間借り・無店舗') ? null : parseFloat(lngVal);
+    // 🌟 テイクアウト等のポカヨケ（位置情報破棄）
+    let finalLat = (latVal === "" || latVal === "null" || eatType === '🎪間借り・無店舗' || combinedTags.includes('🥡テイクアウト') || combinedTags.includes('🛍️豆・グッズ')) ? null : parseFloat(latVal);
+    let finalLng = (lngVal === "" || lngVal === "null" || eatType === '🎪間借り・無店舗' || combinedTags.includes('🥡テイクアウト') || combinedTags.includes('🛍️豆・グッズ')) ? null : parseFloat(lngVal);
 
     let finalStatusIcon = document.getElementById('weatherSelect').value;
     if (document.getElementById('isBookmark')?.checked) finalStatusIcon = "💭";
@@ -321,7 +371,9 @@ async function handleFormSubmit(e) {
     const payload = {
         id: editingDiaryId, shopId: shopId, shopName: document.getElementById('shopName').value,
         comment: document.getElementById('comment').value, visitedAt: document.getElementById('visitedAt').value,
-        tags: combinedTags, imageBase64: currentBase64, lat: finalLat, lng: finalLng,
+        tags: combinedTags, 
+        imageBase64: currentImageBase64Array.length > 0 ? currentImageBase64Array : null, // 🌟 配列で送信
+        lat: finalLat, lng: finalLng,
         temperature: document.getElementById('temperature')?.value || null, weatherIcon: finalStatusIcon,
         userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
         userUuid: localStorage.getItem('ezo_user_uuid'), isPublic: document.getElementById('isPublicCheckbox')?.checked ? 1 : 0 
@@ -330,11 +382,12 @@ async function handleFormSubmit(e) {
     const result = await saveDiaryApi(payload); 
     if (result.success) {
         document.getElementById('recordForm').reset();
-        document.getElementById('imagePreview').style.display = 'none';
+        const previewContainer = document.getElementById('photoPreviewContainer');
+        if(previewContainer) previewContainer.innerHTML = '';
         if(document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = ""; 
         document.getElementById('dynamicFormFields')?.classList.remove('show');
         
-        currentBase64 = null; editingDiaryId = null;
+        currentImageBase64Array = []; editingDiaryId = null;
         document.getElementById('submitBtn').innerHTML = "🚀 記録する";
         alert("✨ 記録が保存されました！");
         refreshHistoryList();
@@ -384,13 +437,52 @@ function setEditingData(id) {
     const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗').join(', ');
     document.getElementById('tags').value = manualTags;
 
-    const imgPreview = document.getElementById('imagePreview');
-    if (diary.image_base64 || diary.image_url) {
-        imgPreview.src = diary.image_base64 || diary.image_url; imgPreview.style.display = 'block';
-    } else { imgPreview.style.display = 'none'; }
+    // 🌟 画像プレビューの復元（配列データ・旧データの両方に対応）
+    let previewContainer = document.getElementById('photoPreviewContainer');
+    if (!previewContainer) {
+        const oldPreview = document.getElementById('imagePreview');
+        if (oldPreview) {
+            previewContainer = document.createElement('div');
+            previewContainer.id = 'photoPreviewContainer';
+            previewContainer.style.display = 'flex';
+            previewContainer.style.gap = '8px';
+            previewContainer.style.overflowX = 'auto';
+            oldPreview.parentNode.insertBefore(previewContainer, oldPreview);
+            oldPreview.style.display = 'none';
+        }
+    }
+    if (previewContainer) previewContainer.innerHTML = '';
+    currentImageBase64Array = []; // 既存画像の配列
+
+    let imageUrls = [];
+    if (diary.image_base64) {
+        try {
+            imageUrls = JSON.parse(diary.image_base64);
+            if (!Array.isArray(imageUrls)) imageUrls = [diary.image_base64];
+        } catch (e) {
+            imageUrls = [diary.image_base64]; // パースできなければ単一文字列
+        }
+    } else if (diary.image_url) {
+        imageUrls = [diary.image_url];
+    }
+
+    if (imageUrls.length > 0) {
+        imageUrls.forEach(url => {
+            currentImageBase64Array.push(url); // 再保存用に配列に保持
+            if (previewContainer) {
+                const img = document.createElement('img');
+                img.src = url;
+                img.style.width = '80px';
+                img.style.height = '80px';
+                img.style.objectFit = 'cover';
+                img.style.borderRadius = '8px';
+                previewContainer.appendChild(img);
+            }
+        });
+    }
     
     document.getElementById('dynamicFormFields')?.classList.add('show');
-    currentBase64 = null; editingDiaryId = diary.id;
+    editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";
     window.scrollTo(0, 0); 
 }

@@ -268,41 +268,55 @@ export default {
         const userUuid = auth.user.userUuid;
         const isPublicVal = data.isPublic !== undefined ? data.isPublic : 0;
 
-        let targetBase64 = data.imageBase64 || null;
+        // 🌟 R2への複数画像・並列オフロード処理
+        let incomingImages = [];
+        let uploadedUrls = [];
 
-        // 🌟 【ここから追加】R2への画像オフロード処理
-        if (targetBase64 && targetBase64.startsWith('data:image')) {
-            try {
-                const base64Data = targetBase64.split(',')[1];
-                const binaryString = atob(base64Data);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-
-                // UUIDを使用して一意のファイル名を生成
-                const fileName = `diaries/${Date.now()}_${crypto.randomUUID()}.jpg`;
-
-                // R2バケットへPUT（保存）
-                await env.BUCKET.put(fileName, bytes, {
-                    httpMetadata: { contentType: 'image/jpeg' }
-                });
-
-                // D1にBase64の代わりにURLを保存するため、targetBase64を上書き
-                targetBase64 = `https://pub-ada16c54772b47eb8e38f4b9f332ca73.r2.dev/${fileName}`;
-            } catch (err) {
-                console.error("R2 Upload Error:", err);
-                // 失敗時は元のBase64のまま続行（フォールバック）
-            }
+        // 過去の仕様（文字列）と新しい仕様（配列）の両方に対応するポカヨケ
+        if (Array.isArray(data.imageBase64)) {
+            incomingImages = data.imageBase64;
+        } else if (data.imageBase64) {
+            incomingImages = [data.imageBase64];
         }
-        // 🌟 【ここまで追加】
+
+        if (incomingImages.length > 0) {
+            const uploadPromises = incomingImages.map(async (base64Str) => {
+                if (base64Str && base64Str.startsWith('data:image')) {
+                    try {
+                        const base64Data = base64Str.split(',')[1];
+                        const binaryString = atob(base64Data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        const fileName = `diaries/${Date.now()}_${crypto.randomUUID()}.jpg`;
+                        
+                        await env.BUCKET.put(fileName, bytes, { 
+                            httpMetadata: { contentType: 'image/jpeg' } 
+                        });
+                        
+                        return `https://pub-ada16c54772b47eb8e38f4b9f332ca73.r2.dev/${fileName}`;
+                    } catch (err) {
+                        console.error("R2 Upload Error:", err);
+                        return null;
+                    }
+                }
+                return base64Str; // 既にURLの場合はそのまま通す
+            });
+
+            const results = await Promise.all(uploadPromises);
+            uploadedUrls = results.filter(url => url !== null);
+        }
+
+        // D1に保存する値を「JSON配列の文字列」にする（画像がない場合はnull）
+        const finalImageValue = uploadedUrls.length > 0 ? JSON.stringify(uploadedUrls) : null;
 
         let aiExtractedTags = ""; let unclassifiedTags = [];
         if (env.AI && comment.length > 5) {
           const systemPrompt = `あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。\n\n{\n  "tags": {\n    "coffee": ["抽出したコーヒー・ドリンク関連のタグ(品種, 焙煎, 抽出方法など)"],\n    "food": ["抽出したフード関連のタグ(ランチ, ケーキ, スイーツなど)"],\n    "atmosphere": ["抽出した雰囲気や設備のタグ(作業向き, リラックス, 音楽, 景色など)。なお、もし日記内にテイクアウトや物販が終了・廃止されたという記述があれば、それぞれ『テイクアウト廃止』や『物販終了』というキーワードを含めてください"]\n  },\n  "unclassified": ["上記に分類できないが重要そうなキーワード"]\n}`;
           try {
             const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-              messages: [{ role: "system", content: systemPrompt }, { role: "user", content: comment }]
+              messages: [{ role: "system", content: systemPrompt }, { role: "user", content: content }]
             });
             if (aiResponse && aiResponse.response) {
               let rawText = aiResponse.response.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
@@ -334,9 +348,9 @@ export default {
 
         // 💾 D1へのデータベース保存
         if (data.id) {
-          if (targetBase64) {
+          if (finalImageValue) {
             await env.DB.prepare(`UPDATE diaries SET shop_id = ?, shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
-              .bind(data.shopId || null, data.shopName, comment, combinedTags, visitedAt, targetBase64, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
+              .bind(data.shopId || null, data.shopName, comment, combinedTags, visitedAt, finalImageValue, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
           } else {
             await env.DB.prepare(`UPDATE diaries SET shop_id = ?, shop_name = ?, comment = ?, tags = ?, visited_at = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
               .bind(data.shopId || null, data.shopName, comment, combinedTags, visitedAt, weatherIcon, temp, lat, lng, isPublicVal, data.id, userUuid).run();
@@ -345,7 +359,7 @@ export default {
         } else {
           const info = await env.DB.prepare(
             `INSERT INTO diaries (shop_id, shop_name, comment, latitude, longitude, image_base64, image_url, tags, weather_icon, temperature, user_gender, user_age, user_uuid, visited_at, created_at, is_public) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).bind(data.shopId || null, data.shopName || "名前なし", comment, lat, lng, targetBase64, null, combinedTags, weatherIcon, temp, userGender, userAge, userUuid, visitedAt, createdSystemAt, isPublicVal).run();
+          ).bind(data.shopId || null, data.shopName || "名前なし", comment, lat, lng, finalImageValue, null, combinedTags, weatherIcon, temp, userGender, userAge, userUuid, visitedAt, createdSystemAt, isPublicVal).run();
           return new Response(JSON.stringify({ success: true, id: info.meta.last_row_id }), { headers: corsHeaders });
         }
       } catch (err) {
