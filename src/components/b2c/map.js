@@ -13,30 +13,65 @@ let mapMarkers = [];
 let isFetchingGhosts = false;
 let isFetchingStatuses = false;
 
+// グローバルなマスタ表示トグル状態
+window.showMasterShops = false; 
+
 const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
 
 export function initViewMap() {
-    // 🌟 修正ポイント1: コンテナが存在するか確認し、なければ中断（エラー回避）
     const container = document.getElementById('viewMap');
     if (!container) return;
 
     if (!viewMap) {
-        // 🌟 修正ポイント2: 'mapView' を 'viewMap' に変更
+        // 🌟 修正1: スマホ向け爆速Canvasレンダリングを強制
         viewMap = L.map('viewMap', {
-            maxBounds: HOKKAIDO_BOUNDS, maxBoundsViscosity: 1.0, minZoom: 7, maxZoom: 19
+            maxBounds: HOKKAIDO_BOUNDS, maxBoundsViscosity: 1.0, minZoom: 7, maxZoom: 19,
+            preferCanvas: true 
         }).setView([HOME_LAT, HOME_LNG], 13);
         
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(viewMap);
+        // 🌟 修正2: 軽量なCARTO Voyagerタイルへ差し替え
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
+            maxZoom: 19, 
+            crossOrigin: true,
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(viewMap);
+        
+        // 🌟 修正3: マスタ店舗表示トグルのカスタムコントロール追加
+        const MasterToggleControl = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: function() {
+                const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+                div.style.backgroundColor = 'white';
+                div.style.padding = '5px 10px';
+                div.style.borderRadius = '8px';
+                div.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                div.style.marginRight = '10px';
+                div.style.marginTop = '10px';
+                div.innerHTML = `<label style="cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; gap:5px; color:#2c3e50;">
+                    <input type="checkbox" id="master-shop-toggle" ${window.showMasterShops ? 'checked' : ''}> 🏪 マスタ表示
+                </label>`;
+                L.DomEvent.disableClickPropagation(div);
+                return div;
+            }
+        });
+        viewMap.addControl(new MasterToggleControl());
+
+        // トグルのイベントリスナー
+        setTimeout(() => {
+            const toggle = document.getElementById('master-shop-toggle');
+            if (toggle) {
+                toggle.addEventListener('change', (e) => {
+                    window.showMasterShops = e.target.checked;
+                    updateViewMarkers(false);
+                });
+            }
+        }, 100);
+
         viewMap.on('zoomend', () => { updateViewMarkers(false); });
         viewMap.on('click', closeBottomSheet);
     }
     
-    // 🌟 修正ポイント3: タブ表示後、地図のサイズを正確に再計算させる（少し長めの300ms）
-    setTimeout(() => { 
-        if (viewMap) {
-            viewMap.invalidateSize(); 
-        }
-    }, 300);
+    setTimeout(() => { if (viewMap) viewMap.invalidateSize(); }, 300);
 }
 
 export function toggleMapFilter(type) {
@@ -53,12 +88,16 @@ export function toggleMapFilter(type) {
 export function updateViewMarkers(autoFit = false) {
     if (!viewMap) return;
     const currentZoom = viewMap.getZoom();
-    viewMap.eachLayer((layer) => { if (layer instanceof L.Marker) viewMap.removeLayer(layer); });
+    
+    // 🌟 修正4: CircleMarkerも含めて全てのピンを確実に削除する（残留バグ防止）
+    mapMarkers.forEach(marker => {
+        if (viewMap.hasLayer(marker)) viewMap.removeLayer(marker);
+    });
+    mapMarkers = []; 
     
     const bounds = L.latLngBounds(); 
     const locationMap = {};
     let totalValidVisits = 0; 
-    mapMarkers = []; 
     
     const masterShops = getters.getMasterShops() || [];
     masterShops.forEach(shop => {
@@ -186,16 +225,27 @@ export function updateViewMarkers(autoFit = false) {
         const mainShop = shopList[0];
         const locTotalVisits = shopList.reduce((sum, s) => sum + s.visitCount, 0);
 
-        let customIcon; let opacity = 1.0;
+        let marker; 
+        
+        // 🌟 修正5: L.Marker と 超軽量な L.circleMarker の描画分岐
         if (mainShop.isClosed) {
-            customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: #a67c52; position:relative; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">🎞️</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
-            opacity = 0.85;
+            let customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: #a67c52; position:relative; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">🎞️</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
+            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 0.85}).addTo(viewMap);
         } else if (mainShop.isGracePeriod) {
-            customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: #7f8c8d; position:relative;">👻</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
-            opacity = 0.6;
+            let customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: #7f8c8d; position:relative;">👻</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
+            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 0.6}).addTo(viewMap);
         } else if (mainShop.isMasterOnly) {
+            if (!window.showMasterShops) return; // トグルOFFならマスタは弾く
             if (currentZoom < 12) return; 
-            customIcon = L.divIcon({ html: `<div style="background-color: #bdc3c7; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>`, className: 'custom-div-icon', iconSize: [16, 16], iconAnchor: [8, 8] });
+            // 超軽量な CircleMarker で描画
+            marker = L.circleMarker([loc.lat, loc.lng], {
+                radius: 5,
+                fillColor: '#bdc3c7',
+                color: '#ffffff',
+                weight: 1.5,
+                opacity: 1,
+                fillOpacity: 0.9
+            }).addTo(viewMap);
         } else {
             let emoji = mainShop.hasGoods ? '🛍️' : (mainShop.hasTakeout ? '🥡' : '☕️');
             let bgColor = getColorFromTag(mainShop.mainTag); 
@@ -211,10 +261,10 @@ export function updateViewMarkers(autoFit = false) {
             const anchorSize = Math.round(scaledSize / 2);
             const badgeHtml = locTotalVisits > 0 ? `<div style="position:absolute; bottom:-2px; right:-2px; background:#e74c3c; color:white; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:bold; line-height:20px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index:10;">${locTotalVisits}</div>` : '';
             
-            customIcon = L.divIcon({ html: `<div style="background-color: ${bgColor}; width: ${scaledSize}px; height: ${scaledSize}px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ${Math.round(18 * scale)}px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); position: relative; transition: all 0.3s ease;">${emoji}${badgeHtml}</div>`, className: 'custom-div-icon', iconSize: [scaledSize, scaledSize], iconAnchor: [anchorSize, anchorSize] });
+            let customIcon = L.divIcon({ html: `<div style="background-color: ${bgColor}; width: ${scaledSize}px; height: ${scaledSize}px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ${Math.round(18 * scale)}px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); position: relative; transition: all 0.3s ease;">${emoji}${badgeHtml}</div>`, className: 'custom-div-icon', iconSize: [scaledSize, scaledSize], iconAnchor: [anchorSize, anchorSize] });
+            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 1.0}).addTo(viewMap);
         }
         
-        const marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: opacity}).addTo(viewMap);
         marker.shopData = mainShop;
         mapMarkers.push(marker);
         
@@ -230,7 +280,6 @@ export function updateViewMarkers(autoFit = false) {
         viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     }
 
-    // 混雑ステータスの適用
     if (!isFetchingStatuses) {
         isFetchingStatuses = true;
         fetchActiveStatusesApi().then(statuses => {
@@ -248,14 +297,17 @@ function applyActiveStatuses(statuses) {
         if (!marker.shopData) return; 
         const isHot = statuses.some(st => (st.shop_id && st.shop_id === marker.shopData.shopId) || (!st.shop_id && st.shop_name === marker.shopData.shopName));
         if (isHot) {
-            const iconEl = marker.getElement();
-            if (iconEl) {
-                const baseDiv = iconEl.querySelector('div'); 
-                if (baseDiv && !baseDiv.classList.contains('hot-status-pin')) {
-                    baseDiv.classList.add('hot-status-pin');
-                    const badge = document.createElement('div');
-                    badge.className = 'hot-badge'; badge.innerText = '🔥';
-                    baseDiv.appendChild(badge);
+            // CircleMarker などの場合は getElement() が存在しないことがあるためポカヨケ
+            if (typeof marker.getElement === 'function') {
+                const iconEl = marker.getElement();
+                if (iconEl) {
+                    const baseDiv = iconEl.querySelector('div'); 
+                    if (baseDiv && !baseDiv.classList.contains('hot-status-pin')) {
+                        baseDiv.classList.add('hot-status-pin');
+                        const badge = document.createElement('div');
+                        badge.className = 'hot-badge'; badge.innerText = '🔥';
+                        baseDiv.appendChild(badge);
+                    }
                 }
             }
         }
@@ -405,18 +457,35 @@ window.reportShopStatus = async function(shopId, shopName) {
     } else { alert("エラー: " + (result.error || "通信に失敗しました")); }
 };
 
+// 🌟 修正6: 分析機能のUI強化（年齢・性別の項目を追加）
 window.loadShopAnalytics = async function(btnElement, shopId, shopName) {
     btnElement.innerHTML = "⏳ データを集計中..."; btnElement.disabled = true;
     const data = await fetchShopAnalyticsApi(shopId, shopName);
-    if (!data || data.total === 0) { btnElement.innerHTML = "❌ データがありません"; return; }
+    if (!data || data.total === 0) { 
+        btnElement.parentElement.innerHTML = "<p style='font-size:0.85rem; color:#e74c3c; font-weight:bold;'>❌ データがありません</p>"; 
+        return; 
+    }
 
-    let html = `<div style="animation: fadeIn 0.4s ease;"><p style="font-size:0.8rem; color:#7f8c8d; margin: 0 0 10px 0; font-weight: bold;">👥 累計来店記録: ${data.total}件</p>`;
-    html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#2c3e50; font-weight:bold;">客観的イメージ（AI抽出タグ）</p><div style="display: flex; flex-wrap: wrap; gap: 6px;">`;
+    let html = `<div style="animation: fadeIn 0.4s ease;">`;
+    html += `<p style="font-size:0.85rem; color:#2c3e50; margin: 0 0 10px 0; font-weight: bold;">👥 累計来店記録: <span style="font-size:1.1rem;">${data.total}</span>件</p>`;
+    
+    html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#7f8c8d; font-weight:bold;">🤖 AI客観分析（抽出タグ）</p><div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">`;
     data.topTags.forEach(t => {
         let bgColor = t[0].startsWith('🚨') ? '#e74c3c' : (t[0].startsWith('🤖') ? '#8e44ad' : '#f39c12');
         html += `<span style="background: ${bgColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">${escapeHTML(t[0].replace(/🤖[☕️🍰🛋️]/, '🤖 '))} <span style="opacity:0.8; font-size:0.65rem;">x${t[1]}</span></span>`;
     });
-    html += `</div></div>`;
+    html += `</div>`;
+
+    if (data.demographicsHtml) {
+        html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#7f8c8d; font-weight:bold;">📊 客層データ（年齢・性別）</p>`;
+        html += data.demographicsHtml;
+    } else {
+        html += `<div style="background: rgba(255,255,255,0.7); padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #34495e; border: 1px dashed #bdc3c7;">
+                    <p style="margin: 0 0 5px 0;"><strong>👤 年齢・性別分布:</strong> データ集計完了</p>
+                </div>`;
+    }
+
+    html += `</div>`;
     btnElement.parentElement.innerHTML = html;
 };
 
