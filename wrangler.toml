@@ -23,3 +23,8 @@ binding = "AI"
 [vars]
 # ▼ 先ほどGASで作成した「ウェブアプリのURL」をここに貼り付けてください！
 GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyOp-cHTDluKEAXD3Qg2nQl2SOTHpDl0SgejDaQKKybN4tT4ySfREIAM1WQyFf0bpd5/exec"
+
+# R2バケットのバインディング
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ezocafe-images" # ステップ1で作ったバケット名を指定

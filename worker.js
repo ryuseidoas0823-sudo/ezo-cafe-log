@@ -90,7 +90,6 @@ export default {
       }
 
       try {
-        // 🚨 【新規追加】有効期限内のリアルタイムステータスを取得
         if (action === "get_active_statuses") {
             const auth = await checkAuthorization(request, env, ["free", "premium", "business", "admin"]);
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -207,22 +206,20 @@ export default {
       try {
         const data = await request.json();
         
-        // 🚨 【新規追加】リアルタイムステータスの報告（連打防止のポカヨケ実装）
         if (data.action === "report_status") {
             const auth = await checkAuthorization(request, env, ["free", "premium"]);
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
 
             const shopId = data.shopId || null;
             const shopName = data.shopName || "名前なし";
-            const statusType = data.statusType || "crowded"; // 将来のB2B拡張('available', 'baked')を見据えた設計
+            const statusType = data.statusType || "crowded"; 
             const userUuid = auth.user.userUuid;
 
             const nowMs = Date.now() + 9 * 60 * 60 * 1000;
             const nowStr = new Date(nowMs).toISOString();
             const oneHourAgoStr = new Date(nowMs - 60 * 60 * 1000).toISOString();
-            const expiresAtStr = new Date(nowMs + 30 * 60 * 1000).toISOString(); // 有効期限は30分
+            const expiresAtStr = new Date(nowMs + 30 * 60 * 1000).toISOString(); 
 
-            // 🛡️ ポカヨケ: 同一UUIDから、同じ店舗への1時間以内の連続投稿をブロック
             let recentReport;
             if (shopId) {
                 recentReport = await env.DB.prepare("SELECT id FROM shop_statuses WHERE shop_id = ? AND user_uuid = ? AND reported_at > ?").bind(shopId, userUuid, oneHourAgoStr).first();
@@ -273,6 +270,33 @@ export default {
 
         let targetBase64 = data.imageBase64 || null;
 
+        // 🌟 【ここから追加】R2への画像オフロード処理
+        if (targetBase64 && targetBase64.startsWith('data:image')) {
+            try {
+                const base64Data = targetBase64.split(',')[1];
+                const binaryString = atob(base64Data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+
+                // UUIDを使用して一意のファイル名を生成
+                const fileName = `diaries/${Date.now()}_${crypto.randomUUID()}.jpg`;
+
+                // R2バケットへPUT（保存）
+                await env.BUCKET.put(fileName, bytes, {
+                    httpMetadata: { contentType: 'image/jpeg' }
+                });
+
+                // D1にBase64の代わりにURLを保存するため、targetBase64を上書き
+                targetBase64 = `https://pub-ada16c54772b47eb8e38f4b9f332ca73.r2.dev/${fileName}`;
+            } catch (err) {
+                console.error("R2 Upload Error:", err);
+                // 失敗時は元のBase64のまま続行（フォールバック）
+            }
+        }
+        // 🌟 【ここまで追加】
+
         let aiExtractedTags = ""; let unclassifiedTags = [];
         if (env.AI && comment.length > 5) {
           const systemPrompt = `あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。\n\n{\n  "tags": {\n    "coffee": ["抽出したコーヒー・ドリンク関連のタグ(品種, 焙煎, 抽出方法など)"],\n    "food": ["抽出したフード関連のタグ(ランチ, ケーキ, スイーツなど)"],\n    "atmosphere": ["抽出した雰囲気や設備のタグ(作業向き, リラックス, 音楽, 景色など)。なお、もし日記内にテイクアウトや物販が終了・廃止されたという記述があれば、それぞれ『テイクアウト廃止』や『物販終了』というキーワードを含めてください"]\n  },\n  "unclassified": ["上記に分類できないが重要そうなキーワード"]\n}`;
@@ -308,6 +332,7 @@ export default {
         const createdSystemAt = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')} ${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')}`;
         const visitedAt = data.visitedAt || createdSystemAt; 
 
+        // 💾 D1へのデータベース保存
         if (data.id) {
           if (targetBase64) {
             await env.DB.prepare(`UPDATE diaries SET shop_id = ?, shop_name = ?, comment = ?, tags = ?, visited_at = ?, image_base64 = ?, weather_icon = ?, temperature = ?, latitude = ?, longitude = ?, is_public = ? WHERE id = ? AND user_uuid = ?`)
