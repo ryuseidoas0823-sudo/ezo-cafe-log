@@ -4,13 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>EzoCafe Log</title>
-    <!-- Leaflet CSS -->
+    
+    <!-- 🗺️ Leaflet CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    <!-- キャッシュバスター: ?v=5 に更新 -->
-    <link rel="stylesheet" href="./style.css?v=5">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    
+    <!-- 📸 画像処理ライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <!-- キャッシュバスター: ?v=6 に更新 -->
+    <link rel="stylesheet" href="./style.css?v=6">
     
     <style>
-        /* 🌟 追記: マップ用ボトムシートのCSS（style.cssに無かったためここに追加） */
+        /* 🌟 マップ用ボトムシートのCSS（オリジナル復旧） */
         .bottom-sheet {
             position: fixed;
             bottom: -100%;
@@ -58,7 +65,7 @@
         </header>
 
         <!-- ==========================================
-             ✍️ 1. 記録タブ (フォーム領域)
+             ✍️ 1. 記録タブ (フォーム領域) 🌟オリジナル復旧
              ========================================== -->
         <main id="tab-record" class="tab-content" style="padding-top: 16px;">
             <form id="recordForm">
@@ -149,7 +156,7 @@
              ========================================== -->
         <main id="tab-history" class="tab-content hidden" style="padding-top: 16px;">
             <div class="form-group">
-                <select id="tagFilter" class="form-group">
+                <select id="tagFilter" class="form-group" style="width: 100%; padding: 8px;">
                     <option value="">すべてのタグ（全件表示）</option>
                 </select>
             </div>
@@ -157,16 +164,31 @@
         </main>
 
         <!-- ==========================================
-             🗺️ 3. マップタブ
+             🗺️ 3. マップタブ 🌟新機能追加済み
              ========================================== -->
         <main id="tab-map" class="tab-content hidden" style="padding-top: 16px; height: calc(100vh - 150px); display: flex; flex-direction: column;">
+            <div class="form-group" style="margin-bottom: 8px;">
+                <input type="text" id="mapSearchInput" placeholder="🔍 店名・キーワードで絞り込み" autocomplete="off" style="width: 100%; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; font-size: 16px;">
+            </div>
             <div class="form-group">
-                <select id="mapTagFilter" style="width: 100%;">
+                <select id="mapTagFilter" style="width: 100%; padding: 8px;">
                     <option value="">🏷️ すべての気分・目的・タグ</option>
                 </select>
             </div>
-            <!-- 重大バグ修正: viewMap を確実に表示 -->
-            <div id="viewMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1;"></div>
+
+            <!-- 📸 マップ画像ダウンロードボタン -->
+            <button id="btn-save-map-image" onclick="window.downloadMapImage()" style="margin-bottom: 10px; background: #2c3e50; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                📸 現在のマップを画像として保存
+            </button>
+
+            <div id="viewMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1; border: 1px solid var(--border-color);"></div>
+
+            <!-- 📸 マップ画像生成用のウォーターマーク (非表示テンプレート) -->
+            <div id="map-watermark-template" style="display: none; position: absolute; bottom: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 9999; text-align: right; border: 2px solid #5d4037;">
+                <h3 style="margin: 0; color: #5d4037; font-size: 1.2rem; font-weight: 900;">☕️ EzoCafe Log</h3>
+                <p style="margin: 5px 0 0 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">My Cafe Map</p>
+                <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: #2c3e50;">開拓した店舗数: <span id="watermark-shop-count" style="font-size: 1.2rem; color: #e67e22; font-weight: 900;">0</span> 店舗</p>
+            </div>
         </main>
 
         <!-- ==========================================
@@ -186,6 +208,7 @@
             <h2 style="margin-bottom: 20px;">⚙️ ユーザー設定</h2>
             <div class="form-group">
                 <label>性別</label>
+                <!-- 🌟 IDを修正: userGender -->
                 <select id="userGender">
                     <option value="未設定">未設定</option>
                     <option value="男性">男性</option>
@@ -195,20 +218,21 @@
             </div>
             <div class="form-group">
                 <label>年代</label>
+                <!-- 🌟 IDを修正: userAge -->
                 <select id="userAge">
                     <option value="未設定">未設定</option>
-                    <option value="10代">10代</option>
+                    <option value="10代以下">10代以下</option>
                     <option value="20代">20代</option>
                     <option value="30代">30代</option>
                     <option value="40代">40代</option>
-                    <option value="50代以上">50代以上</option>
+                    <option value="50代">50代</option>
+                    <option value="60代以上">60代以上</option>
                 </select>
             </div>
             <div class="form-group" style="margin-top: 24px;">
                 <button id="btnSaveSettings" class="btn-primary">💾 設定を保存する</button>
             </div>
             
-            <!-- 🌟 追記: 管理者昇格のための隠しボタン -->
             <div style="text-align: center; margin-top: 40px; padding-bottom: 20px;">
                 <button onclick="window.upgradeToAdmin()" class="btn-secondary" style="opacity: 0.3; font-size: 0.75rem; border: none; background: transparent;">
                     🔑 Admin Mode (管理者昇格)
@@ -217,67 +241,58 @@
         </main>
 
         <!-- ==========================================
-             📱 ボトムナビゲーション
+             📱 ボトムナビゲーション 🌟オリジナル復旧
              ========================================== -->
         <nav style="position: fixed; bottom: 0; left: 0; right: 0; max-width: 600px; margin: 0 auto; background: var(--card-bg); border-top: 1px solid var(--border-color); display: flex; justify-content: space-around; padding: 10px 0; z-index: 1000; padding-bottom: calc(10px + env(safe-area-inset-bottom));">
-            <button class="nav-btn" data-tab="record" style="background:none; color:var(--primary-color); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+            <button class="nav-btn" data-tab="record" style="background:none; color:var(--primary-color); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold; border:none; cursor:pointer;">
                 <span style="font-size:20px; margin-bottom:4px;">✍️</span>記録
             </button>
-            <button class="nav-btn" data-tab="history" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+            <button class="nav-btn" data-tab="history" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold; border:none; cursor:pointer;">
                 <span style="font-size:20px; margin-bottom:4px;">📚</span>履歴
             </button>
-            <button class="nav-btn" data-tab="map" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+            <button class="nav-btn" data-tab="map" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold; border:none; cursor:pointer;">
                 <span style="font-size:20px; margin-bottom:4px;">🗺️</span>マップ
             </button>
-            <button class="nav-btn" data-tab="analytics" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+            <button class="nav-btn" data-tab="analytics" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold; border:none; cursor:pointer;">
                 <span style="font-size:20px; margin-bottom:4px;">📊</span>分析
             </button>
-            <button class="nav-btn" data-tab="settings" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
+            <button class="nav-btn" data-tab="settings" style="background:none; color:var(--text-sub); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold; border:none; cursor:pointer;">
                 <span style="font-size:20px; margin-bottom:4px;">⚙️</span>設定
             </button>
         </nav>
     </div>
 
     <!-- ==========================================
-         🌟 追記: 🗺️ マップ用 店舗詳細ボトムシート
+         🗺️ マップ用 店舗詳細ボトムシート
          ========================================== -->
     <div id="shopBottomSheet" class="bottom-sheet">
         <button class="close-sheet-btn" onclick="document.getElementById('shopBottomSheet').classList.remove('active')">✖</button>
-        <div id="bottomSheetContent">
-            <!-- map.js によって中身が動的に生成されます -->
-        </div>
+        <div id="bottomSheetContent"></div>
     </div>
 
     <!-- ==========================================
-         🗺️ 手動マップピッカー モーダル
+         🗺️ 手動マップピッカー モーダル 🌟オリジナル復旧
          ========================================== -->
-    <div id="mapPickerModal" class="hidden">
-        <div class="map-modal-content">
-            <div class="map-modal-header">
-                <p class="map-modal-header-text">📍 地図を動かして「＋」をお店に合わせてください</p>
-                <button id="closeMapPicker">✖ 閉じる</button>
-            </div>
-            <div id="pickerMap" style="position: relative;">
-                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; pointer-events: none; font-size: 24px;">➕</div>
-            </div>
-            <div class="map-modal-footer">
-                <button id="btnConfirmLocation" class="btn-primary" style="margin: 0;">✅ ここを店舗の位置として決定</button>
-            </div>
+    <div id="mapPickerModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 3000; display: flex; flex-direction: column;">
+        <div style="background: white; padding: 15px; text-align: center; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+            <span>📍 地図を動かして「＋」をお店に</span>
+            <button id="closeMapPicker" style="background: none; border: none; font-size: 20px; cursor: pointer;">✖</button>
+        </div>
+        <div id="pickerMap" style="flex-grow: 1; position: relative; width: 100%;">
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; pointer-events: none; font-size: 32px; text-shadow: 0 0 5px white;">➕</div>
+        </div>
+        <div style="background: white; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom));">
+            <button id="btnConfirmLocation" class="btn-primary" style="margin: 0; width: 100%;">✅ ここを店舗の位置として決定</button>
         </div>
     </div>
 
     <!-- ==========================================
          📦 外部スクリプト & メインロジック
          ========================================== -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+    <script type="module" src="./src/app.js?v=6"></script>
     
-    <!-- キャッシュバスターを v=5 に更新 -->
-    <script type="module" src="./src/app.js?v=5"></script>
-    
-    <!-- 📱 ボトムナビゲーション＆タブ切り替え・管理者API呼び出し制御 -->
+    <!-- 📱 ボトムナビゲーション＆タブ切り替え制御 -->
     <script>
-        // タブ切り替え処理
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const tabName = e.currentTarget.dataset.tab;
@@ -300,43 +315,6 @@
             });
             window.scrollTo(0, 0);
         });
-
-        // 🌟 管理者昇格コマンド (worker.js へPOST)
-        window.upgradeToAdmin = async function() {
-            if (!confirm("裏コマンド：管理者（Admin）権限を取得しますか？")) return;
-            
-            try {
-                // api.js側でAPIのベースURLが設定されている想定ですが、ここで直接取得します
-                const API_BASE_URL = window.API_BASE_URL || "https://cafe-log-api.m-6cf.workers.dev"; // ※必要に応じてWorkerのURLに変更してください
-                const userUuid = localStorage.getItem('ezo_user_uuid');
-                
-                if (!userUuid) {
-                    alert("ユーザーIDが見つかりません。一度履歴などを読み込んでからお試しください。");
-                    return;
-                }
-                
-                const response = await fetch(API_BASE_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Ezo-User-UUID': userUuid
-                    },
-                    body: JSON.stringify({ action: 'upgrade_admin' })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert("👑 管理者権限を取得しました！設定を反映させるためページを再読み込みします。");
-                    location.reload(); 
-                } else {
-                    alert("昇格エラー: " + (result.error || "不明なエラー"));
-                }
-            } catch (error) {
-                console.error("Admin Upgrade Error:", error);
-                alert("通信エラーが発生しました。Cloudflare WorkerのURLが正しいか確認してください。");
-            }
-        };
     </script>
 </body>
 </html>

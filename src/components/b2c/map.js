@@ -13,9 +13,7 @@ let mapMarkers = [];
 let isFetchingGhosts = false;
 let isFetchingStatuses = false;
 
-// グローバルなマスタ表示トグル状態
 window.showMasterShops = false; 
-
 const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
 
 export function initViewMap() {
@@ -23,20 +21,17 @@ export function initViewMap() {
     if (!container) return;
 
     if (!viewMap) {
-        // 🌟 修正1: スマホ向け爆速Canvasレンダリングを強制
         viewMap = L.map('viewMap', {
             maxBounds: HOKKAIDO_BOUNDS, maxBoundsViscosity: 1.0, minZoom: 7, maxZoom: 19,
             preferCanvas: true 
         }).setView([HOME_LAT, HOME_LNG], 13);
         
-        // 🌟 修正2: 軽量なCARTO Voyagerタイルへ差し替え
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
             maxZoom: 19, 
             crossOrigin: true,
             attribution: '&copy; OpenStreetMap &copy; CARTO'
         }).addTo(viewMap);
         
-        // 🌟 修正3: マスタ店舗表示トグルのカスタムコントロール追加
         const MasterToggleControl = L.Control.extend({
             options: { position: 'topright' },
             onAdd: function() {
@@ -56,7 +51,7 @@ export function initViewMap() {
         });
         viewMap.addControl(new MasterToggleControl());
 
-        // トグルのイベントリスナー
+        // イベントリスナーの登録
         setTimeout(() => {
             const toggle = document.getElementById('master-shop-toggle');
             if (toggle) {
@@ -69,6 +64,19 @@ export function initViewMap() {
 
         viewMap.on('zoomend', () => { updateViewMarkers(false); });
         viewMap.on('click', closeBottomSheet);
+
+        // 🌟 バグ修正: タグ選択とワード検索のイベントリスナー（入力ごとに即時反映）
+        const mapTagFilter = document.getElementById('mapTagFilter');
+        if (mapTagFilter && !mapTagFilter.dataset.listened) {
+            mapTagFilter.addEventListener('change', () => updateViewMarkers(false));
+            mapTagFilter.dataset.listened = "true";
+        }
+
+        const mapSearchInput = document.getElementById('mapSearchInput');
+        if (mapSearchInput && !mapSearchInput.dataset.listened) {
+            mapSearchInput.addEventListener('input', () => updateViewMarkers(false));
+            mapSearchInput.dataset.listened = "true";
+        }
     }
     
     setTimeout(() => { if (viewMap) viewMap.invalidateSize(); }, 300);
@@ -89,7 +97,6 @@ export function updateViewMarkers(autoFit = false) {
     if (!viewMap) return;
     const currentZoom = viewMap.getZoom();
     
-    // 🌟 修正4: CircleMarkerも含めて全てのピンを確実に削除する（残留バグ防止）
     mapMarkers.forEach(marker => {
         if (viewMap.hasLayer(marker)) viewMap.removeLayer(marker);
     });
@@ -99,6 +106,11 @@ export function updateViewMarkers(autoFit = false) {
     const locationMap = {};
     let totalValidVisits = 0; 
     
+    // 🌟 検索とタグの値を取得
+    const filters = getters.getFilters();
+    const selectedMoodTag = document.getElementById('mapTagFilter') ? document.getElementById('mapTagFilter').value : "";
+    const searchKeyword = document.getElementById('mapSearchInput') ? document.getElementById('mapSearchInput').value.toLowerCase().trim() : "";
+
     const masterShops = getters.getMasterShops() || [];
     masterShops.forEach(shop => {
         const lat = parseFloat(shop.latitude); const lng = parseFloat(shop.longitude);
@@ -186,9 +198,6 @@ export function updateViewMarkers(autoFit = false) {
         }
     });
 
-    const filters = getters.getFilters();
-    const selectedMoodTag = document.getElementById('mapTagFilter') ? document.getElementById('mapTagFilter').value : "";
-
     Object.values(locationMap).forEach(loc => {
         const mergedShops = {};
         Object.values(loc.shops).forEach(s => {
@@ -219,7 +228,16 @@ export function updateViewMarkers(autoFit = false) {
         if (filters.takeout) shopList = shopList.filter(s => s.hasTakeout);
         if (filters.goods)   shopList = shopList.filter(s => s.hasGoods);
         
-        if (selectedMoodTag !== "") { shopList = shopList.filter(s => !s.isMasterOnly && s.allTagsSet && s.allTagsSet.has(selectedMoodTag)); }
+        // 🌟 ワードでの絞り込み（インクリメンタルサーチ）
+        if (searchKeyword !== "") {
+            shopList = shopList.filter(s => (s.shopName || "").toLowerCase().includes(searchKeyword));
+        }
+
+        // 🌟 タグでの絞り込み
+        if (selectedMoodTag !== "") { 
+            shopList = shopList.filter(s => !s.isMasterOnly && s.allTagsSet && s.allTagsSet.has(selectedMoodTag)); 
+        }
+
         if (shopList.length === 0) return;
 
         const mainShop = shopList[0];
@@ -227,7 +245,6 @@ export function updateViewMarkers(autoFit = false) {
 
         let marker; 
         
-        // 🌟 修正5: L.Marker と 超軽量な L.circleMarker の描画分岐
         if (mainShop.isClosed) {
             let customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: #a67c52; position:relative; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">🎞️</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
             marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 0.85}).addTo(viewMap);
@@ -235,16 +252,10 @@ export function updateViewMarkers(autoFit = false) {
             let customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: #7f8c8d; position:relative;">👻</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
             marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 0.6}).addTo(viewMap);
         } else if (mainShop.isMasterOnly) {
-            if (!window.showMasterShops) return; // トグルOFFならマスタは弾く
+            if (!window.showMasterShops) return; 
             if (currentZoom < 12) return; 
-            // 超軽量な CircleMarker で描画
             marker = L.circleMarker([loc.lat, loc.lng], {
-                radius: 5,
-                fillColor: '#bdc3c7',
-                color: '#ffffff',
-                weight: 1.5,
-                opacity: 1,
-                fillOpacity: 0.9
+                radius: 5, fillColor: '#bdc3c7', color: '#ffffff', weight: 1.5, opacity: 1, fillOpacity: 0.9
             }).addTo(viewMap);
         } else {
             let emoji = mainShop.hasGoods ? '🛍️' : (mainShop.hasTakeout ? '🥡' : '☕️');
@@ -297,7 +308,6 @@ function applyActiveStatuses(statuses) {
         if (!marker.shopData) return; 
         const isHot = statuses.some(st => (st.shop_id && st.shop_id === marker.shopData.shopId) || (!st.shop_id && st.shop_name === marker.shopData.shopName));
         if (isHot) {
-            // CircleMarker などの場合は getElement() が存在しないことがあるためポカヨケ
             if (typeof marker.getElement === 'function') {
                 const iconEl = marker.getElement();
                 if (iconEl) {
@@ -457,7 +467,6 @@ window.reportShopStatus = async function(shopId, shopName) {
     } else { alert("エラー: " + (result.error || "通信に失敗しました")); }
 };
 
-// 🌟 修正6: 分析機能のUI強化（年齢・性別の項目を追加）
 window.loadShopAnalytics = async function(btnElement, shopId, shopName) {
     btnElement.innerHTML = "⏳ データを集計中..."; btnElement.disabled = true;
     const data = await fetchShopAnalyticsApi(shopId, shopName);
