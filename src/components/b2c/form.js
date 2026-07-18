@@ -1,49 +1,41 @@
 // ==========================================
-// 📦 src/components/b2c/form.js (完全統合版：複数画像・爆速マップ・マスタトグル対応)
+// 📦 src/components/b2c/form.js (完全修正・堅牢化版)
 // ==========================================
 import { saveDiaryApi, searchMasterApi } from '../../api.js';
 import { refreshHistoryList } from './list.js';
 import { getters } from '../../state.js';
 import { parseTags, escapeHTML } from '../../utils/text.js';
 
-// 🌟 状態管理用の変数群
 let currentImageBase64Array = [];
 let editingDiaryId = null;
 let suggestTimeout = null;
 let pickerMap = null;
 
-// 🌟 マップのマスタピン管理用
-let masterLayerGroup = null;
-let isMasterFetched = false;
-
 export function initFormHandlers() {
-    // フォームの送信
     const recordForm = document.getElementById('recordForm');
     if (recordForm) recordForm.addEventListener('submit', handleFormSubmit);
     
-    // 画像の選択（単体入力UIを再利用しつつ multiple 化）
     const singleInput = document.getElementById('imageInputSingle');
     if (singleInput) {
-        singleInput.setAttribute('multiple', 'multiple'); // HTMLを触らず複数選択を有効化
+        singleInput.setAttribute('multiple', 'multiple');
         singleInput.addEventListener('change', handlePhotoSelection);
     }
     
-    // 一括ストック
     const bulkInput = document.getElementById('imageInputBulk');
     if (bulkInput) bulkInput.addEventListener('change', handleBulkUpload);
 
-    // 写真なしスキップ
     const btnSkipPhoto = document.getElementById('btnSkipPhoto');
     if (btnSkipPhoto) btnSkipPhoto.addEventListener('click', handleSkipPhoto);
 
-    // 店舗サジェストと手動マップピッカーの初期化
     setupShopSuggest();
     setupMapPicker();
 
-    // 履歴タブからの「編集」イベントを受け取る
     window.addEventListener('edit-diary', (e) => {
         setEditingData(e.detail.id);
     });
+
+    // 🌟 修正2: アプリ起動時に「今日の日付」を確実にセットする
+    resetDateToToday();
 }
 
 function resetDateToToday() {
@@ -62,7 +54,7 @@ function resizeImageAsync(file) {
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
-                const MAX_SIZE = 800; // R2用に800pxで統一
+                const MAX_SIZE = 800;
                 let width = img.width; let height = img.height;
                 if (width > height) {
                     if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
@@ -127,7 +119,7 @@ async function extractExifAndWeather(file) {
     return { lat, lng, visitedAt, weatherIcon, temp };
 }
 
-// 📸 複数写真選択時の処理（配列化＆プレビュー生成）
+// 📸 複数写真選択時の処理
 async function handlePhotoSelection(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -139,11 +131,9 @@ async function handlePhotoSelection(e) {
     if(statusEl) { statusEl.innerText = "📸 写真を解析中..."; statusEl.style.color = "#3498db"; }
     if(submitBtn) submitBtn.disabled = true;
 
-    // 配列とプレビュー領域の初期化
     currentImageBase64Array = [];
     let previewContainer = document.getElementById('photoPreviewContainer');
     
-    // もしプレビューコンテナが無ければ、既存のimagePreviewの親要素に作成する
     if (!previewContainer) {
         const oldPreview = document.getElementById('imagePreview');
         if (oldPreview) {
@@ -153,14 +143,13 @@ async function handlePhotoSelection(e) {
             previewContainer.style.gap = '8px';
             previewContainer.style.overflowX = 'auto';
             oldPreview.parentNode.insertBefore(previewContainer, oldPreview);
-            oldPreview.style.display = 'none'; // 古い単体プレビューは隠す
+            oldPreview.style.display = 'none';
         }
     } else {
         previewContainer.innerHTML = '';
     }
 
     try {
-        // 🌟 Exifと天気は最初の1枚目からのみ抽出
         const { lat, lng, visitedAt, weatherIcon, temp } = await extractExifAndWeather(files[0]);
         
         document.getElementById('visitedAt').value = visitedAt;
@@ -170,6 +159,7 @@ async function handlePhotoSelection(e) {
         document.getElementById('longitude').value = lng !== null ? lng : "";
         if (lat !== null) document.getElementById('locationSource').value = 'exif';
 
+        if (dynamicForm) dynamicForm.classList.remove('hidden'); // hiddenを解除
         if (dynamicForm) dynamicForm.classList.add('show');
 
         if(statusEl) {
@@ -182,7 +172,6 @@ async function handlePhotoSelection(e) {
             }
         }
 
-        // 🌟 すべての画像をリサイズして配列に格納
         for (let i = 0; i < files.length; i++) {
             const base64 = await resizeImageAsync(files[i]);
             currentImageBase64Array.push(base64);
@@ -225,7 +214,7 @@ async function handleBulkUpload(e) {
 
         const payload = {
             id: null, shopId: null, shopName: "未整理の写真", comment: "", visitedAt: visitedAt, tags: "", 
-            imageBase64: [base64], // 🌟 配列化してバックエンドへ渡す
+            imageBase64: [base64], 
             lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
             userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
             userUuid: localStorage.getItem('ezo_user_uuid'), isPublic: 0 
@@ -248,15 +237,18 @@ function handleSkipPhoto() {
     const dynamicForm = document.getElementById('dynamicFormFields');
     const statusEl = document.getElementById('gpsStatus');
     
-    currentImageBase64Array = []; // 配列を空に
+    currentImageBase64Array = []; 
     document.getElementById('imageInputSingle').value = '';
     const previewContainer = document.getElementById('photoPreviewContainer');
     if (previewContainer) previewContainer.innerHTML = '';
     
     ['latitude', 'longitude', 'temperature', 'locationSource'].forEach(id => document.getElementById(id).value = "");
     document.getElementById('weatherSelect').value = "❓";
+    resetDateToToday(); // スキップ時も念のため今日の日付にリセット
     
+    if (dynamicForm) dynamicForm.classList.remove('hidden'); // hiddenを解除
     if (dynamicForm) dynamicForm.classList.add('show');
+    
     if (statusEl) {
         statusEl.innerText = "ℹ️ 写真なしで記録します。\n店舗名で検索、またはマップから手動で位置を指定できます！";
         statusEl.style.color = "#3498db";
@@ -309,105 +301,26 @@ function setupShopSuggest() {
     });
 }
 
-// 📍 手動マップピッカー（爆速化 ＆ マスタピン切替機能搭載版）
+// 📍 手動マップピッカー
 function setupMapPicker() {
     document.getElementById('btnOpenMapPicker')?.addEventListener('click', () => {
         document.getElementById('mapPickerModal').classList.remove('hidden');
-        
         if (!pickerMap) {
-            // 🚀 改善案1: Canvasレンダリングを優先しスマホでの描画負荷を劇的に下げる
-            pickerMap = L.map('pickerMap', {
-                preferCanvas: true, 
-                wheelPxPerZoomLevel: 120
-            }).setView([43.0600, 141.3500], 15);
-            
-            // 🚀 改善案2: 軽量でお洒落なCARTOタイルに変更
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                maxZoom: 19,
-                crossOrigin: true,
-                attribution: '&copy; CARTO'
-            }).addTo(pickerMap);
-
-            // 🌟 追加機能: 店舗マスタ表示のトグルスイッチ（カスタムコントロール）
-            const ToggleControl = L.Control.extend({
-                options: { position: 'topleft' },
-                onAdd: function() {
-                    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-                    container.style.backgroundColor = 'white';
-                    container.style.padding = '6px 10px';
-                    container.style.borderRadius = '6px';
-                    container.style.cursor = 'pointer';
-                    container.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
-                    
-                    container.innerHTML = `
-                        <label style="cursor:pointer; display:flex; align-items:center; font-size:13px; font-weight:bold; margin:0; color:#2c3e50;">
-                            <input type="checkbox" id="toggleMasterPins" style="margin-right:6px; cursor:pointer; width:16px; height:16px;">
-                            🏪 マスタ店舗を表示
-                        </label>
-                    `;
-                    
-                    // スイッチ操作時に裏の地図が動かないようにするポカヨケ
-                    L.DomEvent.disableClickPropagation(container);
-                    return container;
-                }
-            });
-            pickerMap.addControl(new ToggleControl());
-
-            // マスタピンを格納する専用レイヤー
-            masterLayerGroup = L.layerGroup();
-
-            // トグル操作時のイベント処理
-            document.getElementById('toggleMasterPins').addEventListener('change', async (e) => {
-                if (e.target.checked) {
-                    pickerMap.addLayer(masterLayerGroup);
-                    
-                    // 初回のみAPIからデータを取得する（通信量の節約）
-                    if (!isMasterFetched) {
-                        try {
-                            const uuid = localStorage.getItem('ezo_user_uuid') || "";
-                            // ※APIのURLに合わせて適宜修正してください
-                            const res = await fetch('/api/diaries?action=get_all_master', {
-                                headers: { "X-Ezo-User-UUID": uuid }
-                            });
-                            const data = await res.json();
-                            
-                            data.forEach(shop => {
-                                if(shop.latitude && shop.longitude) {
-                                    // 🚀 DOM(画像)マーカーではなく、超軽量なCircleMarkerを使用
-                                    L.circleMarker([shop.latitude, shop.longitude], {
-                                        radius: 6,
-                                        color: '#d35400',
-                                        fillColor: '#f39c12',
-                                        fillOpacity: 0.9,
-                                        weight: 2
-                                    })
-                                    .bindPopup(`<b>${escapeHTML(shop.shop_name)}</b><br><span style="font-size:10px; color:#7f8c8d;">店舗マスタ</span>`)
-                                    .addTo(masterLayerGroup);
-                                }
-                            });
-                            isMasterFetched = true;
-                        } catch (err) {
-                            console.error("店舗マスタの取得に失敗しました", err);
-                        }
-                    }
-                } else {
-                    pickerMap.removeLayer(masterLayerGroup); // チェックが外れたら隠す
-                }
-            });
+            pickerMap = L.map('pickerMap').setView([43.0600, 141.3500], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(pickerMap);
         }
-        
         const currentLat = document.getElementById('latitude').value;
         const currentLng = document.getElementById('longitude').value;
         if (currentLat && currentLng && currentLat !== "null" && currentLng !== "null") {
             pickerMap.setView([parseFloat(currentLat), parseFloat(currentLng)], 17);
         }
-        // モーダル表示時のマップの崩れを防ぐ
         setTimeout(() => { pickerMap.invalidateSize(); }, 200);
     });
 
-    window.closeMapPicker = function() {
+    // 🌟 修正1: 閉じるボタンに正しくイベントリスナーを紐付け
+    document.getElementById('closeMapPicker')?.addEventListener('click', () => {
         document.getElementById('mapPickerModal').classList.add('hidden');
-    };
+    });
 
     document.getElementById('btnConfirmLocation')?.addEventListener('click', () => {
         const center = pickerMap.getCenter();
@@ -415,11 +328,8 @@ function setupMapPicker() {
         document.getElementById('longitude').value = center.lng;
         document.getElementById('locationSource').value = 'manual'; 
         const statusEl = document.getElementById('gpsStatus');
-        if (statusEl) { 
-            statusEl.innerText = "📍 マップから手動で店舗の位置を決定しました"; 
-            statusEl.style.color = "#27ae60"; 
-        }
-        window.closeMapPicker();
+        if (statusEl) { statusEl.innerText = "📍 マップから手動で店舗の位置を決定しました"; statusEl.style.color = "#27ae60"; }
+        document.getElementById('mapPickerModal').classList.add('hidden');
     });
 }
 
@@ -442,12 +352,11 @@ async function handleFormSubmit(e) {
 
     const submitBtn = document.getElementById('submitBtn');
     const originalBtnText = submitBtn.innerHTML;
-    submitBtn.disabled = true; submitBtn.innerHTML = "🤖 通信中...";
+    submitBtn.disabled = true; submitBtn.innerHTML = "🤖 複数画像をアップロード中...";
 
     const userTags = document.getElementById('tags').value;
     const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;
 
-    // 🌟 テイクアウト等のポカヨケ（位置情報破棄）
     let finalLat = (latVal === "" || latVal === "null" || eatType === '🎪間借り・無店舗' || combinedTags.includes('🥡テイクアウト') || combinedTags.includes('🛍️豆・グッズ')) ? null : parseFloat(latVal);
     let finalLng = (lngVal === "" || lngVal === "null" || eatType === '🎪間借り・無店舗' || combinedTags.includes('🥡テイクアウト') || combinedTags.includes('🛍️豆・グッズ')) ? null : parseFloat(lngVal);
 
@@ -459,7 +368,7 @@ async function handleFormSubmit(e) {
         id: editingDiaryId, shopId: shopId, shopName: document.getElementById('shopName').value,
         comment: document.getElementById('comment').value, visitedAt: document.getElementById('visitedAt').value,
         tags: combinedTags, 
-        imageBase64: currentImageBase64Array.length > 0 ? currentImageBase64Array : null, // 🌟 配列で送信
+        imageBase64: currentImageBase64Array.length > 0 ? currentImageBase64Array : null,
         lat: finalLat, lng: finalLng,
         temperature: document.getElementById('temperature')?.value || null, weatherIcon: finalStatusIcon,
         userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
@@ -472,7 +381,12 @@ async function handleFormSubmit(e) {
         const previewContainer = document.getElementById('photoPreviewContainer');
         if(previewContainer) previewContainer.innerHTML = '';
         if(document.getElementById('gpsStatus')) document.getElementById('gpsStatus').innerText = ""; 
+        
+        // 🌟 修正3: 送信成功後、フォームをリセットした直後に「今日の日付」を入れ直す
+        resetDateToToday();
+        
         document.getElementById('dynamicFormFields')?.classList.remove('show');
+        document.getElementById('dynamicFormFields')?.classList.add('hidden'); // フォームを再度隠す
         
         currentImageBase64Array = []; editingDiaryId = null;
         document.getElementById('submitBtn').innerHTML = "🚀 記録する";
@@ -483,7 +397,7 @@ async function handleFormSubmit(e) {
     submitBtn.disabled = false; submitBtn.innerHTML = originalBtnText;
 }
 
-// ✏️ 編集データをセット（履歴からの呼び出し）
+// ✏️ 編集データをセット
 function setEditingData(id) {
     const diaries = getters.getAllDiaries();
     const diary = diaries.find(d => d.id === id);
@@ -524,7 +438,6 @@ function setEditingData(id) {
     const manualTags = allTags.filter(t => !t.startsWith("🤖") && !t.startsWith("🚨") && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗').join(', ');
     document.getElementById('tags').value = manualTags;
 
-    // 🌟 画像プレビューの復元（配列データ・旧データの両方に対応）
     let previewContainer = document.getElementById('photoPreviewContainer');
     if (!previewContainer) {
         const oldPreview = document.getElementById('imagePreview');
@@ -539,7 +452,7 @@ function setEditingData(id) {
         }
     }
     if (previewContainer) previewContainer.innerHTML = '';
-    currentImageBase64Array = []; // 既存画像の配列
+    currentImageBase64Array = []; 
 
     let imageUrls = [];
     if (diary.image_base64) {
@@ -547,7 +460,7 @@ function setEditingData(id) {
             imageUrls = JSON.parse(diary.image_base64);
             if (!Array.isArray(imageUrls)) imageUrls = [diary.image_base64];
         } catch (e) {
-            imageUrls = [diary.image_base64]; // パースできなければ単一文字列
+            imageUrls = [diary.image_base64];
         }
     } else if (diary.image_url) {
         imageUrls = [diary.image_url];
@@ -555,7 +468,7 @@ function setEditingData(id) {
 
     if (imageUrls.length > 0) {
         imageUrls.forEach(url => {
-            currentImageBase64Array.push(url); // 再保存用に配列に保持
+            currentImageBase64Array.push(url);
             if (previewContainer) {
                 const img = document.createElement('img');
                 img.src = url;
@@ -568,6 +481,7 @@ function setEditingData(id) {
         });
     }
     
+    document.getElementById('dynamicFormFields')?.classList.remove('hidden'); // hiddenを解除
     document.getElementById('dynamicFormFields')?.classList.add('show');
     editingDiaryId = diary.id;
     document.getElementById('submitBtn').innerHTML = "🔄 この内容で更新する";

@@ -1,9 +1,12 @@
 // ==========================================
-// 📚 src/components/b2c/list.js (インスタ風ドットUI＆フリック連動対応版)
+// 📚 src/components/b2c/list.js (フリックUI＆ドット連動 完全対応版)
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
 import { deleteDiaryApi, fetchDiariesApi } from '../../api.js';
+
+// タイポグラフィ画像の生成結果を保持するキャッシュ（パフォーマンス改善）
+const typographyCache = new Map();
 
 /**
  * 履歴タブの初期化
@@ -101,39 +104,41 @@ export function renderDiariesList(diaries) {
             }
         });
 
-        // 複数画像のパース処理
+        // 🌟 画像データのパース
         let imageUrls = [];
         const rawImageData = diary.image_base64 || diary.image_url;
         
         if (rawImageData) {
             try {
                 imageUrls = JSON.parse(rawImageData);
-                if (!Array.isArray(imageUrls)) imageUrls = [rawImageData];
+                if (!Array.isArray(imageUrls)) {
+                    imageUrls = [rawImageData]; 
+                }
             } catch (e) {
                 imageUrls = [rawImageData];
             }
         }
 
         let imageHTML = "";
-        if (imageUrls.length > 1) {
-            // 🌟 複数画像：フリックコンテナとインスタ風ドットを展開
-            imageHTML = `<div class="flick-wrapper">`;
-            imageHTML += `<div class="flick-container">`;
-            imageUrls.forEach(url => {
-                imageHTML += `<img src="${url}" class="flick-item" loading="lazy" alt="カフェの写真">`;
-            });
-            imageHTML += `</div>`;
-            
-            // インスタ風のドット（・）インジケーターを生成
-            imageHTML += `<div class="flick-dots">`;
-            imageUrls.forEach((_, idx) => {
-                imageHTML += `<span class="dot ${idx === 0 ? 'active' : ''}" data-idx="${idx}"></span>`;
-            });
-            imageHTML += `</div>`;
-            imageHTML += `</div>`;
-        } else if (imageUrls.length === 1) {
-            imageHTML = `<img src="${imageUrls[0]}" class="diary-image" loading="lazy" alt="カフェの写真">`;
+        if (imageUrls.length > 0) {
+            if (imageUrls.length === 1) {
+                // 単一画像
+                imageHTML = `<img src="${escapeHTML(imageUrls[0])}" class="diary-image" loading="lazy" alt="カフェの写真">`;
+            } else {
+                // 🌟 新仕様：複数画像（ラッパーとドットインジケーターを含める）
+                imageHTML = `
+                    <div class="flick-wrapper">
+                        <div class="flick-container">
+                            ${imageUrls.map(url => `<img src="${escapeHTML(url)}" class="flick-item" loading="lazy" alt="カフェの写真">`).join('')}
+                        </div>
+                        <div class="flick-dots">
+                            ${imageUrls.map((_, i) => `<div class="dot ${i === 0 ? 'active' : ''}"></div>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
         } else {
+            // 画像がない場合はタイポグラフィ生成
             const typoBase64 = generateTypographyBase64(diary.shop_name, diary.tags, diary.weather_icon);
             imageHTML = `<img src="${typoBase64}" class="diary-image" loading="lazy" alt="タイポグラフィカード">`;
         }
@@ -163,31 +168,33 @@ export function renderDiariesList(diaries) {
             </div>
         `;
         
-        // --- イベントリスナーの設定 ---
-        
-        // 1. 削除・編集ボタン
+        // 🌟 フリック時のドット連動ロジック
+        if (imageUrls.length > 1) {
+            const flickContainer = card.querySelector('.flick-container');
+            if (flickContainer) {
+                flickContainer.addEventListener('scroll', (e) => {
+                    const c = e.target;
+                    const item = c.querySelector('.flick-item');
+                    if (!item) return;
+                    
+                    // スクロール量と要素幅＋ギャップ(8px)から現在のインデックスを算出
+                    const itemWidthWithGap = item.clientWidth + 8;
+                    const index = Math.round(c.scrollLeft / itemWidthWithGap);
+                    
+                    const dots = c.parentElement.querySelectorAll('.dot');
+                    dots.forEach((dot, i) => {
+                        dot.classList.toggle('active', i === index);
+                    });
+                }, { passive: true }); // passive: true でスクロールパフォーマンスを最適化
+            }
+        }
+
+        // イベントリスナー設定
         card.querySelector('.data-delete-btn').addEventListener('click', () => deleteDiary(diary.id));
         card.querySelector('.data-edit-btn').addEventListener('click', () => {
             const event = new CustomEvent('edit-diary', { detail: { id: diary.id } });
             window.dispatchEvent(event);
         });
-
-        // 2. 🌟 複数画像のフリックスクロール連動処理（ドット切り替え）
-        const flickContainer = card.querySelector('.flick-container');
-        const dots = card.querySelectorAll('.dot');
-        
-        if (flickContainer && dots.length > 0) {
-            flickContainer.addEventListener('scroll', () => {
-                const itemWidth = flickContainer.children[0].offsetWidth;
-                const scrollPos = flickContainer.scrollLeft;
-                const currentIndex = Math.round(scrollPos / itemWidth);
-                
-                // 現在の画像に合わせてドットの色（active）を切り替える
-                dots.forEach((dot, idx) => {
-                    dot.classList.toggle('active', idx === currentIndex);
-                });
-            });
-        }
 
         container.appendChild(card);
     });
@@ -195,8 +202,14 @@ export function renderDiariesList(diaries) {
 
 /**
  * 写真がないとき用のタイポグラフィ生成 (Canvas API)
+ * 🌟 パフォーマンス改善：キャッシュ機能を追加
  */
 function generateTypographyBase64(shopName, tags, weatherIcon) {
+    const cacheKey = `${shopName}_${tags}_${weatherIcon}`;
+    if (typographyCache.has(cacheKey)) {
+        return typographyCache.get(cacheKey);
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = 800; canvas.height = 450;
     const ctx = canvas.getContext('2d');
@@ -221,7 +234,9 @@ function generateTypographyBase64(shopName, tags, weatherIcon) {
     ctx.fillStyle = '#7f8c8d'; ctx.font = '22px sans-serif';
     ctx.fillText(manualTags.length > 0 ? manualTags.join(' / ') : '日常の記録', 400, 260);
 
-    return canvas.toDataURL('image/jpeg', 0.8);
+    const base64 = canvas.toDataURL('image/jpeg', 0.8);
+    typographyCache.set(cacheKey, base64); // キャッシュに保存
+    return base64;
 }
 
 /**
