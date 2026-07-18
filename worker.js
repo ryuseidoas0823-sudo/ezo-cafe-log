@@ -90,6 +90,83 @@ export default {
       }
 
       try {
+        // 📊 B2B向け：経営用ダッシュボードのアナリティクスデータ取得
+        if (action === "get_b2b_analytics") {
+          const auth = await checkAuthorization(request, env, ["admin", "business"]);
+          if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
+
+          const shopId = url.searchParams.get("shop_id");
+          if (!shopId) return new Response(JSON.stringify({ error: "shop_idが必要です" }), { status: 400, headers: corsHeaders });
+
+          // 1. ロイヤルティ分析（新規 vs リピーター）
+          const loyaltyStmt = env.DB.prepare(`
+            WITH ValidDiaries AS (
+              SELECT user_uuid
+              FROM diaries
+              WHERE shop_id = ? 
+                AND weather_icon NOT IN ('💭', '📦', '🚫')
+            ),
+            UserVisits AS (
+              SELECT user_uuid, COUNT(*) AS visit_count
+              FROM ValidDiaries
+              GROUP BY user_uuid
+            )
+            SELECT 
+              SUM(CASE WHEN visit_count = 1 THEN 1 ELSE 0 END) AS new_customers,
+              SUM(CASE WHEN visit_count > 1 THEN 1 ELSE 0 END) AS repeat_customers
+            FROM UserVisits
+          `);
+          const loyaltyResult = await loyaltyStmt.bind(shopId).first() || {};
+
+          // 2. ヒートマップ分析（時間帯 × 利用タイプ）
+          const heatmapStmt = env.DB.prepare(`
+            WITH ValidDiaries AS (
+              SELECT 
+                CASE 
+                  WHEN CAST(strftime('%H', created_at) AS INTEGER) BETWEEN 5 AND 10 THEN 'morning'
+                  WHEN CAST(strftime('%H', created_at) AS INTEGER) BETWEEN 11 AND 14 THEN 'afternoon'
+                  WHEN CAST(strftime('%H', created_at) AS INTEGER) BETWEEN 15 AND 17 THEN 'evening'
+                  ELSE 'night'
+                END AS time_zone,
+                CASE 
+                  WHEN tags LIKE '%☕️店内%' THEN '☕️店内'
+                  WHEN tags LIKE '%🥡テイクアウト%' THEN '🥡テイクアウト'
+                  WHEN tags LIKE '%🛍️豆・グッズ%' THEN '🛍️豆・グッズ'
+                  WHEN tags LIKE '%🎪間借り・無店舗%' THEN '🎪間借り・無店舗'
+                  ELSE 'その他'
+                END AS usage_type
+              FROM diaries
+              WHERE shop_id = ? 
+                AND weather_icon NOT IN ('💭', '📦', '🚫')
+                AND created_at IS NOT NULL
+            )
+            SELECT time_zone, usage_type, COUNT(*) AS count
+            FROM ValidDiaries
+            WHERE usage_type != 'その他'
+            GROUP BY time_zone, usage_type
+            ORDER BY count DESC
+          `);
+          const heatmapResult = await heatmapStmt.bind(shopId).all();
+
+          // データ成形
+          const newCust = loyaltyResult.new_customers || 0;
+          const repeatCust = loyaltyResult.repeat_customers || 0;
+          const totalUsers = newCust + repeatCust;
+          const repeatRate = totalUsers > 0 ? ((repeatCust / totalUsers) * 100).toFixed(1) + '%' : '0%';
+
+          return new Response(JSON.stringify({
+            success: true,
+            data: {
+              loyalty: {
+                new_customers: newCust,
+                repeat_customers: repeatCust,
+                repeat_rate: repeatRate
+              },
+              heatmap: heatmapResult.results || []
+            }
+          }), { headers: corsHeaders });
+        }
+
         if (action === "get_active_statuses") {
             const auth = await checkAuthorization(request, env, ["free", "premium", "business", "admin"]);
             if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -272,7 +349,6 @@ export default {
         let incomingImages = [];
         let uploadedUrls = [];
 
-        // 過去の仕様（文字列）と新しい仕様（配列）の両方に対応するポカヨケ
         if (Array.isArray(data.imageBase64)) {
             incomingImages = data.imageBase64;
         } else if (data.imageBase64) {
@@ -308,7 +384,6 @@ export default {
             uploadedUrls = results.filter(url => url !== null);
         }
 
-        // D1に保存する値を「JSON配列の文字列」にする（画像がない場合はnull）
         const finalImageValue = uploadedUrls.length > 0 ? JSON.stringify(uploadedUrls) : null;
 
         let aiExtractedTags = ""; let unclassifiedTags = [];
@@ -316,7 +391,7 @@ export default {
           const systemPrompt = `あなたはカフェデータアナリストです。入力された日記から以下のJSONフォーマットでタグを抽出してください。厳密にJSON形式のみを出力し、マークダウン(\`\`\`json など)やその他のテキストは一切含めないでください。\n\n{\n  "tags": {\n    "coffee": ["抽出したコーヒー・ドリンク関連のタグ(品種, 焙煎, 抽出方法など)"],\n    "food": ["抽出したフード関連のタグ(ランチ, ケーキ, スイーツなど)"],\n    "atmosphere": ["抽出した雰囲気や設備のタグ(作業向き, リラックス, 音楽, 景色など)。なお、もし日記内にテイクアウトや物販が終了・廃止されたという記述があれば、それぞれ『テイクアウト廃止』や『物販終了』というキーワードを含めてください"]\n  },\n  "unclassified": ["上記に分類できないが重要そうなキーワード"]\n}`;
           try {
             const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-              messages: [{ role: "system", content: systemPrompt }, { role: "user", content: content }]
+              messages: [{ role: "system", content: systemPrompt }, { role: "user", content: comment }]
             });
             if (aiResponse && aiResponse.response) {
               let rawText = aiResponse.response.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
