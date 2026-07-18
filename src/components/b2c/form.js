@@ -1,16 +1,20 @@
 // ==========================================
-// 📦 src/components/b2c/form.js (複数画像対応 ＆ 編集・一括機能統合版)
+// 📦 src/components/b2c/form.js (完全統合版：複数画像・爆速マップ・マスタトグル対応)
 // ==========================================
 import { saveDiaryApi, searchMasterApi } from '../../api.js';
 import { refreshHistoryList } from './list.js';
 import { getters } from '../../state.js';
 import { parseTags, escapeHTML } from '../../utils/text.js';
 
-// 🌟 複数画像格納用の配列に変更
+// 🌟 状態管理用の変数群
 let currentImageBase64Array = [];
 let editingDiaryId = null;
 let suggestTimeout = null;
 let pickerMap = null;
+
+// 🌟 マップのマスタピン管理用
+let masterLayerGroup = null;
+let isMasterFetched = false;
 
 export function initFormHandlers() {
     // フォームの送信
@@ -200,7 +204,7 @@ async function handlePhotoSelection(e) {
     }
 }
 
-// 📦 一括アップロード (バックエンド側でR2へ並列アップロードされるようになります)
+// 📦 一括アップロード
 async function handleBulkUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -305,19 +309,99 @@ function setupShopSuggest() {
     });
 }
 
-// 📍 手動マップピッカー
+// 📍 手動マップピッカー（爆速化 ＆ マスタピン切替機能搭載版）
 function setupMapPicker() {
     document.getElementById('btnOpenMapPicker')?.addEventListener('click', () => {
         document.getElementById('mapPickerModal').classList.remove('hidden');
+        
         if (!pickerMap) {
-            pickerMap = L.map('pickerMap').setView([43.0600, 141.3500], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true }).addTo(pickerMap);
+            // 🚀 改善案1: Canvasレンダリングを優先しスマホでの描画負荷を劇的に下げる
+            pickerMap = L.map('pickerMap', {
+                preferCanvas: true, 
+                wheelPxPerZoomLevel: 120
+            }).setView([43.0600, 141.3500], 15);
+            
+            // 🚀 改善案2: 軽量でお洒落なCARTOタイルに変更
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19,
+                crossOrigin: true,
+                attribution: '&copy; CARTO'
+            }).addTo(pickerMap);
+
+            // 🌟 追加機能: 店舗マスタ表示のトグルスイッチ（カスタムコントロール）
+            const ToggleControl = L.Control.extend({
+                options: { position: 'topleft' },
+                onAdd: function() {
+                    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+                    container.style.backgroundColor = 'white';
+                    container.style.padding = '6px 10px';
+                    container.style.borderRadius = '6px';
+                    container.style.cursor = 'pointer';
+                    container.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+                    
+                    container.innerHTML = `
+                        <label style="cursor:pointer; display:flex; align-items:center; font-size:13px; font-weight:bold; margin:0; color:#2c3e50;">
+                            <input type="checkbox" id="toggleMasterPins" style="margin-right:6px; cursor:pointer; width:16px; height:16px;">
+                            🏪 マスタ店舗を表示
+                        </label>
+                    `;
+                    
+                    // スイッチ操作時に裏の地図が動かないようにするポカヨケ
+                    L.DomEvent.disableClickPropagation(container);
+                    return container;
+                }
+            });
+            pickerMap.addControl(new ToggleControl());
+
+            // マスタピンを格納する専用レイヤー
+            masterLayerGroup = L.layerGroup();
+
+            // トグル操作時のイベント処理
+            document.getElementById('toggleMasterPins').addEventListener('change', async (e) => {
+                if (e.target.checked) {
+                    pickerMap.addLayer(masterLayerGroup);
+                    
+                    // 初回のみAPIからデータを取得する（通信量の節約）
+                    if (!isMasterFetched) {
+                        try {
+                            const uuid = localStorage.getItem('ezo_user_uuid') || "";
+                            // ※APIのURLに合わせて適宜修正してください
+                            const res = await fetch('/api/diaries?action=get_all_master', {
+                                headers: { "X-Ezo-User-UUID": uuid }
+                            });
+                            const data = await res.json();
+                            
+                            data.forEach(shop => {
+                                if(shop.latitude && shop.longitude) {
+                                    // 🚀 DOM(画像)マーカーではなく、超軽量なCircleMarkerを使用
+                                    L.circleMarker([shop.latitude, shop.longitude], {
+                                        radius: 6,
+                                        color: '#d35400',
+                                        fillColor: '#f39c12',
+                                        fillOpacity: 0.9,
+                                        weight: 2
+                                    })
+                                    .bindPopup(`<b>${escapeHTML(shop.shop_name)}</b><br><span style="font-size:10px; color:#7f8c8d;">店舗マスタ</span>`)
+                                    .addTo(masterLayerGroup);
+                                }
+                            });
+                            isMasterFetched = true;
+                        } catch (err) {
+                            console.error("店舗マスタの取得に失敗しました", err);
+                        }
+                    }
+                } else {
+                    pickerMap.removeLayer(masterLayerGroup); // チェックが外れたら隠す
+                }
+            });
         }
+        
         const currentLat = document.getElementById('latitude').value;
         const currentLng = document.getElementById('longitude').value;
         if (currentLat && currentLng && currentLat !== "null" && currentLng !== "null") {
             pickerMap.setView([parseFloat(currentLat), parseFloat(currentLng)], 17);
         }
+        // モーダル表示時のマップの崩れを防ぐ
         setTimeout(() => { pickerMap.invalidateSize(); }, 200);
     });
 
@@ -331,7 +415,10 @@ function setupMapPicker() {
         document.getElementById('longitude').value = center.lng;
         document.getElementById('locationSource').value = 'manual'; 
         const statusEl = document.getElementById('gpsStatus');
-        if (statusEl) { statusEl.innerText = "📍 マップから手動で店舗の位置を決定しました"; statusEl.style.color = "#27ae60"; }
+        if (statusEl) { 
+            statusEl.innerText = "📍 マップから手動で店舗の位置を決定しました"; 
+            statusEl.style.color = "#27ae60"; 
+        }
         window.closeMapPicker();
     });
 }
@@ -355,7 +442,7 @@ async function handleFormSubmit(e) {
 
     const submitBtn = document.getElementById('submitBtn');
     const originalBtnText = submitBtn.innerHTML;
-    submitBtn.disabled = true; submitBtn.innerHTML = "🤖 複数画像をアップロード中...";
+    submitBtn.disabled = true; submitBtn.innerHTML = "🤖 通信中...";
 
     const userTags = document.getElementById('tags').value;
     const combinedTags = userTags ? `${eatType}, ${userTags}` : eatType;

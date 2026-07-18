@@ -1,199 +1,380 @@
+/* ==========================================
+   ☕️ EzoCafe Log - Master Style Sheet
+   ========================================== */
+
+/* --- 1. Base & Reset --- */
 :root {
-    --bg-color: #f8f5f2;
-    --text-color: #3e2723;
-    --accent-color: #5d4037;
+    --primary-color: #27ae60;
+    --primary-hover: #219150;
+    --danger-color: #e74c3c;
+    --text-main: #2c3e50;
+    --text-sub: #7f8c8d;
+    --bg-color: #f8f9fa;
     --card-bg: #ffffff;
+    --border-color: #e0e0e0;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
 body {
-    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
     background-color: var(--bg-color);
-    color: var(--text-color);
-    margin: 0;
-    padding: 20px;
+    color: var(--text-main);
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
 }
 
-.container { max-width: 600px; margin: 0 auto; }
-#main-content { padding-bottom: 80px; }
+/* スマホでの閲覧を最適化（中央寄せのコンテナ） */
+.app-container {
+    max-width: 600px;
+    margin: 0 auto;
+    background-color: var(--bg-color);
+    min-height: 100vh;
+    padding-bottom: 80px; /* 下部ナビゲーションなどの余白 */
+}
 
-h1 { text-align: center; color: var(--accent-color); font-size: 1.5em; margin-bottom: 25px; }
+/* --- 2. Typography & Utilities --- */
+h1, h2, h3 {
+    color: var(--text-main);
+    margin-bottom: 10px;
+}
 
-.form-card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-bottom: 30px; }
-.form-group { margin-bottom: 18px; }
-.form-group.relative { position: relative; } 
+.hidden {
+    display: none !important;
+}
 
-label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 0.9em; color: var(--accent-color); }
-input[type="text"], input[type="date"], textarea, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; background-color: #fafafa; color: var(--text-color); }
+/* --- 3. Form & Inputs (記録フォーム) --- */
+.form-group {
+    margin-bottom: 16px;
+    padding: 0 16px;
+}
 
-.suggest-list {
-    position: absolute;
+.form-group.relative {
+    position: relative;
+}
+
+label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
     width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 16px; /* スマホでのズーム防止 */
+    background-color: var(--card-bg);
+    transition: border-color 0.3s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(39, 174, 96, 0.2);
+}
+
+/* --- 4. Buttons --- */
+button {
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+.btn-primary {
+    display: block;
+    width: calc(100% - 32px);
+    margin: 20px auto;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 14px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.btn-primary:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background-color: #ecf0f1;
+    color: var(--text-main);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    border: 1px solid var(--border-color);
+}
+
+/* --- 5. Map Modal (手動マップピッカー) --- */
+#mapPickerModal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+.map-modal-content {
+    background-color: var(--card-bg);
+    width: 100%;
+    height: 90vh;
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.3s ease-out forwards;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.map-modal-header {
+    position: relative;
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: #fff;
+    z-index: 2;
+}
+
+/* 🌟 ポカヨケ：テキストと閉じるボタンの被り防止 */
+.map-modal-header-text {
+    padding-right: 60px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1.4;
+    color: var(--text-main);
+    margin: 0;
+}
+
+#closeMapPicker {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    background: transparent;
+    border: 1px solid var(--danger-color);
+    color: var(--danger-color);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+#pickerMap {
+    flex-grow: 1;
+    width: 100%;
+    z-index: 1;
+}
+
+.map-modal-footer {
+    padding: 16px;
+    background-color: #fff;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    z-index: 2;
+}
+
+/* --- 6. Shop Suggestion Dropdown --- */
+#shopSuggestList {
+    position: absolute;
+    top: 100%; left: 16px; right: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     max-height: 200px;
     overflow-y: auto;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    z-index: 10;
-    margin-top: 5px;
-    padding: 0;
+    z-index: 100;
     list-style: none;
+    margin-top: -4px;
+}
+
+.suggest-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.suggest-item:last-child {
+    border-bottom: none;
+}
+
+.suggest-item:hover, .suggest-item:active {
+    background-color: #f1f8f5;
+}
+
+/* --- 7. Multiple Images & Flick UI (プレビューと履歴) --- */
+#photoPreviewContainer {
+    padding: 0 16px;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+}
+
+#photoPreviewContainer::-webkit-scrollbar {
     display: none;
 }
-.suggest-item {
-    padding: 10px 12px;
-    cursor: pointer;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 0.95em;
-}
-.suggest-item:last-child { border-bottom: none; }
-.suggest-item:hover { background-color: #f8f5f2; color: var(--accent-color); font-weight: bold; }
 
-textarea { resize: vertical; min-height: 100px; }
-input[type="file"] { margin-top: 5px; font-size: 0.9em; }
-
-.weather-selector, .type-selector { display: flex; gap: 8px; margin-top: 5px; }
-.weather-selector label, .type-selector label { flex: 1; padding: 10px 5px; background: white; border: 2px solid #ddd; border-radius: 8px; text-align: center; cursor: pointer; font-weight: bold; font-size: 0.9rem; color: #7f8c8d; transition: 0.2s; }
-.weather-selector input[type="radio"], .type-selector input[type="radio"] { display: none; }
-.weather-selector label:has(input[type="radio"]:checked), .type-selector label:has(input[type="radio"]:checked) { border-color: var(--accent-color); background-color: #f8f5f2; color: var(--accent-color); }
-
-#imagePreview { width: 100%; border-radius: 8px; margin-top: 10px; object-fit: cover; max-height: 250px; }
-
-button { background-color: var(--accent-color); color: white; border: none; padding: 14px 20px; width: 100%; border-radius: 8px; font-size: 16px; cursor: pointer; transition: opacity 0.2s; font-weight: bold; margin-top: 10px; }
-button:hover { opacity: 0.9; }
-button:disabled { background-color: #a1887f; cursor: not-allowed; }
-
-.diary-card { background: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); position: relative;}
-.diary-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; margin-bottom: 15px; }
-.diary-date { font-size: 0.85em; color: #888; }
-.diary-shop { margin: 0; font-size: 1.25em; color: var(--text-color); font-weight: bold; }
-
-.diary-image { 
-    width: 100%; 
-    max-height: 400px;
-    object-fit: contain; 
-    background-color: #fafafa;
-    border-radius: 8px; 
-    margin-bottom: 15px; 
+/* 🌟 フリックカウンターとコンテナの統合設計 */
+.flick-wrapper {
+    position: relative;
+    /* 下部の余白は .diary-image 等の既存の仕様に合わせる */
+    margin-bottom: 12px; 
 }
 
-.diary-comment { font-size: 0.95em; margin-bottom: 15px; white-space: pre-wrap; color: #444; }
-.diary-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.tag-badge { padding: 4px 10px; border-radius: 12px; color: white; font-size: 0.75em; font-weight: bold; }
-
-.card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; padding-top: 12px; border-top: 1px dashed #eee; }
-.action-btn { background: #ecf0f1; border: none; font-size: 0.85rem; padding: 8px 12px; border-radius: 5px; cursor: pointer; width: auto; color: #2c3e50; font-weight: bold; margin: 0; }
-
-#mapView { width: 100%; height: 65vh; border-radius: 12px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-.emoji-pin { font-size: 20px; text-align: center; line-height: 36px; width: 36px; height: 36px; border-radius: 50%; box-shadow: 0 3px 6px rgba(0,0,0,0.4); border: 2px solid white; display: flex; align-items: center; justify-content: center; }
-.map-label { background-color: rgba(255, 255, 255, 0.95); border: 1px solid #5d4037; border-radius: 4px; color: #3e2723; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-
-.bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 65px; background-color: #ffffff; display: flex; justify-content: space-around; align-items: center; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05); z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
-.nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; text-decoration: none; color: #cccccc; flex: 1; padding: 5px 0; transition: color 0.2s; }
-.nav-item.active { color: var(--accent-color); }
-.nav-icon { font-size: 24px; margin-bottom: 2px; }
-.nav-label { font-size: 10px; font-weight: bold; }
-
-.hidden { display: none !important; }
-
-.fixed-filter { position: fixed; bottom: calc(65px + env(safe-area-inset-bottom)); left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); padding: 10px 20px; box-shadow: 0 -4px 10px rgba(0,0,0,0.05); box-sizing: border-box; z-index: 999; backdrop-filter: blur(5px); border-top: 1px solid #f0f0f0; }
-
-.dashboard-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-.dashboard-card h3 { margin-top: 0; color: #2c3e50; font-size: 1.1rem; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
-.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-.stat-box { background: #ecf0f1; padding: 15px; border-radius: 8px; text-align: center; }
-.stat-value { font-size: 1.5rem; font-weight: bold; color: #e74c3c; }
-.stat-label { font-size: 0.8rem; color: #7f8c8d; }
-.chart-container { position: relative; width: 100%; margin-top: 15px; }
-
-.hidden-fields { opacity: 0; max-height: 0; overflow: hidden; transform: translateY(20px); transition: opacity 0.5s ease, max-height 0.6s cubic-bezier(0, 1, 0, 1), transform 0.5s ease; }
-.hidden-fields.show { opacity: 1; max-height: 2000px; transform: translateY(0); transition: opacity 0.5s ease, max-height 0.6s ease, transform 0.5s ease; margin-top: 20px; }
-
-.glass-effect { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); }
-
-.floating-map-controls { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); width: 92%; max-width: 400px; z-index: 1000; padding: 12px; border-radius: 20px; display: flex; flex-direction: column; }
-.filter-btn { flex: 1; background: rgba(255, 255, 255, 0.9); border: none; padding: 8px 0; border-radius: 12px; font-size: 0.85rem; font-weight: bold; color: #5d4037; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-.filter-btn:active { transform: scale(0.95); }
-.filter-select { width: 100%; padding: 10px; border-radius: 12px; border: none; font-weight: bold; color: #2c3e50; background: rgba(255, 255, 255, 0.9); box-shadow: 0 2px 4px rgba(0,0,0,0.05); outline: none; }
-
-.bottom-sheet { position: absolute; bottom: -100%; left: 0; width: 100%; height: auto; max-height: 75vh; border-radius: 24px 24px 0 0; z-index: 2000; transition: bottom 0.4s cubic-bezier(0.3, 1, 0.3, 1); display: flex; flex-direction: column; }
-.bottom-sheet.active { bottom: 0; }
-.bottom-sheet-handle { width: 40px; height: 5px; background-color: #bdc3c7; border-radius: 3px; margin: 12px auto; }
-.bottom-sheet-content { padding: 0 20px 20px 20px; overflow-y: auto; max-height: calc(75vh - 30px); }
-
-/* ゴーストピン用アニメーション */
-@keyframes ghostHeartbeat {
-    0% { transform: scale(0.95); opacity: 0.4; box-shadow: 0 0 0 0 rgba(142, 68, 173, 0.4); }
-    70% { transform: scale(1.1); opacity: 0.8; box-shadow: 0 0 10px 10px rgba(142, 68, 173, 0); }
-    100% { transform: scale(0.95); opacity: 0.4; box-shadow: 0 0 0 0 rgba(142, 68, 173, 0); }
-}
-
-.ghost-pin-icon {
-    background: radial-gradient(circle, rgba(142, 68, 173, 0.8) 0%, rgba(142, 68, 173, 0.1) 80%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    color: rgba(255, 255, 255, 0.9);
-    animation: ghostHeartbeat 3s infinite ease-in-out;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    backdrop-filter: blur(2px);
-}
-
-/* ==========================================
-   🔥 🆕 リアルタイム（混雑）ピン用アニメーション
-========================================== */
-@keyframes hotHeartbeat {
-    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
-    50% { transform: scale(1.05); box-shadow: 0 0 15px 10px rgba(231, 76, 60, 0); }
-    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
-}
-
-.hot-status-pin {
-    animation: hotHeartbeat 1.5s infinite ease-in-out !important;
-    border-color: #e74c3c !important; 
-}
-
-.hot-badge {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    background: white;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    z-index: 20;
-    border: 2px solid #e74c3c;
-}
-
-/* ==========================================
-   📸 複数画像のフリック（カルーセル）UI
-   ========================================== */
 .flick-container {
     display: flex;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
     gap: 8px;
-    padding-bottom: 8px;
-    /* スクロールバーを隠す（スマートな見た目） */
-    -ms-overflow-style: none;
+    padding: 0 16px; /* ラッパーと余白を調整 */
     scrollbar-width: none;
 }
+
 .flick-container::-webkit-scrollbar {
     display: none;
 }
+
 .flick-item {
-    flex: 0 0 100%; /* 1枚ずつ画面幅に合わせる */
-    scroll-snap-align: center;
-    border-radius: 8px;
+    flex: 0 0 85%;
+    max-height: 250px;
     object-fit: cover;
-    width: 100%;
-    max-height: 300px;
+    border-radius: 12px;
+    scroll-snap-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.flick-counter {
+    position: absolute;
+    top: 12px;
+    right: 28px; /* 右端のパディングを加味した位置 */
+    background: rgba(0, 0, 0, 0.65);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 4px 10px;
+    border-radius: 14px;
+    backdrop-filter: blur(4px);
+    z-index: 2;
+    pointer-events: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* 単一画像の場合 */
+.diary-image {
+    width: calc(100% - 32px);
+    margin: 12px 16px;
+    border-radius: 12px;
+    object-fit: cover;
+    max-height: 250px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* --- 8. Diary Card (履歴リスト) --- */
+.diary-card {
+    background-color: var(--card-bg);
+    margin: 0 16px 20px;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    overflow: hidden;
+    padding-bottom: 16px;
+}
+
+.diary-header {
+    padding: 16px 16px 0;
+}
+
+.diary-date {
+    font-size: 12px;
+    color: var(--text-sub);
+    font-weight: bold;
+}
+
+.diary-shop {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-top: 4px;
+    margin-bottom: 0;
+}
+
+.diary-comment {
+    padding: 0 16px;
+    font-size: 14px;
+    color: var(--text-main);
+    white-space: pre-wrap;
+}
+
+.diary-tags {
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tag-badge {
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.card-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0 16px;
+    margin-top: 8px;
+}
+
+.action-btn {
+    background-color: #f1f2f6;
+    color: var(--text-sub);
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.data-edit-btn:hover { background-color: #eccc68; color: #2f3542; }
+.data-delete-btn:hover { background-color: #ff6b81; color: white; }
+
+/* --- 9. Status Text (GPS解析状況など) --- */
+#gpsStatus, #bulkStatus {
+    font-size: 12px;
+    font-weight: bold;
+    padding: 0 16px;
+    margin-top: -8px;
+    margin-bottom: 12px;
+    white-space: pre-wrap;
 }

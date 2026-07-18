@@ -1,5 +1,5 @@
 // ==========================================
-// 📚 src/components/b2c/list.js (複数画像フリックUI対応版)
+// 📚 src/components/b2c/list.js (フリック連動カウンター対応版)
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
@@ -101,38 +101,36 @@ export function renderDiariesList(diaries) {
             }
         });
 
-        // 🌟 【改修ポイント】複数画像のパースとフリックUIの描画
+        // 複数画像のパース処理
         let imageUrls = [];
         const rawImageData = diary.image_base64 || diary.image_url;
         
         if (rawImageData) {
             try {
-                // 新仕様（JSON配列文字列）のパースを試みる
                 imageUrls = JSON.parse(rawImageData);
-                if (!Array.isArray(imageUrls)) {
-                    imageUrls = [rawImageData]; // パースできたが配列でなければ単一URL扱い
-                }
+                if (!Array.isArray(imageUrls)) imageUrls = [rawImageData];
             } catch (e) {
-                // パースエラーの場合は旧仕様（単一のURL文字列）とみなす（ポカヨケ）
                 imageUrls = [rawImageData];
             }
         }
 
         let imageHTML = "";
-        if (imageUrls.length > 0) {
-            if (imageUrls.length === 1) {
-                // 1枚のみの場合は既存のシンプルな img タグ
-                imageHTML = `<img src="${imageUrls[0]}" class="diary-image" loading="lazy" alt="カフェの写真">`;
-            } else {
-                // 複数枚の場合はフリック（カルーセル）コンテナを展開
-                imageHTML = `<div class="flick-container">`;
-                imageUrls.forEach(url => {
-                    imageHTML += `<img src="${url}" class="flick-item" loading="lazy" alt="カフェの写真">`;
-                });
-                imageHTML += `</div>`;
-            }
+        if (imageUrls.length > 1) {
+            // 🌟 画像が2枚以上の場合はフリックコンテナとカウンターを展開
+            imageHTML = `<div class="flick-wrapper">`;
+            imageHTML += `<div class="flick-container">`;
+            imageUrls.forEach(url => {
+                imageHTML += `<img src="${url}" class="flick-item" loading="lazy" alt="カフェの写真">`;
+            });
+            imageHTML += `</div>`;
+            // カウンターバッジ（1 / N）
+            imageHTML += `<div class="flick-counter"><span class="current-idx">1</span> / ${imageUrls.length}</div>`;
+            imageHTML += `</div>`;
+        } else if (imageUrls.length === 1) {
+            // 🌟 画像が1枚だけの場合はカウンター不要なのでシンプルなimgタグ
+            imageHTML = `<img src="${imageUrls[0]}" class="diary-image" loading="lazy" alt="カフェの写真">`;
         } else {
-            // 画像がない場合は美しいタイポグラフィを生成（既存機能維持）
+            // 画像がない場合は美しいタイポグラフィを生成
             const typoBase64 = generateTypographyBase64(diary.shop_name, diary.tags, diary.weather_icon);
             imageHTML = `<img src="${typoBase64}" class="diary-image" loading="lazy" alt="タイポグラフィカード">`;
         }
@@ -162,13 +160,29 @@ export function renderDiariesList(diaries) {
             </div>
         `;
         
-        // 動的に生成したボタンにイベントイベントリスナーを設定
+        // --- イベントリスナーの設定 ---
+        
+        // 1. 削除・編集ボタン
         card.querySelector('.data-delete-btn').addEventListener('click', () => deleteDiary(diary.id));
         card.querySelector('.data-edit-btn').addEventListener('click', () => {
-            // main.js側の編集処理を呼び出すカスタムイベントを発火
             const event = new CustomEvent('edit-diary', { detail: { id: diary.id } });
             window.dispatchEvent(event);
         });
+
+        // 2. 🌟 複数画像のフリックスクロール連動カウンター処理
+        const flickContainer = card.querySelector('.flick-container');
+        const counterSpan = card.querySelector('.current-idx');
+        
+        if (flickContainer && counterSpan) {
+            flickContainer.addEventListener('scroll', () => {
+                // 画像1枚あたりの幅（gap含む）を取得して、スクロール量から現在のインデックスを計算
+                // ※Math.roundを使うことで、画面の半分を超えたら次の数字に切り替わる自然なUXを実現
+                const itemWidth = flickContainer.children[0].offsetWidth;
+                const scrollPos = flickContainer.scrollLeft;
+                const currentIndex = Math.round(scrollPos / itemWidth) + 1;
+                counterSpan.textContent = currentIndex;
+            });
+        }
 
         container.appendChild(card);
     });
