@@ -6,8 +6,8 @@
     <title>EzoCafe Log</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    <!-- 🌟 キャッシュバスター: ?v=3 に更新し強制読み込み -->
-    <link rel="stylesheet" href="./style.css?v=3">
+    <!-- 🌟 キャッシュバスター: ?v=4 に更新 -->
+    <link rel="stylesheet" href="./style.css?v=4">
 </head>
 <body>
     <div class="app-container">
@@ -126,7 +126,8 @@
                     <option value="">🏷️ すべての気分・目的・タグ</option>
                 </select>
             </div>
-            <div id="mainMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1;"></div>
+            <!-- 🌟 重大バグ修正: mainMap を viewMap に変更しJSのクラッシュを解消 -->
+            <div id="viewMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1;"></div>
         </main>
 
         <!-- ==========================================
@@ -170,7 +171,7 @@
         </main>
 
         <!-- ==========================================
-             📱 ボトムナビゲーション (下部固定)
+             📱 ボトムナビゲーション
              ========================================== -->
         <nav style="position: fixed; bottom: 0; left: 0; right: 0; max-width: 600px; margin: 0 auto; background: var(--card-bg); border-top: 1px solid var(--border-color); display: flex; justify-content: space-around; padding: 10px 0; z-index: 1000; padding-bottom: calc(10px + env(safe-area-inset-bottom));">
             <button class="nav-btn" data-tab="record" style="background:none; color:var(--primary-color); display:flex; flex-direction:column; align-items:center; font-size:11px; font-weight:bold;">
@@ -214,28 +215,24 @@
          ========================================== -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
-    <!-- キャッシュバスターを v=3 に更新 -->
-    <script type="module" src="./src/app.js?v=3"></script>
+    <!-- キャッシュバスターを v=4 に更新 -->
+    <script type="module" src="./src/app.js?v=4"></script>
     
     <!-- 📱 ボトムナビゲーション＆タブ切り替え制御 -->
     <script>
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const tabName = e.currentTarget.dataset.tab;
-                // app.js 等へタブ切り替えイベントを通知
                 window.dispatchEvent(new CustomEvent('switch-tab', {detail: {tab: tabName}}));
             });
         });
 
         window.addEventListener('switch-tab', (e) => {
             const tab = e.detail.tab;
-            
-            // 全タブを隠し、対象タブのみ表示
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             const target = document.getElementById('tab-' + tab);
             if (target) target.classList.remove('hidden');
             
-            // ナビゲーションのハイライト（色）を切り替え
             document.querySelectorAll('.nav-btn').forEach(b => {
                 if(b.dataset.tab === tab) {
                     b.style.color = 'var(--primary-color)';
@@ -243,7 +240,7 @@
                     b.style.color = 'var(--text-sub)';
                 }
             });
-            window.scrollTo(0, 0); // タブ切り替え時に一番上へ戻す
+            window.scrollTo(0, 0);
         });
     </script>
 </body>
