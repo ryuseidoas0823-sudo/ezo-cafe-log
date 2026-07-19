@@ -22,3 +22,14 @@ CREATE TABLE IF NOT EXISTS diaries (
 -- 2. B2Bダッシュボード用のアナリティクス検索を高速化する複合インデックス
 CREATE INDEX IF NOT EXISTS idx_diaries_b2b_analytics 
 ON diaries (shop_id, weather_icon, created_at);
+
+-- リアルタイムな混雑状況を保持するステータステーブル
+CREATE TABLE IF NOT EXISTS shop_statuses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id TEXT,
+    shop_name TEXT,
+    status_type TEXT,
+    user_uuid TEXT,
+    reported_at TEXT,
+    expires_at TEXT
+);
