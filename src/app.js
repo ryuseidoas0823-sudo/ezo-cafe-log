@@ -12,8 +12,14 @@ import { renderAnalytics } from './components/b2c/analytics.js';
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. 基本設定と認証の初期化
     resetDateToToday();
-    loadSettings(); // 🌟 バグ修正: 保存されている性別・年代を正しいIDで読み込む
+    loadSettings();
     getOrGenerateUserUuid(); 
+    
+    // 🌟 テスト・デバッグ用：現在のUUIDを設定画面に表示
+    const uuidDisplay = document.getElementById('currentTestUuidDisplay');
+    if (uuidDisplay) {
+        uuidDisplay.textContent = localStorage.getItem('ezo_user_uuid') || '未設定 (自動生成されます)';
+    }
     
     // 2. ユーザー情報と初期データの並列取得
     const currentUser = await fetchMeApi();
@@ -31,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initFormHandlers();
     initHistoryTab();
 
-    // 🌟 設定保存ボタンのイベントリスナー（修正）
+    // 🌟 設定保存ボタンのイベントリスナー
     const saveSettingsBtn = document.getElementById('btnSaveSettings');
     if (saveSettingsBtn) {
         saveSettingsBtn.addEventListener('click', window.saveSettings);
@@ -49,10 +55,9 @@ function switchTabLogic(tabName) {
         initViewMap(); 
         updateViewMarkers(true); 
     }
-    if (tabName === 'analytics') renderAnalytics(); // 🌟 アナリティクス描画機能を追加
+    if (tabName === 'analytics') renderAnalytics();
 }
 
-// 🌟 バグ修正: HTML側のIDに合わせて 'userGender' と 'userAge' に変更
 function loadSettings() {
     const g = localStorage.getItem('ezo_gender');
     const a = localStorage.getItem('ezo_age');
@@ -86,7 +91,6 @@ function resetDateToToday() {
     if(dateInput) dateInput.value = `${yyyy}-${mm}-${dd}`;
 }
 
-
 // ==========================================
 // 🌐 HTMLの onclick から呼ばれるグローバル関数の公開
 // ==========================================
@@ -94,7 +98,30 @@ function resetDateToToday() {
 // 万が一HTML側に onclick="window.switchTab(...)" が残っていた場合のポカヨケ
 window.switchTab = (tabName) => window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: tabName } }));
 
-// 🌟 バグ修正: 保存ロジック内のIDも統一
+// 🌟 テスト用アカウント切替ロジック (統合)
+window.switchTestUser = function(uuid) {
+    if (uuid === 'reset') {
+        if (confirm("テストモードを終了し、通常のアカウントに戻しますか？")) {
+            localStorage.removeItem('ezo_user_uuid');
+            alert("リセットしました。ページを再読み込みします。");
+            location.reload();
+        }
+        return;
+    }
+
+    const roleNames = {
+        'test-user-free-001': '無課金 (Free)',
+        'test-user-premium-001': '課金 (Premium)',
+        'test-user-business-001': '店舗側 (Business)'
+    };
+
+    if (confirm(`「${roleNames[uuid]}」アカウントに切り替えますか？`)) {
+        localStorage.setItem('ezo_user_uuid', uuid);
+        alert(`${roleNames[uuid]} に切り替えました！`);
+        location.reload();
+    }
+};
+
 window.saveSettings = function() {
     const g = document.getElementById('userGender')?.value || "";
     const a = document.getElementById('userAge')?.value || "";
@@ -119,9 +146,9 @@ window.upgradeToAdmin = async function() {
     }
 };
 
-// 🌟 復旧: 地図の画像ダウンロード機能（html2canvas）
+// 🌟 地図の画像ダウンロード機能（html2canvas）
 window.downloadMapImage = function() {
-    const mapContainer = document.getElementById('viewMap'); // IDを viewMap に修正
+    const mapContainer = document.getElementById('viewMap');
     const template = document.getElementById('map-watermark-template');
     const saveBtn = document.getElementById('btn-save-map-image');
     

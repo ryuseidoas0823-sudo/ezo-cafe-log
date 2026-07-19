@@ -409,11 +409,27 @@ export default {
         let combinedTags = data.tags || "";
         if (aiExtractedTags) combinedTags = combinedTags ? `${combinedTags}, ${aiExtractedTags}` : aiExtractedTags;
 
+        // 🌟 DX改善アプローチ: GAS業務連携の最適化
         if (unclassifiedTags && unclassifiedTags.length > 0) {
           const gasWebhookUrl = env.GAS_WEBHOOK_URL || ""; 
           if (gasWebhookUrl) {
-            const errorReportData = { shopName: data.shopName || "名前なし", unclassified: unclassifiedTags, comment: comment };
-            ctx.waitUntil(fetch(gasWebhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(errorReportData) }).catch(err => console.log("GAS Webhook Error:", err)));
+            // 元のキー構造(shopName, unclassified, comment)は既存のGAS側のパースを壊さないために完全維持。
+            // その上で、バックオフィス部門の目視確認やステータス管理を助けるメタデータを _dx_metadata として拡張付与。
+            const errorReportData = { 
+                shopName: data.shopName || "名前なし", 
+                unclassified: unclassifiedTags, 
+                comment: comment,
+                _dx_metadata: {
+                    workflow_stage: "needs_manual_review",
+                    timestamp: new Date().toISOString(),
+                    user_uuid: userUuid
+                }
+            };
+            ctx.waitUntil(fetch(gasWebhookUrl, { 
+                method: "POST", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify(errorReportData) 
+            }).catch(err => console.error("[DX Alert] GAS Webhook Error:", err)));
           }
         }
 

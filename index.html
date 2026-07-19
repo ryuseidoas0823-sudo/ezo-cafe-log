@@ -239,6 +239,19 @@
                 <button id="btnSaveSettings" class="btn-primary">💾 設定を保存する</button>
             </div>
             
+            <!-- 🌟 開発・テスト用アカウント切替メニュー (新規追加) -->
+            <div style="margin-top: 30px; padding: 15px; background: rgba(41, 128, 185, 0.05); border: 1px dashed #2980b9; border-radius: 8px;">
+                <h3 style="margin-top: 0; color: #2980b9; font-size: 1rem;">🧪 テスト用アカウント切替</h3>
+                <p style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 12px;">権限別のUI/API挙動を検証します。</p>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button onclick="window.switchTestUser('test-user-free-001')" class="btn-secondary" style="border-color: #bdc3c7; color: #2c3e50;">👤 無課金 (Free)</button>
+                    <button onclick="window.switchTestUser('test-user-premium-001')" class="btn-secondary" style="border-color: #f1c40f; color: #d35400;">✨ 課金 (Premium)</button>
+                    <button onclick="window.switchTestUser('test-user-business-001')" class="btn-secondary" style="border-color: #3498db; color: #2980b9;">🏢 店舗側 (Business)</button>
+                    <button onclick="window.switchTestUser('reset')" class="btn-secondary" style="border-color: #95a5a6; color: #7f8c8d; margin-top: 8px;">🔄 アカウントをリセット</button>
+                </div>
+                <p style="font-size: 0.75rem; color: #34495e; margin-top: 10px; text-align: center;">現在のUUID: <br><span id="currentTestUuidDisplay" style="font-weight:bold; word-break: break-all;"></span></p>
+            </div>
+
             <div style="text-align: center; margin-top: 40px; padding-bottom: 20px;">
                 <button onclick="window.upgradeToAdmin()" class="btn-secondary" style="opacity: 0.3; font-size: 0.75rem; border: none; background: transparent;">
                     🔑 Admin Mode (管理者昇格)
@@ -327,6 +340,38 @@
                 }
             });
             window.scrollTo(0, 0);
+        });
+
+        // 🌟 追加：テスト用アカウント切替ロジック
+        window.switchTestUser = function(uuid) {
+            if (uuid === 'reset') {
+                if (confirm("テストモードを終了し、通常のアカウントに戻しますか？")) {
+                    localStorage.removeItem('ezo_user_uuid');
+                    alert("リセットしました。ページを再読み込みします。");
+                    location.reload();
+                }
+                return;
+            }
+
+            const roleNames = {
+                'test-user-free-001': '無課金 (Free)',
+                'test-user-premium-001': '課金 (Premium)',
+                'test-user-business-001': '店舗側 (Business)'
+            };
+
+            if (confirm(`「${roleNames[uuid]}」アカウントに切り替えますか？`)) {
+                localStorage.setItem('ezo_user_uuid', uuid);
+                alert(`${roleNames[uuid]} に切り替えました！`);
+                location.reload();
+            }
+        };
+
+        // 初期ロード時に現在のUUIDを表示
+        document.addEventListener('DOMContentLoaded', () => {
+            const uuidDisplay = document.getElementById('currentTestUuidDisplay');
+            if (uuidDisplay) {
+                uuidDisplay.textContent = localStorage.getItem('ezo_user_uuid') || '未設定 (自動生成されます)';
+            }
         });
 
         // 🌟 追加・復旧：管理者（Admin）昇格コマンド
