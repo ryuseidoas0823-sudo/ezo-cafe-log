@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const currentUser = await fetchMeApi();
     mutators.setCurrentUser(currentUser);
 
-    // 🌟 【追加】権限に基づくフロントエンドのUI制限を適用
+    // 🌟 権限に基づくフロントエンドのUI制限を適用
     applyRoleRestrictions(currentUser);
     
     const [diaries, masterShops] = await Promise.all([
@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupGlobalEventListeners();
 });
 
-// 🌟 【新規追加】権限によるUI出し分けロジック
+// 🌟 【修正】権限によるUI出し分けロジック
 function applyRoleRestrictions(user) {
     const role = user?.role || 'free';
     
@@ -56,28 +56,19 @@ function applyRoleRestrictions(user) {
     const navAnalyticsBtn = document.querySelector('.nav-btn[data-tab="analytics"]');
     const mapImageBtn = document.getElementById('btn-save-map-image');
 
-    // 初期状態として一旦すべて表示（リセット）
-    if (navAnalyticsBtn) navAnalyticsBtn.style.display = 'flex';
-    if (mapImageBtn) mapImageBtn.style.display = 'flex';
+    // 初期状態として一旦表示をリセット
+    // ※ 'flex' などを強制せず空文字にすることで、元のCSS(class)の設定を尊重し描画崩れを防ぐ
+    if (navAnalyticsBtn) navAnalyticsBtn.style.display = '';
+    if (mapImageBtn) mapImageBtn.style.display = '';
 
     if (role === 'free') {
-        // 🔒 Free（無課金）の制限: B2B分析タブとマップ画像出力を隠す
+        // 🔒 Free（無課金）のみ分析タブを隠す
         if (navAnalyticsBtn) navAnalyticsBtn.style.display = 'none';
-        if (mapImageBtn) mapImageBtn.style.display = 'none';
-        console.log("🔒 権限: Free (一部機能を制限中)");
+        console.log("🔒 権限: Free (分析機能を制限中)");
     } 
-    else if (role === 'premium') {
-        // ✨ Premium（課金）の制限: 画像出力などは使えるが、B2B分析タブは隠す
-        if (navAnalyticsBtn) navAnalyticsBtn.style.display = 'none';
-        console.log("✨ 権限: Premium (B2C機能フル解放)");
-    } 
-    else if (role === 'business') {
-        // 🏢 Business（店舗）の制限: 分析タブは見える。マップ画像出力は不要な場合隠すなど
-        console.log("🏢 権限: Business (店舗向けダッシュボード解放)");
-    } 
-    else if (role === 'admin') {
-        // 👑 Admin（管理者）: 全て表示
-        console.log("👑 権限: Admin (フルアクセス)");
+    else {
+        // ✨ Premium, Business, Admin はすべて解放
+        console.log(`✨ 権限: ${role} (全機能解放)`);
     }
 }
 
