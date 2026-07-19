@@ -15,7 +15,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadSettings();
     getOrGenerateUserUuid(); 
     
-    // 🌟 テスト・デバッグ用：現在のUUIDを設定画面に表示
     const uuidDisplay = document.getElementById('currentTestUuidDisplay');
     if (uuidDisplay) {
         uuidDisplay.textContent = localStorage.getItem('ezo_user_uuid') || '未設定 (自動生成されます)';
@@ -24,6 +23,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. ユーザー情報と初期データの並列取得
     const currentUser = await fetchMeApi();
     mutators.setCurrentUser(currentUser);
+
+    // 🌟 【追加】権限に基づくフロントエンドのUI制限を適用
+    applyRoleRestrictions(currentUser);
     
     const [diaries, masterShops] = await Promise.all([
         fetchDiariesApi(),
@@ -37,7 +39,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initFormHandlers();
     initHistoryTab();
 
-    // 🌟 設定保存ボタンのイベントリスナー
     const saveSettingsBtn = document.getElementById('btnSaveSettings');
     if (saveSettingsBtn) {
         saveSettingsBtn.addEventListener('click', window.saveSettings);
@@ -46,6 +47,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4. カスタムイベントのリスナー登録
     setupGlobalEventListeners();
 });
+
+// 🌟 【新規追加】権限によるUI出し分けロジック
+function applyRoleRestrictions(user) {
+    const role = user?.role || 'free';
+    
+    // 制御対象のDOM要素
+    const navAnalyticsBtn = document.querySelector('.nav-btn[data-tab="analytics"]');
+    const mapImageBtn = document.getElementById('btn-save-map-image');
+
+    // 初期状態として一旦すべて表示（リセット）
+    if (navAnalyticsBtn) navAnalyticsBtn.style.display = 'flex';
+    if (mapImageBtn) mapImageBtn.style.display = 'flex';
+
+    if (role === 'free') {
+        // 🔒 Free（無課金）の制限: B2B分析タブとマップ画像出力を隠す
+        if (navAnalyticsBtn) navAnalyticsBtn.style.display = 'none';
+        if (mapImageBtn) mapImageBtn.style.display = 'none';
+        console.log("🔒 権限: Free (一部機能を制限中)");
+    } 
+    else if (role === 'premium') {
+        // ✨ Premium（課金）の制限: 画像出力などは使えるが、B2B分析タブは隠す
+        if (navAnalyticsBtn) navAnalyticsBtn.style.display = 'none';
+        console.log("✨ 権限: Premium (B2C機能フル解放)");
+    } 
+    else if (role === 'business') {
+        // 🏢 Business（店舗）の制限: 分析タブは見える。マップ画像出力は不要な場合隠すなど
+        console.log("🏢 権限: Business (店舗向けダッシュボード解放)");
+    } 
+    else if (role === 'admin') {
+        // 👑 Admin（管理者）: 全て表示
+        console.log("👑 権限: Admin (フルアクセス)");
+    }
+}
 
 // 🌟 UIの表示切替は index.html 側で行うため、ここではデータ更新とJSレンダリングのみを担当
 function switchTabLogic(tabName) {
@@ -95,10 +129,8 @@ function resetDateToToday() {
 // 🌐 HTMLの onclick から呼ばれるグローバル関数の公開
 // ==========================================
 
-// 万が一HTML側に onclick="window.switchTab(...)" が残っていた場合のポカヨケ
 window.switchTab = (tabName) => window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: tabName } }));
 
-// 🌟 テスト用アカウント切替ロジック (統合)
 window.switchTestUser = function(uuid) {
     if (uuid === 'reset') {
         if (confirm("テストモードを終了し、通常のアカウントに戻しますか？")) {
@@ -134,7 +166,6 @@ window.saveSettings = function() {
     alert("✨ 設定を保存しました！");
 };
 
-// 🌟 管理者権限への昇格
 window.upgradeToAdmin = async function() {
     if(!confirm("あなたのアカウントを管理者(Admin)に昇格させますか？")) return;
     const res = await upgradeToAdminApi();
@@ -146,7 +177,6 @@ window.upgradeToAdmin = async function() {
     }
 };
 
-// 🌟 地図の画像ダウンロード機能（html2canvas）
 window.downloadMapImage = function() {
     const mapContainer = document.getElementById('viewMap');
     const template = document.getElementById('map-watermark-template');
@@ -161,7 +191,6 @@ window.downloadMapImage = function() {
         saveBtn.innerHTML = "📸 画像を生成中...";
     }
 
-    // ウォーターマークがある場合は表示
     let watermarkClone = null;
     if (template) {
         const validShopsCount = document.getElementById('stat-unique-shops')?.innerText || "0";
