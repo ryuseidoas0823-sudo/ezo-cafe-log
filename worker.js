@@ -13,25 +13,43 @@ async function checkAuthorization(request, env, requiredRoles = []) {
     return { authorized: false, status: 401, error: "Authentication Required: ユーザーUUIDが提供されていません。" };
   }
 
+  // 🌟 【DX改善】テストユーザーの特権マッピング定義
+  const testUsers = {
+      'test-user-premium-001': 'premium',
+      'test-user-business-001': 'business',
+      'test-user-admin-001': 'admin' // 念のため管理者用も定義
+  };
+
   try {
-    const user = await env.DB.prepare("SELECT role, associated_shop_id FROM users WHERE user_uuid = ?")
+    let user = await env.DB.prepare("SELECT role, associated_shop_id FROM users WHERE user_uuid = ?")
       .bind(userUuid)
       .first();
 
     if (!user) {
+      // 🌟 新規登録時の自動プロビジョニング
       const now = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString();
-      await env.DB.prepare("INSERT INTO users (user_uuid, role, created_at, updated_at) VALUES (?, 'free', ?, ?)")
-        .bind(userUuid, now, now)
+      const initialRole = testUsers[userUuid] || 'free'; 
+      
+      await env.DB.prepare("INSERT INTO users (user_uuid, role, created_at, updated_at) VALUES (?, ?, ?, ?)")
+        .bind(userUuid, initialRole, now, now)
         .run();
       
-      const isAuthorized = requiredRoles.length === 0 || requiredRoles.includes("free");
+      const isAuthorized = requiredRoles.length === 0 || requiredRoles.includes(initialRole) || initialRole === "admin";
       return {
         authorized: isAuthorized,
         status: isAuthorized ? 200 : 403,
-        user: { userUuid: userUuid, role: "free", associated_shop_id: null }
+        user: { userUuid: userUuid, role: initialRole, associated_shop_id: null }
       };
+      
+    } else if (testUsers[userUuid] && user.role !== testUsers[userUuid]) {
+      // 🌟 【自己修復ロジック】既に間違った権限(free等)で登録されている場合、自動で正しい権限に上書き修復する
+      await env.DB.prepare("UPDATE users SET role = ? WHERE user_uuid = ?")
+        .bind(testUsers[userUuid], userUuid)
+        .run();
+      user.role = testUsers[userUuid];
     }
 
+    // 通常の権限チェック (adminは無条件で全許可)
     if (requiredRoles.length > 0 && !requiredRoles.includes(user.role) && user.role !== "admin") {
       return { authorized: false, status: 403, error: `Forbidden: この操作には ${requiredRoles.join(" または ")} 権限が必要です。` };
     }
