@@ -1,10 +1,12 @@
 // ==========================================
-// 🗺️ src/components/b2c/map.js (マップ画像ダウンロード対応版)
+// 🗺️ src/components/b2c/map.js (DX強化・パフォーマンス最適化版)
+// 責務: マップ描画、マーカー集約、フィルター処理、UI統合
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
 import { fetchActiveStatusesApi, fetchGhostPinsApi, reportStatusApi, fetchShopAnalyticsApi, toggleLocalStatusApi, saveDiaryApi, deleteDiaryApi } from '../../api.js';
 
+// 📍 拠点座標
 const HOME_LAT = 43.0600;
 const HOME_LNG = 141.3500;
 let viewMap = null;
@@ -15,6 +17,15 @@ let isFetchingStatuses = false;
 
 window.showMasterShops = false; 
 const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
+
+// 🛠️ ユーティリティ: 連続呼び出しを間引くDebounce関数（UIフリーズ防止）
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
 
 export function initViewMap() {
     const container = document.getElementById('viewMap');
@@ -51,7 +62,6 @@ export function initViewMap() {
         });
         viewMap.addControl(new MasterToggleControl());
 
-        // イベントリスナーの登録
         setTimeout(() => {
             const toggle = document.getElementById('master-shop-toggle');
             if (toggle) {
@@ -65,16 +75,16 @@ export function initViewMap() {
         viewMap.on('zoomend', () => { updateViewMarkers(false); });
         viewMap.on('click', closeBottomSheet);
 
-        // 🌟 バグ修正: タグ選択とワード検索のイベントリスナー（入力ごとに即時反映）
         const mapTagFilter = document.getElementById('mapTagFilter');
         if (mapTagFilter && !mapTagFilter.dataset.listened) {
             mapTagFilter.addEventListener('change', () => updateViewMarkers(false));
             mapTagFilter.dataset.listened = "true";
         }
 
+        // 🌟 DX実践: インクリメンタルサーチの負荷をDebounceで抑制
         const mapSearchInput = document.getElementById('mapSearchInput');
         if (mapSearchInput && !mapSearchInput.dataset.listened) {
-            mapSearchInput.addEventListener('input', () => updateViewMarkers(false));
+            mapSearchInput.addEventListener('input', debounce(() => updateViewMarkers(false), 300));
             mapSearchInput.dataset.listened = "true";
         }
     }
@@ -106,7 +116,6 @@ export function updateViewMarkers(autoFit = false) {
     const locationMap = {};
     let totalValidVisits = 0; 
     
-    // 🌟 検索とタグの値を取得
     const filters = getters.getFilters();
     const selectedMoodTag = document.getElementById('mapTagFilter') ? document.getElementById('mapTagFilter').value : "";
     const searchKeyword = document.getElementById('mapSearchInput') ? document.getElementById('mapSearchInput').value.toLowerCase().trim() : "";
@@ -228,12 +237,10 @@ export function updateViewMarkers(autoFit = false) {
         if (filters.takeout) shopList = shopList.filter(s => s.hasTakeout);
         if (filters.goods)   shopList = shopList.filter(s => s.hasGoods);
         
-        // 🌟 ワードでの絞り込み（インクリメンタルサーチ）
         if (searchKeyword !== "") {
             shopList = shopList.filter(s => (s.shopName || "").toLowerCase().includes(searchKeyword));
         }
 
-        // 🌟 タグでの絞り込み
         if (selectedMoodTag !== "") { 
             shopList = shopList.filter(s => !s.isMasterOnly && s.allTagsSet && s.allTagsSet.has(selectedMoodTag)); 
         }
@@ -291,12 +298,18 @@ export function updateViewMarkers(autoFit = false) {
         viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     }
 
+    // 🌟 DX実践: 状態解放とエラーハンドリングの徹底
     if (!isFetchingStatuses) {
         isFetchingStatuses = true;
-        fetchActiveStatusesApi().then(statuses => {
-            mutators.setActiveStatuses(statuses);
-            applyActiveStatuses(statuses);
-        });
+        fetchActiveStatusesApi()
+            .then(statuses => {
+                mutators.setActiveStatuses(statuses);
+                applyActiveStatuses(statuses);
+            })
+            .catch(err => console.error("[DX Alert] ステータス取得エラー:", err))
+            .finally(() => {
+                isFetchingStatuses = false;
+            });
     } else if (getters.getActiveStatuses().length > 0) {
         setTimeout(() => applyActiveStatuses(getters.getActiveStatuses()), 100);
     }
@@ -458,65 +471,93 @@ window.recordFromMap = function(shopId, shopName, lat, lng) {
 window.reportShopStatus = async function(shopId, shopName) {
     if (!confirm(`「${shopName}」が現在混雑していることを共有しますか？`)) return;
     document.body.style.cursor = 'wait';
-    const result = await reportStatusApi(shopId, shopName, 'crowded');
-    document.body.style.cursor = 'default';
-    if (result.success) {
-        alert("🔥 混雑状況を報告しました！");
-        isFetchingStatuses = false; 
-        closeBottomSheet(); updateViewMarkers(false);
-    } else { alert("エラー: " + (result.error || "通信に失敗しました")); }
+    try {
+        const result = await reportStatusApi(shopId, shopName, 'crowded');
+        if (result.success) {
+            alert("🔥 混雑状況を報告しました！");
+            isFetchingStatuses = false; 
+            closeBottomSheet(); updateViewMarkers(false);
+        } else {
+            alert("エラー: " + (result.error || "通信に失敗しました"));
+        }
+    } catch (err) {
+        console.error("[DX Alert] Report Status Error:", err);
+        alert("システムエラーが発生しました。");
+    } finally {
+        document.body.style.cursor = 'default';
+    }
 };
 
 window.loadShopAnalytics = async function(btnElement, shopId, shopName) {
-    btnElement.innerHTML = "⏳ データを集計中..."; btnElement.disabled = true;
-    const data = await fetchShopAnalyticsApi(shopId, shopName);
-    if (!data || data.total === 0) { 
-        btnElement.parentElement.innerHTML = "<p style='font-size:0.85rem; color:#e74c3c; font-weight:bold;'>❌ データがありません</p>"; 
-        return; 
-    }
-
-    let html = `<div style="animation: fadeIn 0.4s ease;">`;
-    html += `<p style="font-size:0.85rem; color:#2c3e50; margin: 0 0 10px 0; font-weight: bold;">👥 累計来店記録: <span style="font-size:1.1rem;">${data.total}</span>件</p>`;
+    btnElement.innerHTML = "⏳ データを集計中..."; 
+    btnElement.disabled = true;
     
-    html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#7f8c8d; font-weight:bold;">🤖 AI客観分析（抽出タグ）</p><div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">`;
-    data.topTags.forEach(t => {
-        let bgColor = t[0].startsWith('🚨') ? '#e74c3c' : (t[0].startsWith('🤖') ? '#8e44ad' : '#f39c12');
-        html += `<span style="background: ${bgColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">${escapeHTML(t[0].replace(/🤖[☕️🍰🛋️]/, '🤖 '))} <span style="opacity:0.8; font-size:0.65rem;">x${t[1]}</span></span>`;
-    });
-    html += `</div>`;
+    try {
+        const data = await fetchShopAnalyticsApi(shopId, shopName);
+        if (!data || data.total === 0) { 
+            btnElement.parentElement.innerHTML = "<p style='font-size:0.85rem; color:#e74c3c; font-weight:bold;'>❌ データがありません</p>"; 
+            return; 
+        }
 
-    if (data.demographicsHtml) {
-        html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#7f8c8d; font-weight:bold;">📊 客層データ（年齢・性別）</p>`;
-        html += data.demographicsHtml;
-    } else {
-        html += `<div style="background: rgba(255,255,255,0.7); padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #34495e; border: 1px dashed #bdc3c7;">
-                    <p style="margin: 0 0 5px 0;"><strong>👤 年齢・性別分布:</strong> データ集計完了</p>
-                </div>`;
+        let html = `<div style="animation: fadeIn 0.4s ease;">`;
+        html += `<p style="font-size:0.85rem; color:#2c3e50; margin: 0 0 10px 0; font-weight: bold;">👥 累計来店記録: <span style="font-size:1.1rem;">${data.total}</span>件</p>`;
+        
+        html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#7f8c8d; font-weight:bold;">🤖 AI客観分析（抽出タグ）</p><div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">`;
+        data.topTags.forEach(t => {
+            let bgColor = t[0].startsWith('🚨') ? '#e74c3c' : (t[0].startsWith('🤖') ? '#8e44ad' : '#f39c12');
+            html += `<span style="background: ${bgColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">${escapeHTML(t[0].replace(/🤖[☕️🍰🛋️]/, '🤖 '))} <span style="opacity:0.8; font-size:0.65rem;">x${t[1]}</span></span>`;
+        });
+        html += `</div>`;
+
+        if (data.demographicsHtml) {
+            html += `<p style="font-size:0.75rem; margin:0 0 6px 0; color:#7f8c8d; font-weight:bold;">📊 客層データ（年齢・性別）</p>`;
+            html += data.demographicsHtml;
+        } else {
+            html += `<div style="background: rgba(255,255,255,0.7); padding: 10px; border-radius: 8px; font-size: 0.8rem; color: #34495e; border: 1px dashed #bdc3c7;">
+                        <p style="margin: 0 0 5px 0;"><strong>👤 年齢・性別分布:</strong> データ集計完了</p>
+                    </div>`;
+        }
+
+        html += `</div>`;
+        btnElement.parentElement.innerHTML = html;
+    } catch (err) {
+        console.error("[DX Alert] Analytics Load Error:", err);
+        btnElement.innerHTML = "❌ 取得失敗";
     }
-
-    html += `</div>`;
-    btnElement.parentElement.innerHTML = html;
 };
 
 window.reportClosed = async function(shopId, shopName, lat, lng) {
     if (!confirm(`「${shopName}」を閉店・移転として報告しますか？`)) return;
     document.body.style.cursor = 'wait'; 
-    await saveDiaryApi({ shopId: shopId, shopName: shopName, weatherIcon: "🚫", userUuid: localStorage.getItem('ezo_user_uuid') });
-    closeBottomSheet(); document.body.style.cursor = 'default';
-    alert("閉店・移転を報告しました。");
+    try {
+        await saveDiaryApi({ shopId: shopId, shopName: shopName, weatherIcon: "🚫", userUuid: localStorage.getItem('ezo_user_uuid') });
+        closeBottomSheet();
+        alert("閉店・移転を報告しました。");
+    } catch (err) {
+        console.error("[DX Alert] Close Report Error:", err);
+        alert("エラーが発生しました。");
+    } finally {
+        document.body.style.cursor = 'default';
+    }
 };
 
 window.cancelCloseReport = async function(diaryId) {
     if (!confirm(`この閉店報告を取り消しますか？`)) return;
     document.body.style.cursor = 'wait';
-    await deleteDiaryApi(diaryId); 
-    closeBottomSheet(); document.body.style.cursor = 'default';
+    try {
+        await deleteDiaryApi(diaryId); 
+        closeBottomSheet(); 
+    } catch (err) {
+        console.error("[DX Alert] Cancel Report Error:", err);
+    } finally {
+        document.body.style.cursor = 'default';
+    }
 };
 
 window.toggleMapFilter = toggleMapFilter;
 
 // ==========================================
-// 📸 🌟追加: マップ画像をダウンロードする機能
+// 📸 画像化機能 (堅牢化)
 // ==========================================
 window.downloadMapImage = async function() {
     const btn = document.getElementById('btn-save-map-image');
@@ -525,17 +566,16 @@ window.downloadMapImage = async function() {
     const originalText = btn.innerHTML;
     btn.innerHTML = "⏳ 画像を生成中...";
     btn.disabled = true;
+    let controls = [];
 
     try {
         const mapEl = document.getElementById('viewMap');
         const watermarkTemplate = document.getElementById('map-watermark-template');
         
-        // 1. ウォーターマークを複製してマップ内部に配置（撮影用）
         const watermark = watermarkTemplate.cloneNode(true);
         watermark.id = "temp-watermark";
         watermark.style.display = "block";
         
-        // 2. 開拓済みの店舗数を計算して反映（未整理・行きたい・閉店を除く）
         const validDiaries = getters.getAllDiaries().filter(d => 
             d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫"
         );
@@ -544,40 +584,34 @@ window.downloadMapImage = async function() {
         
         mapEl.appendChild(watermark);
 
-        // 3. LeafletのズームボタンなどのUIを撮影時だけ非表示にする
-        const controls = mapEl.querySelectorAll('.leaflet-control-container');
+        controls = mapEl.querySelectorAll('.leaflet-control-container');
         controls.forEach(c => c.style.display = 'none');
 
-        // 4. html2canvas で描画処理
         const canvas = await html2canvas(mapEl, {
             useCORS: true,
             allowTaint: true,
-            backgroundColor: null, // 背景を透過させる
-            scale: 2 // 高解像度で出力
+            backgroundColor: null, 
+            scale: 2 
         });
 
-        // 5. 非表示にしたUIと追加したウォーターマークを元に戻す
-        controls.forEach(c => c.style.display = '');
-        mapEl.removeChild(watermark);
-
-        // 6. 出来上がった画像をダウンロード
         const dataUrl = canvas.toDataURL("image/png");
         const a = document.createElement('a');
         a.href = dataUrl;
         
-        // ファイル名を日付付きに設定
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-        a.download = `EzoCafeMap_${dateStr}.png`;
+        a.download = `MapExport_${dateStr}.png`;
         
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
 
+        mapEl.removeChild(watermark);
+
     } catch (error) {
-        console.error("Map Image Generation Error:", error);
-        alert("画像の生成に失敗しました。");
+        console.error("[DX Alert] Map Image Generation Error:", error);
+        alert("画像の生成に失敗しました。タイルサーバー等のCORS制限が原因の可能性があります。");
     } finally {
-        // ボタンを元の状態に戻す
+        controls.forEach(c => c.style.display = '');
         btn.innerHTML = originalText;
         btn.disabled = false;
     }

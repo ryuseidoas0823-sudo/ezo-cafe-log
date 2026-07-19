@@ -17,7 +17,7 @@ async function checkAuthorization(request, env, requiredRoles = []) {
   const testUsers = {
       'test-user-premium-001': 'premium',
       'test-user-business-001': 'business',
-      'test-user-admin-001': 'admin' // 念のため管理者用も定義
+      'test-user-admin-001': 'admin'
   };
 
   try {
@@ -42,7 +42,7 @@ async function checkAuthorization(request, env, requiredRoles = []) {
       };
       
     } else if (testUsers[userUuid] && user.role !== testUsers[userUuid]) {
-      // 🌟 【自己修復ロジック】既に間違った権限(free等)で登録されている場合、自動で正しい権限に上書き修復する
+      // 🌟 【自己修復ロジック】誤った権限で登録されている場合、自動で正しい権限に上書き修復
       await env.DB.prepare("UPDATE users SET role = ? WHERE user_uuid = ?")
         .bind(testUsers[userUuid], userUuid)
         .run();
@@ -108,7 +108,7 @@ export default {
       }
 
       try {
-        // 📊 B2B向け：経営用ダッシュボードのアナリティクスデータ取得
+        // 📊 B2B向け：経営用ダッシュボードのアナリティクスデータ取得 (商用レベルクロス分析実装済)
         if (action === "get_b2b_analytics") {
           const auth = await checkAuthorization(request, env, ["admin", "business"]);
           if (!auth.authorized) return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: corsHeaders });
@@ -116,18 +116,13 @@ export default {
           const shopId = url.searchParams.get("shop_id");
           if (!shopId) return new Response(JSON.stringify({ error: "shop_idが必要です" }), { status: 400, headers: corsHeaders });
 
-          // 1. ロイヤルティ分析（新規 vs リピーター）
+          // 1. ロイヤルティ分析
           const loyaltyStmt = env.DB.prepare(`
             WITH ValidDiaries AS (
-              SELECT user_uuid
-              FROM diaries
-              WHERE shop_id = ? 
-                AND weather_icon NOT IN ('💭', '📦', '🚫')
+              SELECT user_uuid FROM diaries WHERE shop_id = ? AND weather_icon NOT IN ('💭', '📦', '🚫')
             ),
             UserVisits AS (
-              SELECT user_uuid, COUNT(*) AS visit_count
-              FROM ValidDiaries
-              GROUP BY user_uuid
+              SELECT user_uuid, COUNT(*) AS visit_count FROM ValidDiaries GROUP BY user_uuid
             )
             SELECT 
               SUM(CASE WHEN visit_count = 1 THEN 1 ELSE 0 END) AS new_customers,
@@ -136,7 +131,7 @@ export default {
           `);
           const loyaltyResult = await loyaltyStmt.bind(shopId).first() || {};
 
-          // 2. ヒートマップ分析（時間帯 × 利用タイプ）
+          // 2. 利用形態ヒートマップ
           const heatmapStmt = env.DB.prepare(`
             WITH ValidDiaries AS (
               SELECT 
@@ -153,20 +148,92 @@ export default {
                   WHEN tags LIKE '%🎪間借り・無店舗%' THEN '🎪間借り・無店舗'
                   ELSE 'その他'
                 END AS usage_type
-              FROM diaries
-              WHERE shop_id = ? 
-                AND weather_icon NOT IN ('💭', '📦', '🚫')
-                AND created_at IS NOT NULL
+              FROM diaries WHERE shop_id = ? AND weather_icon NOT IN ('💭', '📦', '🚫') AND created_at IS NOT NULL
             )
-            SELECT time_zone, usage_type, COUNT(*) AS count
-            FROM ValidDiaries
-            WHERE usage_type != 'その他'
-            GROUP BY time_zone, usage_type
-            ORDER BY count DESC
+            SELECT time_zone, usage_type, COUNT(*) AS count FROM ValidDiaries WHERE usage_type != 'その他' GROUP BY time_zone, usage_type ORDER BY count DESC
           `);
           const heatmapResult = await heatmapStmt.bind(shopId).all();
 
-          // データ成形
+          // 3. 天候別の「行動変容」ヒートマップ
+          const weatherBehaviorStmt = env.DB.prepare(`
+            SELECT 
+                weather_icon,
+                SUM(CASE WHEN tags LIKE '%☕️店内%' THEN 1 ELSE 0 END) as eat_in_count,
+                SUM(CASE WHEN tags LIKE '%🥡テイクアウト%' THEN 1 ELSE 0 END) as takeout_count,
+                SUM(CASE WHEN tags LIKE '%🛍️豆・グッズ%' THEN 1 ELSE 0 END) as merch_count
+            FROM diaries
+            WHERE shop_id = ? AND weather_icon NOT IN ('💭', '📦', '🚫', '❓')
+            GROUP BY weather_icon
+            ORDER BY eat_in_count DESC
+          `);
+          const weatherBehavior = await weatherBehaviorStmt.bind(shopId).all();
+
+          // 4. 「客観的タグ」と「店舗の意図」のギャップ分析
+          const tagsStmt = env.DB.prepare(`SELECT tags FROM diaries WHERE shop_id = ? AND tags IS NOT NULL`);
+          const tagsResult = await tagsStmt.bind(shopId).all();
+          
+          let aiTagsCount = {}; let userTagsCount = {};
+          tagsResult.results.forEach(row => {
+              const tagsList = row.tags.split(',').map(t => t.trim()).filter(t => t);
+              tagsList.forEach(tag => {
+                  if(tag.startsWith('🤖')) {
+                      aiTagsCount[tag] = (aiTagsCount[tag] || 0) + 1;
+                  } else {
+                      userTagsCount[tag] = (userTagsCount[tag] || 0) + 1;
+                  }
+              });
+          });
+          const topAiTags = Object.entries(aiTagsCount).sort((a,b) => b[1]-a[1]).slice(0, 5).map(t => ({ tag: t[0], count: t[1] }));
+          const topUserTags = Object.entries(userTagsCount).sort((a,b) => b[1]-a[1]).slice(0, 5).map(t => ({ tag: t[0], count: t[1] }));
+
+          // 5. ペルソナ（顧客像）の自動クラスタリング
+          const personaStmt = env.DB.prepare(`
+            WITH PersonaData AS (
+                SELECT 
+                    CASE 
+                        WHEN CAST(strftime('%H', created_at) AS INTEGER) BETWEEN 5 AND 10 THEN '朝'
+                        WHEN CAST(strftime('%H', created_at) AS INTEGER) BETWEEN 11 AND 14 THEN '昼'
+                        WHEN CAST(strftime('%H', created_at) AS INTEGER) BETWEEN 15 AND 17 THEN '夕方'
+                        ELSE '夜'
+                    END AS time_zone,
+                    COALESCE(NULLIF(user_age, '未設定'), '年齢不詳') AS age,
+                    CASE 
+                        WHEN tags LIKE '%作業%' OR tags LIKE '%PC%' THEN '作業目的'
+                        WHEN tags LIKE '%読書%' OR tags LIKE '%静か%' THEN 'リラックス・読書'
+                        WHEN tags LIKE '%デート%' OR tags LIKE '%会話%' THEN '交流目的'
+                        ELSE '日常利用'
+                    END AS usage_scene
+                FROM diaries WHERE shop_id = ?
+            )
+            SELECT time_zone, age, usage_scene, COUNT(*) as cluster_size
+            FROM PersonaData
+            GROUP BY time_zone, age, usage_scene
+            ORDER BY cluster_size DESC
+            LIMIT 3
+          `);
+          const personaResult = await personaStmt.bind(shopId).all();
+
+          // 6. マイクロコンバージョンの深掘り
+          const microCvStmt = env.DB.prepare(`
+            WITH UserBehavior AS (
+                SELECT user_uuid, 
+                       MAX(CASE WHEN tags LIKE '%☕️店内%' THEN 1 ELSE 0 END) as has_eatin,
+                       MAX(CASE WHEN tags LIKE '%🛍️豆・グッズ%' THEN 1 ELSE 0 END) as has_merch
+                FROM diaries WHERE shop_id = ?
+                GROUP BY user_uuid
+            )
+            SELECT 
+                SUM(has_eatin) as total_eatin_users,
+                SUM(CASE WHEN has_eatin = 1 AND has_merch = 1 THEN 1 ELSE 0 END) as converted_users
+            FROM UserBehavior
+            WHERE has_eatin = 1
+          `);
+          const microCvResult = await microCvStmt.bind(shopId).first() || { total_eatin_users: 0, converted_users: 0 };
+          const eatinUsers = microCvResult.total_eatin_users || 0;
+          const cvUsers = microCvResult.converted_users || 0;
+          const cvRate = eatinUsers > 0 ? ((cvUsers / eatinUsers) * 100).toFixed(1) + '%' : '0%';
+
+          // 統合データ成形
           const newCust = loyaltyResult.new_customers || 0;
           const repeatCust = loyaltyResult.repeat_customers || 0;
           const totalUsers = newCust + repeatCust;
@@ -175,12 +242,14 @@ export default {
           return new Response(JSON.stringify({
             success: true,
             data: {
-              loyalty: {
-                new_customers: newCust,
-                repeat_customers: repeatCust,
-                repeat_rate: repeatRate
-              },
-              heatmap: heatmapResult.results || []
+              loyalty: { new_customers: newCust, repeat_customers: repeatCust, repeat_rate: repeatRate },
+              heatmap: heatmapResult.results || [],
+              advanced_analytics: {
+                  weather_behavior: weatherBehavior.results || [],
+                  tag_gap: { ai_generated: topAiTags, user_generated: topUserTags },
+                  top_personas: personaResult.results || [],
+                  micro_conversion: { eatin_users: eatinUsers, converted_users: cvUsers, conversion_rate: cvRate }
+              }
             }
           }), { headers: corsHeaders });
         }
@@ -431,8 +500,6 @@ export default {
         if (unclassifiedTags && unclassifiedTags.length > 0) {
           const gasWebhookUrl = env.GAS_WEBHOOK_URL || ""; 
           if (gasWebhookUrl) {
-            // 元のキー構造(shopName, unclassified, comment)は既存のGAS側のパースを壊さないために完全維持。
-            // その上で、バックオフィス部門の目視確認やステータス管理を助けるメタデータを _dx_metadata として拡張付与。
             const errorReportData = { 
                 shopName: data.shopName || "名前なし", 
                 unclassified: unclassifiedTags, 
