@@ -9,15 +9,15 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     
-    <!-- 📸 画像処理ライブラリ -->
+    <!-- 📸 画像処理ライブラリ (復活) -->
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
-    <!-- キャッシュバスター: ?v=8 に更新 -->
-    <link rel="stylesheet" href="./style.css?v=8">
+    <!-- 🌟 キャッシュバスター: 最新版の v=9 に更新 -->
+    <link rel="stylesheet" href="./style.css?v=9">
     
     <style>
-        /* 🌟 マップ用ボトムシートのCSS（オリジナル復旧） */
+        /* 🌟 マップ用ボトムシートのCSS (ネイティブアプリ水準のUXを復旧) */
         .bottom-sheet {
             position: fixed;
             bottom: -100%;
@@ -152,25 +152,24 @@
         </main>
 
         <!-- ==========================================
-             📚 2. 履歴タブ 🌟「未整理フィルター」追加済
+             📚 2. 履歴タブ (未整理フィルター復旧)
              ========================================== -->
         <main id="tab-history" class="tab-content hidden" style="padding-top: 16px;">
             <div class="form-group" style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px;">
                 <select id="tagFilter" class="form-group" style="flex: 1; padding: 8px; margin-bottom: 0;">
                     <option value="">すべてのタグ（全件表示）</option>
                 </select>
-                <!-- 🌟 追加: 未整理フィルター用チェックボックス -->
+                <!-- 🌟 復旧: 業務効率化に必須の未整理フィルター -->
                 <label style="display: flex; align-items: center; gap: 4px; padding: 8px 12px; background: rgba(0,0,0,0.05); border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: bold; color: var(--text-main); white-space: nowrap;">
                     <input type="checkbox" id="unorganizedFilter"> 📦 未整理のみ
                 </label>
             </div>
             
-            <!-- 🌟 ここで履歴が描画されます。一切消していません -->
             <div id="diariesList"></div>
         </main>
 
         <!-- ==========================================
-             🗺️ 3. マップタブ 
+             🗺️ 3. マップタブ (検索＆保存機能復旧)
              ========================================== -->
         <main id="tab-map" class="tab-content hidden" style="padding-top: 16px; height: calc(100vh - 150px); display: flex; flex-direction: column;">
             <div class="form-group" style="margin-bottom: 8px;">
@@ -182,14 +181,15 @@
                 </select>
             </div>
 
-            <!-- 📸 マップ画像ダウンロードボタン -->
+            <!-- 📸 マップ画像ダウンロードボタン復旧 -->
             <button id="btn-save-map-image" onclick="window.downloadMapImage()" style="margin-bottom: 10px; background: #2c3e50; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;">
                 📸 現在のマップを画像として保存
             </button>
 
+            <!-- viewMapに変更済の安全なコンテナ -->
             <div id="viewMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1; border: 1px solid var(--border-color);"></div>
 
-            <!-- 📸 マップ画像生成用のウォーターマーク (非表示テンプレート) -->
+            <!-- 📸 マップ画像生成用のウォーターマーク -->
             <div id="map-watermark-template" style="display: none; position: absolute; bottom: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 9999; text-align: right; border: 2px solid #5d4037;">
                 <h3 style="margin: 0; color: #5d4037; font-size: 1.2rem; font-weight: 900;">☕️ EzoCafe Log</h3>
                 <p style="margin: 5px 0 0 0; font-size: 0.9rem; color: #7f8c8d; font-weight: bold;">My Cafe Map</p>
@@ -208,13 +208,12 @@
         </main>
 
         <!-- ==========================================
-             ⚙️ 5. 設定タブ
+             ⚙️ 5. 設定タブ (QA・管理者機能復旧)
              ========================================== -->
         <main id="tab-settings" class="tab-content hidden" style="padding: 16px;">
             <h2 style="margin-bottom: 20px;">⚙️ ユーザー設定</h2>
             <div class="form-group">
                 <label>性別</label>
-                <!-- 🌟 IDを修正: userGender -->
                 <select id="userGender">
                     <option value="未設定">未設定</option>
                     <option value="男性">男性</option>
@@ -224,7 +223,6 @@
             </div>
             <div class="form-group">
                 <label>年代</label>
-                <!-- 🌟 IDを修正: userAge -->
                 <select id="userAge">
                     <option value="未設定">未設定</option>
                     <option value="10代以下">10代以下</option>
@@ -239,7 +237,7 @@
                 <button id="btnSaveSettings" class="btn-primary">💾 設定を保存する</button>
             </div>
             
-            <!-- 🌟 開発・テスト用アカウント切替メニュー (新規追加) -->
+            <!-- 🌟 開発・テスト用アカウント切替メニュー (復旧) -->
             <div style="margin-top: 30px; padding: 15px; background: rgba(41, 128, 185, 0.05); border: 1px dashed #2980b9; border-radius: 8px;">
                 <h3 style="margin-top: 0; color: #2980b9; font-size: 1rem;">🧪 テスト用アカウント切替</h3>
                 <p style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 12px;">権限別のUI/API挙動を検証します。</p>
@@ -282,7 +280,7 @@
     </div>
 
     <!-- ==========================================
-         🗺️ マップ用 店舗詳細ボトムシート
+         🗺️ マップ用 店舗詳細ボトムシート (復旧)
          ========================================== -->
     <div id="shopBottomSheet" class="bottom-sheet">
         <button class="close-sheet-btn" onclick="document.getElementById('shopBottomSheet').classList.remove('active')">✖</button>
@@ -290,7 +288,7 @@
     </div>
 
     <!-- ==========================================
-         🗺️ 手動マップピッカー モーダル 🌟住所検索バー追加済
+         🗺️ 手動マップピッカー モーダル (住所検索復旧)
          ========================================== -->
     <div id="mapPickerModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 3000; display: flex; flex-direction: column;">
         <div style="background: white; padding: 15px; text-align: center; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
@@ -298,7 +296,7 @@
             <button id="closeMapPicker" style="background: none; border: none; font-size: 20px; cursor: pointer;">✖</button>
         </div>
         
-        <!-- 🌟 追加：住所・市区町村検索機能 -->
+        <!-- 🌟 復旧：住所・市区町村検索機能 -->
         <div style="background: white; padding: 10px 15px; border-bottom: 1px solid #ddd; display: flex; gap: 8px;">
             <input type="text" id="mapPickerSearchInput" placeholder="🔍 市区町村・住所を入力" autocomplete="off" style="flex: 1; border: 1px solid #ccc; border-radius: 8px; padding: 8px; font-size: 14px;">
             <button type="button" id="btnMapPickerSearch" class="btn-secondary" style="margin: 0; padding: 8px 15px;">検索</button>
@@ -315,9 +313,9 @@
     <!-- ==========================================
          📦 外部スクリプト & メインロジック
          ========================================== -->
-    <script type="module" src="./src/app.js?v=8"></script>
+    <script type="module" src="./src/app.js?v=9"></script>
     
-    <!-- 📱 ボトムナビゲーション＆タブ切り替え制御 🌟管理者昇格ロジック完全復旧 -->
+    <!-- 📱 ボトムナビゲーション＆タブ切り替え・QAツール制御 (完全復旧) -->
     <script>
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -342,7 +340,7 @@
             window.scrollTo(0, 0);
         });
 
-        // 🌟 追加：テスト用アカウント切替ロジック
+        // 🌟 復旧：テスト用アカウント切替ロジック
         window.switchTestUser = function(uuid) {
             if (uuid === 'reset') {
                 if (confirm("テストモードを終了し、通常のアカウントに戻しますか？")) {
@@ -374,13 +372,12 @@
             }
         });
 
-        // 🌟 追加・復旧：管理者（Admin）昇格コマンド
+        // 🌟 復旧：管理者（Admin）昇格コマンド
         window.upgradeToAdmin = async function() {
             if (!confirm("裏コマンド：管理者（Admin）権限を取得しますか？")) return;
             
             try {
-                // api.js側でAPIのベースURLが設定されている想定ですが、ここで直接取得します
-                const API_BASE_URL = window.API_BASE_URL || "https://cafe-log-api.m-6cf.workers.dev"; // ※必要に応じてWorkerのURLに変更してください
+                const API_BASE_URL = window.API_BASE_URL || "https://cafe-log-api.m-6cf.workers.dev";
                 const userUuid = localStorage.getItem('ezo_user_uuid');
                 
                 if (!userUuid) {

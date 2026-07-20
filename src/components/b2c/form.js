@@ -1,5 +1,5 @@
 // ==========================================
-// 📦 src/components/b2c/form.js (DX強化・堅牢化版)
+// 📦 src/components/b2c/form.js (完全統合マスター版)
 // 責務: 日記入力UI、Exif解析、外部API連携、マップ選択
 // ==========================================
 import { saveDiaryApi, searchMasterApi } from '../../api.js';
@@ -7,7 +7,6 @@ import { refreshHistoryList } from './list.js';
 import { getters } from '../../state.js';
 import { parseTags, escapeHTML } from '../../utils/text.js';
 
-// ⚠️ 将来的なReact移行を見据え、状態管理は慎重に行う
 let currentImageBase64Array = [];
 let editingDiaryId = null;
 let suggestTimeout = null;
@@ -49,7 +48,7 @@ function resetDateToToday() {
     if (dateInput) dateInput.value = `${yyyy}-${mm}-${dd}`;
 }
 
-// 📸 画像リサイズ処理 (メモリリーク防止のため明示的に破棄)
+// 📸 画像リサイズ処理 (メモリリーク防止対応)
 function resizeImageAsync(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -84,7 +83,7 @@ function resizeImageAsync(file) {
     });
 }
 
-// ☁️ Exifと天気の自動取得 (フォールバック強化版)
+// ☁️ Exifと天気の自動取得 (フォールバック・タイムアウト強化)
 async function extractExifAndWeather(file) {
     let lat = null, lng = null, temp = null, weatherIcon = "❓";
     let targetDate = new Date();
@@ -124,7 +123,6 @@ async function extractExifAndWeather(file) {
         }
         
         try {
-            // API呼び出しにAbortControllerを追加してタイムアウト(5秒)を設定（業務遅延防止）
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
             
@@ -150,7 +148,7 @@ async function extractExifAndWeather(file) {
     return { lat, lng, visitedAt, weatherIcon, temp, hasExifDate };
 }
 
-// 📸 複数写真選択時の処理
+// 📸 複数写真選択時の処理 (Promise.all 並列処理)
 async function handlePhotoSelection(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -209,7 +207,6 @@ async function handlePhotoSelection(e) {
             }
         }
 
-        // 並列処理(Promise.all)に変更し、UIのブロック時間を大幅短縮
         const resizePromises = Array.from(files).map(file => resizeImageAsync(file));
         const base64Images = await Promise.all(resizePromises);
         
@@ -235,7 +232,7 @@ async function handlePhotoSelection(e) {
     }
 }
 
-// 📦 一括アップロード (バックオフィス作業用)
+// 📦 一括アップロード (直列処理によるメモリ保護)
 async function handleBulkUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -247,7 +244,6 @@ async function handleBulkUpload(e) {
     const bulkStatusEl = document.getElementById('bulkStatus');
     e.target.disabled = true; 
 
-    // 直列処理を維持（複数画像の一括処理によるブラウザ/Workerのメモリオーバーフローを防ぐため）
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if(bulkStatusEl) { 
@@ -357,7 +353,7 @@ function setupShopSuggest() {
     });
 }
 
-// 📍 手動マップピッカーと住所検索機能
+// 📍 手動マップピッカーと住所検索機能 (Nominatim実装)
 function setupMapPicker() {
     document.getElementById('btnOpenMapPicker')?.addEventListener('click', () => {
         document.getElementById('mapPickerModal').classList.remove('hidden');
@@ -412,7 +408,6 @@ function setupMapPicker() {
             btnSearch.disabled = true;
 
             try {
-                // 🛡️ DX実践: API仕様の遵守。Accept-Languageを明示的に付与して日本語データを確実にとる
                 const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=jp`, {
                     headers: { 'Accept-Language': 'ja' }
                 });
@@ -448,7 +443,7 @@ function setupMapPicker() {
     }
 }
 
-// 🚀 記録送信 (データクレンジング処理を整理)
+// 🚀 記録送信 (カプセル化されたリセットフローを適用)
 async function handleFormSubmit(e) {
     e.preventDefault();
     const eatTypeEl = document.querySelector('input[name="eatType"]:checked');
@@ -494,7 +489,7 @@ async function handleFormSubmit(e) {
 
     const result = await saveDiaryApi(payload); 
     if (result.success) {
-        resetFormState(); // UIリセット処理を別関数に切り出し
+        resetFormState(); 
         alert("✨ 記録が保存されました！");
         refreshHistoryList();
         window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'history' } }));
@@ -505,7 +500,7 @@ async function handleFormSubmit(e) {
     submitBtn.innerHTML = originalBtnText;
 }
 
-// UIと状態のリセット (カプセル化)
+// UIと状態のリセット
 function resetFormState() {
     document.getElementById('recordForm').reset();
     const previewContainer = document.getElementById('photoPreviewContainer');

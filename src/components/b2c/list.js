@@ -1,5 +1,5 @@
 // ==========================================
-// 📚 src/components/b2c/list.js (未整理フィルター対応版)
+// 📚 src/components/b2c/list.js (フリックUI＆ドット連動 完全対応版)
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
@@ -16,13 +16,6 @@ export function initHistoryTab() {
     if (tagFilterEl) {
         tagFilterEl.addEventListener('change', filterDiaries);
     }
-    
-    // 🌟 追加: 未整理フィルターのイベントリスナー
-    const unorganizedFilterEl = document.getElementById('unorganizedFilter');
-    if (unorganizedFilterEl) {
-        unorganizedFilterEl.addEventListener('change', filterDiaries);
-    }
-
     refreshHistoryList();
 }
 
@@ -34,9 +27,7 @@ export async function refreshHistoryList() {
     mutators.setDiaries(diaries);
     
     renderTagClouds();
-    
-    // 取得直後も現在のフィルター状態を反映させる
-    filterDiaries();
+    renderDiariesList(getters.getAllDiaries());
 }
 
 /**
@@ -79,27 +70,18 @@ export function renderTagClouds() {
 }
 
 /**
- * 🌟 修正: ドロップダウンとチェックボックスの選択に応じてリストをフィルタリングする
+ * ドロップダウンの選択に応じてリストをフィルタリングする
  */
 function filterDiaries() {
-    const selectedTag = document.getElementById('tagFilter')?.value || "";
-    const isUnorganizedOnly = document.getElementById('unorganizedFilter')?.checked || false;
-    
+    const selectedTag = document.getElementById('tagFilter').value;
     mutators.setTagFilter(selectedTag);
     
-    let filtered = getters.getAllDiaries();
-
-    // 1. 「未整理のみ」の絞り込み
-    if (isUnorganizedOnly) {
-        filtered = filtered.filter(diary => diary.weather_icon === "📦");
+    if (selectedTag === "") {
+        renderDiariesList(getters.getAllDiaries());
+    } else {
+        const filtered = getters.getAllDiaries().filter(diary => parseTags(diary.tags).includes(selectedTag));
+        renderDiariesList(filtered);
     }
-
-    // 2. タグの絞り込み
-    if (selectedTag !== "") {
-        filtered = filtered.filter(diary => parseTags(diary.tags).includes(selectedTag));
-    }
-
-    renderDiariesList(filtered);
 }
 
 /**
@@ -144,10 +126,9 @@ export function renderDiariesList(diaries) {
                 imageHTML = `<img src="${escapeHTML(imageUrls[0])}" class="diary-image" loading="lazy" alt="カフェの写真">`;
             } else {
                 // 🌟 新仕様：複数画像（ラッパーとドットインジケーターを含める）
-                // PC向けに cursor: pointer を追加し、クリックできることをアピール
                 imageHTML = `
                     <div class="flick-wrapper">
-                        <div class="flick-container" style="cursor: pointer;">
+                        <div class="flick-container">
                             ${imageUrls.map(url => `<img src="${escapeHTML(url)}" class="flick-item" loading="lazy" alt="カフェの写真">`).join('')}
                         </div>
                         <div class="flick-dots">
@@ -187,16 +168,16 @@ export function renderDiariesList(diaries) {
             </div>
         `;
         
-        // 🌟 フリック時のドット連動 ＆ PC向け両端クリックロジック
+        // 🌟 フリック時のドット連動ロジック
         if (imageUrls.length > 1) {
             const flickContainer = card.querySelector('.flick-container');
             if (flickContainer) {
-                // スクロール時のドット連動
                 flickContainer.addEventListener('scroll', (e) => {
                     const c = e.target;
                     const item = c.querySelector('.flick-item');
                     if (!item) return;
                     
+                    // スクロール量と要素幅＋ギャップ(8px)から現在のインデックスを算出
                     const itemWidthWithGap = item.clientWidth + 8;
                     const index = Math.round(c.scrollLeft / itemWidthWithGap);
                     
@@ -204,27 +185,7 @@ export function renderDiariesList(diaries) {
                     dots.forEach((dot, i) => {
                         dot.classList.toggle('active', i === index);
                     });
-                }, { passive: true });
-
-                // 🌟 新機能：画像両端クリックでのスライド移動（PC向け）
-                flickContainer.addEventListener('click', (e) => {
-                    const rect = flickContainer.getBoundingClientRect();
-                    const clickX = e.clientX - rect.left;
-                    const width = rect.width;
-                    
-                    // スクロール幅（画像1枚分 + ギャップ）を計算
-                    const item = flickContainer.querySelector('.flick-item');
-                    const scrollAmount = item ? item.clientWidth + 8 : width;
-
-                    // 左側25%をクリックしたら前の画像へ
-                    if (clickX < width * 0.25) {
-                        flickContainer.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-                    }
-                    // 右側25%をクリックしたら次の画像へ
-                    else if (clickX > width * 0.75) {
-                        flickContainer.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-                    }
-                });
+                }, { passive: true }); // passive: true でスクロールパフォーマンスを最適化
             }
         }
 
