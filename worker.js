@@ -4,7 +4,7 @@ import { cors } from 'hono/cors'
 const app = new Hono()
 
 // ==========================================
-// 🌐 1. CORSミドルウェア（1行で全ルートに適用）
+// 🌐 1. CORSミドルウェア
 // ==========================================
 app.use('/*', cors({
   origin: '*',
@@ -13,14 +13,20 @@ app.use('/*', cors({
 }))
 
 // ==========================================
-// 🛡️ 2. 権限チェック関数 (Honoのコンテキスト 'c' に対応)
+// 🟢 2. ヘルスチェック（404対策）を追加！
+// ==========================================
+app.get('/', (c) => {
+  return c.text('Ezo Cafe Log API Server is Running! (Hono化成功)')
+})
+
+// ==========================================
+// 🛡️ 3. 権限チェック関数
 // ==========================================
 async function checkAuthorization(c, requiredRoles = []) {
-  // Honoでは c.req.header() や c.req.query() で値を取得します
   let userUuid = c.req.header("X-Ezo-User-UUID") || c.req.query("uuid");
   
   if (!userUuid) {
-    return { authorized: false, status: 401, error: "Authentication Required: ユーザーUUIDが提供されていません。" };
+    return { authorized: false, status: 401, error: "Authentication Required" };
   }
 
   const testUsers = {
@@ -30,7 +36,6 @@ async function checkAuthorization(c, requiredRoles = []) {
   };
 
   try {
-    // DBへのアクセスは c.env.DB を使用します
     let user = await c.env.DB.prepare("SELECT role, associated_shop_id FROM users WHERE user_uuid = ?")
       .bind(userUuid)
       .first();
@@ -58,7 +63,7 @@ async function checkAuthorization(c, requiredRoles = []) {
     }
 
     if (requiredRoles.length > 0 && !requiredRoles.includes(user.role) && user.role !== "admin") {
-      return { authorized: false, status: 403, error: `Forbidden: この操作には ${requiredRoles.join(" または ")} 権限が必要です。` };
+      return { authorized: false, status: 403, error: "Forbidden" };
     }
 
     return { authorized: true, status: 200, user: { userUuid: userUuid, ...user } };
@@ -69,9 +74,8 @@ async function checkAuthorization(c, requiredRoles = []) {
 }
 
 // ==========================================
-// 🚀 3. エンドポイントの定義（ルーティング）
+// 🚀 4. エンドポイントの定義
 // ==========================================
-// 従来の if (action === "get_me") の部分がこうなります
 app.get('/api/me', async (c) => {
   const auth = await checkAuthorization(c, []); 
   if (!auth.authorized) return c.json({ error: auth.error }, auth.status);
