@@ -1,4 +1,7 @@
 {
+  "name": "ezo-cafe-log",
+  "version": "1.0.0",
+  "type": "module",
   "dependencies": {
     "hono": "^4.12.31"
   }
