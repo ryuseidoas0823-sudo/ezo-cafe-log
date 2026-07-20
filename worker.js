@@ -84,3 +84,67 @@ app.get('/api/me', async (c) => {
 })
 
 export default app
+
+// ==========================================
+// 📥 データの取得 (GETリクエスト群)
+// ==========================================
+
+// ① 全日記データの取得（マスターデータ以外）
+app.get('/api/diaries', async (c) => {
+  try {
+    const { results } = await c.env.DB.prepare("SELECT * FROM diaries ORDER BY visited_at DESC, id DESC").all();
+    return c.json(results);
+  } catch (err) {
+    return c.json({ error: err.message }, 500);
+  }
+})
+
+// ② マスターデータの検索 (search_master)
+app.get('/api/master/search', async (c) => {
+  const auth = await checkAuthorization(c, ["free", "premium", "business"]);
+  if (!auth.authorized) return c.json({ error: auth.error }, auth.status);
+
+  const query = c.req.query("query") || "";
+  const { results } = await c.env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE shop_name LIKE ? LIMIT 10")
+    .bind(`%${query}%`).all();
+    
+  return c.json(results);
+})
+
+// ③ マスターデータの全取得 (get_all_master)
+app.get('/api/master/all', async (c) => {
+  const auth = await checkAuthorization(c, ["free", "premium", "business"]);
+  if (!auth.authorized) return c.json({ error: auth.error }, auth.status);
+
+  if (auth.user.role === "admin") {
+    const { results } = await c.env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude, is_local FROM shops_master").all();
+    return c.json(results);
+  } else {
+    const { results } = await c.env.DB.prepare("SELECT shop_id, shop_name, latitude, longitude FROM shops_master WHERE is_local = 1").all();
+    return c.json(results);
+  }
+})
+
+
+// ==========================================
+// 🗑️ データの削除 (DELETEリクエスト)
+// ==========================================
+app.delete('/api/diaries', async (c) => {
+  const auth = await checkAuthorization(c, ["free", "premium"]);
+  if (!auth.authorized) return c.json({ error: auth.error }, auth.status);
+
+  try {
+    const id = c.req.query("id");
+    if (!id) throw new Error("IDが指定されていません");
+    
+    if (auth.user.role === "admin") {
+      await c.env.DB.prepare("DELETE FROM diaries WHERE id = ?").bind(id).run();
+    } else {
+      await c.env.DB.prepare("DELETE FROM diaries WHERE id = ? AND user_uuid = ?").bind(id, auth.user.userUuid).run();
+    }
+    
+    return c.json({ success: true });
+  } catch (err) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+})
