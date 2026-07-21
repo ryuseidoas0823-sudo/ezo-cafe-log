@@ -1,10 +1,15 @@
+# ==========================================
+# ⚙️ 基本設定 (Core Configuration)
+# ==========================================
 name = "cafe-pipeline"
-main = "worker.js"
+# Honoのエントリーポイントに合わせています (ファイル名が異なる場合は適宜変更してください)
+main = "worker.js" 
 compatibility_date = "2026-07-09"
 account_id = "32baac0d4fff9a0eaaf437ec150dc723" 
 
 # ==========================================
-# 💾 D1データベースとの紐付け
+# 💾 D1データベース (Relational Database)
+# 業務ログやステータスを堅牢に一元管理するデータ基盤
 # ==========================================
 [[d1_databases]]
 binding = "DB"
@@ -12,19 +17,31 @@ database_name = "cafe-db"
 database_id = "b4ab1090-8997-4831-874a-53fdcda65eeb" 
 
 # ==========================================
-# 🤖 AI機能の解放 (Vision & Text)
+# 📦 R2オブジェクトストレージ (Object Storage)
+# 現場の証跡データ（画像など）をセキュアかつ低コストで保存
+# ==========================================
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ezocafe-images"
+
+# ==========================================
+# 🤖 AIバインディング (Workers AI)
+# テキスト解析や将来的な非定型データの構造化を担う
 # ==========================================
 [ai]
 binding = "AI"
 
 # ==========================================
-# 🌐 環境変数 (GAS Webhook 連携用など)
+# 🌐 環境変数 (Environment Variables)
+# 外部システム（業務フロー）との統合エンドポイント
 # ==========================================
 [vars]
-# ▼ 先ほどGASで作成した「ウェブアプリのURL」をここに貼り付けてください！
+# 業務自動化の要となるGAS Webhook URL
 GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyOp-cHTDluKEAXD3Qg2nQl2SOTHpDl0SgejDaQKKybN4tT4ySfREIAM1WQyFf0bpd5/exec"
 
-# R2バケットのバインディング
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "ezocafe-images" # ステップ1で作ったバケット名を指定
+# ==========================================
+# 🚀 開発環境用オーバーライド (プレビュー環境用)
+# ※ローカル開発やテスト環境で別のDB/設定を使いたい場合の予約枠
+# ==========================================
+# [env.dev.vars]
+# GAS_WEBHOOK_URL = "開発用GASのURLがあればここへ"

@@ -184,7 +184,8 @@ window.downloadMapImage = function() {
 
     let watermarkClone = null;
     if (template) {
-        const validShopsCount = document.getElementById('stat-unique-shops')?.innerText || "0";
+        const statElement = document.getElementById('stat-unique-shops');
+        const validShopsCount = statElement ? (statElement.innerText.match(/\d+/) || ["0"])[0] : "0";
         const countSpan = document.getElementById('watermark-shop-count');
         if(countSpan) countSpan.innerText = validShopsCount;
 

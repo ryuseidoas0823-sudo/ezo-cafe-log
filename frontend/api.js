@@ -4,8 +4,9 @@
 // ==========================================
 import { getOrGenerateUserUuid } from './utils/crypto.js';
 
-// 🌟 本番環境Worker URL (業務基盤)
-const API_URL = "https://cafe-pipeline.ryusei-doas-0823.workers.dev/"; 
+// 🌟 本番環境Worker URL (業務基盤: Hono REST API対応)
+// ※ URL末尾の「/」は外し、エンドポイント側で「/api/...」と繋ぐ設計に統一
+const API_BASE = "https://cafe-pipeline.ryusei-doas-0823.workers.dev"; 
 
 // 🛡️ 内部向けヘッダー生成関数 (ゼロトラストベースの認証・UUID付与)
 function getAuthHeaders() {
@@ -21,7 +22,10 @@ function getAuthHeaders() {
 
 export async function fetchDiariesApi() {
     try {
-        const response = await fetch(`${API_URL}?_t=${Date.now()}`, { method: "GET", headers: getAuthHeaders() });
+        const response = await fetch(`${API_BASE}/api/diaries?_t=${Date.now()}`, { 
+            method: "GET", 
+            headers: getAuthHeaders() 
+        });
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         return data; 
@@ -33,7 +37,10 @@ export async function fetchDiariesApi() {
 
 export async function fetchMasterShopsApi() {
     try {
-        const response = await fetch(`${API_URL}?action=get_all_master&_t=${Date.now()}`, { method: "GET", headers: getAuthHeaders() });
+        const response = await fetch(`${API_BASE}/api/master/all?_t=${Date.now()}`, { 
+            method: "GET", 
+            headers: getAuthHeaders() 
+        });
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         return data; 
@@ -45,7 +52,10 @@ export async function fetchMasterShopsApi() {
 
 export async function searchMasterApi(query) {
     try {
-        const response = await fetch(`${API_URL}?action=search_master&query=${encodeURIComponent(query)}`, { method: "GET", headers: getAuthHeaders() });
+        const response = await fetch(`${API_BASE}/api/master/search?query=${encodeURIComponent(query)}`, { 
+            method: "GET", 
+            headers: getAuthHeaders() 
+        });
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         return data;
@@ -57,7 +67,10 @@ export async function searchMasterApi(query) {
 
 export async function fetchMeApi() {
     try {
-        const response = await fetch(`${API_URL}?action=get_me`, { method: "GET", headers: getAuthHeaders() });
+        const response = await fetch(`${API_BASE}/api/me`, { 
+            method: "GET", 
+            headers: getAuthHeaders() 
+        });
         const data = await response.json();
         return data.error ? null : data;
     } catch (error) { 
@@ -68,10 +81,15 @@ export async function fetchMeApi() {
 
 export async function fetchShopAnalyticsApi(shopId, shopName) {
     try {
-        const params = new URLSearchParams({ action: "get_shop_analytics" });
+        const params = new URLSearchParams();
         if (shopId) params.append("shop_id", shopId);
         if (shopName) params.append("shop_name", shopName);
-        const response = await fetch(`${API_URL}?${params.toString()}`, { method: "GET", headers: getAuthHeaders() });
+        
+        // 旧: ?action=get_shop_analytics -> 新: /api/analytics/shop
+        const response = await fetch(`${API_BASE}/api/analytics/shop?${params.toString()}`, { 
+            method: "GET", 
+            headers: getAuthHeaders() 
+        });
         const data = await response.json();
         return data.error ? null : data;
     } catch (error) { 
@@ -82,7 +100,11 @@ export async function fetchShopAnalyticsApi(shopId, shopName) {
 
 export async function fetchGhostPinsApi() {
     try {
-        const response = await fetch(`${API_URL}?action=get_ghost_pins&_t=${Date.now()}`, { method: "GET", headers: getAuthHeaders() });
+        // 旧: ?action=get_ghost_pins -> 新: /api/pins/ghost
+        const response = await fetch(`${API_BASE}/api/pins/ghost?_t=${Date.now()}`, { 
+            method: "GET", 
+            headers: getAuthHeaders() 
+        });
         const data = await response.json();
         return data.error ? [] : data;
     } catch (error) { 
@@ -93,7 +115,8 @@ export async function fetchGhostPinsApi() {
 
 export async function fetchActiveStatusesApi() {
     try {
-        const response = await fetch(`${API_URL}?action=get_active_statuses&_t=${Date.now()}`, {
+        // 旧: ?action=get_active_statuses -> 新: /api/statuses/active
+        const response = await fetch(`${API_BASE}/api/statuses/active?_t=${Date.now()}`, {
             method: "GET",
             headers: getAuthHeaders()
         });
@@ -113,7 +136,8 @@ export async function fetchB2bAnalyticsApi(shopId) {
     try {
         if (!shopId) throw new Error("shopIdが指定されていません");
         
-        const response = await fetch(`${API_URL}?action=get_b2b_analytics&shop_id=${shopId}&_t=${Date.now()}`, {
+        // 旧: ?action=get_b2b_analytics -> 新: /api/analytics/b2b
+        const response = await fetch(`${API_BASE}/api/analytics/b2b?shop_id=${shopId}&_t=${Date.now()}`, {
             method: "GET",
             headers: getAuthHeaders()
         });
@@ -133,7 +157,12 @@ export async function fetchB2bAnalyticsApi(shopId) {
 
 export async function saveDiaryApi(payload) {
     try {
-        const response = await fetch(API_URL, { method: "POST", headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        // 旧: API_URL (action payload) -> 新: /api/diaries (POST)
+        const response = await fetch(`${API_BASE}/api/diaries`, { 
+            method: "POST", 
+            headers: getAuthHeaders(), 
+            body: JSON.stringify(payload) 
+        });
         return await response.json();
     } catch (error) { 
         console.error("[DX Alert] データ保存エラー:", error);
@@ -143,7 +172,10 @@ export async function saveDiaryApi(payload) {
 
 export async function deleteDiaryApi(id) {
     try {
-        const response = await fetch(`${API_URL}?id=${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+        const response = await fetch(`${API_BASE}/api/diaries?id=${id}`, { 
+            method: "DELETE", 
+            headers: getAuthHeaders() 
+        });
         return await response.json();
     } catch (error) { 
         console.error("[DX Alert] データ削除エラー:", error);
@@ -153,7 +185,13 @@ export async function deleteDiaryApi(id) {
 
 export async function toggleLocalStatusApi(shopId, isLocal) {
     try {
-        const response = await fetch(API_URL, { method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ action: "toggle_local", shopId: shopId, isLocal: isLocal }) });
+        // 旧: action="toggle_local" -> 新: /api/shops/local-status (POST)
+        // ※ payloadから不要になった action キーを削除
+        const response = await fetch(`${API_BASE}/api/shops/local-status`, { 
+            method: "POST", 
+            headers: getAuthHeaders(), 
+            body: JSON.stringify({ shopId: shopId, isLocal: isLocal }) 
+        });
         return await response.json();
     } catch (error) { 
         console.error("[DX Alert] ローカルステータス更新エラー:", error);
@@ -163,7 +201,11 @@ export async function toggleLocalStatusApi(shopId, isLocal) {
 
 export async function upgradeToAdminApi() {
     try {
-        const response = await fetch(API_URL, { method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ action: "upgrade_admin" }) });
+        // 旧: action="upgrade_admin" -> 新: /api/users/upgrade (POST)
+        const response = await fetch(`${API_BASE}/api/users/upgrade`, { 
+            method: "POST", 
+            headers: getAuthHeaders() 
+        });
         return await response.json();
     } catch (error) { 
         console.error("[DX Alert] 権限昇格エラー:", error);
@@ -173,10 +215,11 @@ export async function upgradeToAdminApi() {
 
 export async function reportStatusApi(shopId, shopName, statusType = "crowded") {
     try {
-        const response = await fetch(API_URL, {
+        // 旧: action="report_status" -> 新: /api/statuses/report (POST)
+        const response = await fetch(`${API_BASE}/api/statuses/report`, {
             method: "POST",
             headers: getAuthHeaders(),
-            body: JSON.stringify({ action: "report_status", shopId, shopName, statusType })
+            body: JSON.stringify({ shopId, shopName, statusType })
         });
         return await response.json();
     } catch (error) {
