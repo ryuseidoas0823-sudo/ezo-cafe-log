@@ -308,6 +308,20 @@ export function updateViewMarkers(autoFit = false) {
             .catch(err => console.error("[DX Alert] ステータス取得エラー:", err))
             .finally(() => {
                 isFetchingStatuses = false;
+                // 🌟 【DX改修】通信完了後、ローディングUIを確実に消し、マップを表示する
+                const mapLoader = document.getElementById('mapLoader'); // ※HTML側のIDと一致させてください
+                const viewMapEl = document.getElementById('viewMap');
+                
+                if (mapLoader) {
+                    mapLoader.style.display = 'none';
+                }
+                if (viewMapEl) {
+                    viewMapEl.style.opacity = '1';
+                    viewMapEl.style.visibility = 'visible';
+                }
+                
+                // DOMの表示が更新された後、確実にLeafletにサイズを認識させる
+                setTimeout(() => { if (viewMap) viewMap.invalidateSize(); }, 150);
             });
     } else if (getters.getActiveStatuses().length > 0) {
         setTimeout(() => applyActiveStatuses(getters.getActiveStatuses()), 100);
@@ -617,3 +631,19 @@ window.downloadMapImage = async function() {
         btn.disabled = false;
     }
 };
+
+// ==========================================
+// 🌟 【DX改修】SPAタブ切り替え時のマップ再描画検知
+// 非表示状態（display: none）で初期化されたLeafletの描画バグを防止
+// ==========================================
+window.addEventListener('switch-tab', (e) => {
+    // タブ切り替えイベントが発火し、対象がマップだった場合
+    if (e.detail && e.detail.tab === 'map') {
+        // DOMの表示が完了するのをわずかに待ち、サイズを再計算させる
+        setTimeout(() => {
+            if (typeof viewMap !== 'undefined' && viewMap !== null) {
+                viewMap.invalidateSize();
+            }
+        }, 150);
+    }
+});
