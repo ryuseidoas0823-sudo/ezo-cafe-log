@@ -5,7 +5,6 @@
 import { getOrGenerateUserUuid } from './utils/crypto.js';
 
 // 🌟 本番環境Worker URL (業務基盤: Hono REST API対応)
-// ※ URL末尾の「/」は外し、エンドポイント側で「/api/...」と繋ぐ設計に統一
 const API_BASE = "https://cafe-pipeline.ryusei-doas-0823.workers.dev"; 
 
 // 🛡️ 内部向けヘッダー生成関数 (ゼロトラストベースの認証・UUID付与)
@@ -26,6 +25,10 @@ export async function fetchDiariesApi() {
             method: "GET", 
             headers: getAuthHeaders() 
         });
+        if (!response.ok) {
+            console.warn(`[DX Alert] 履歴取得エラー (HTTP ${response.status})`);
+            return [];
+        }
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         return data; 
@@ -41,11 +44,15 @@ export async function fetchMasterShopsApi() {
             method: "GET", 
             headers: getAuthHeaders() 
         });
+        if (!response.ok) {
+            console.warn(`[DX Alert] マスタ全件取得エラー (HTTP ${response.status})`);
+            return [];
+        }
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         return data; 
     } catch (error) { 
-        console.error("[DX Alert] マスタ全件取得エラー:", error); 
+        console.error("[DX Alert] マスタ全件取得例外:", error); 
         return [];
     }
 }
@@ -56,11 +63,15 @@ export async function searchMasterApi(query) {
             method: "GET", 
             headers: getAuthHeaders() 
         });
+        if (!response.ok) {
+            console.warn(`[DX Alert] マスタ検索エラー (HTTP ${response.status})`);
+            return [];
+        }
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         return data;
     } catch (error) { 
-        console.error("[DX Alert] マスタ検索エラー:", error); 
+        console.error("[DX Alert] マスタ検索例外:", error); 
         return []; 
     }
 }
@@ -71,10 +82,14 @@ export async function fetchMeApi() {
             method: "GET", 
             headers: getAuthHeaders() 
         });
+        if (!response.ok) {
+            console.warn(`[DX Alert] ユーザー情報取得エラー (HTTP ${response.status})`);
+            return null;
+        }
         const data = await response.json();
         return data.error ? null : data;
     } catch (error) { 
-        console.error("[DX Alert] ユーザー情報取得エラー:", error); 
+        console.error("[DX Alert] ユーザー情報取得例外:", error); 
         return null; 
     }
 }
@@ -85,45 +100,54 @@ export async function fetchShopAnalyticsApi(shopId, shopName) {
         if (shopId) params.append("shop_id", shopId);
         if (shopName) params.append("shop_name", shopName);
         
-        // 旧: ?action=get_shop_analytics -> 新: /api/analytics/shop
         const response = await fetch(`${API_BASE}/api/analytics/shop?${params.toString()}`, { 
             method: "GET", 
             headers: getAuthHeaders() 
         });
+        if (!response.ok) {
+            console.warn(`[DX Alert] 店舗分析データ取得エラー (HTTP ${response.status})`);
+            return null;
+        }
         const data = await response.json();
         return data.error ? null : data;
     } catch (error) { 
-        console.error("[DX Alert] 店舗分析データ取得エラー:", error); 
+        console.error("[DX Alert] 店舗分析データ取得例外:", error); 
         return null; 
     }
 }
 
 export async function fetchGhostPinsApi() {
     try {
-        // 旧: ?action=get_ghost_pins -> 新: /api/pins/ghost
         const response = await fetch(`${API_BASE}/api/pins/ghost?_t=${Date.now()}`, { 
             method: "GET", 
             headers: getAuthHeaders() 
         });
+        if (!response.ok) {
+            console.warn(`[DX Alert] ゴーストピン取得エラー (HTTP ${response.status})`);
+            return [];
+        }
         const data = await response.json();
         return data.error ? [] : data;
     } catch (error) { 
-        console.error("[DX Alert] ゴーストピン取得エラー:", error); 
+        console.error("[DX Alert] ゴーストピン取得例外:", error); 
         return []; 
     }
 }
 
 export async function fetchActiveStatusesApi() {
     try {
-        // 旧: ?action=get_active_statuses -> 新: /api/statuses/active
         const response = await fetch(`${API_BASE}/api/statuses/active?_t=${Date.now()}`, {
             method: "GET",
             headers: getAuthHeaders()
         });
+        if (!response.ok) {
+            console.warn(`[DX Alert] アクティブステータス取得エラー (HTTP ${response.status})`);
+            return [];
+        }
         const data = await response.json();
         return data.error ? [] : data;
     } catch (error) {
-        console.error("[DX Alert] アクティブステータス取得エラー:", error);
+        console.error("[DX Alert] アクティブステータス取得例外:", error);
         return [];
     }
 }
@@ -136,17 +160,20 @@ export async function fetchB2bAnalyticsApi(shopId) {
     try {
         if (!shopId) throw new Error("shopIdが指定されていません");
         
-        // 旧: ?action=get_b2b_analytics -> 新: /api/analytics/b2b
         const response = await fetch(`${API_BASE}/api/analytics/b2b?shop_id=${shopId}&_t=${Date.now()}`, {
             method: "GET",
             headers: getAuthHeaders()
         });
+        if (!response.ok) {
+            console.warn(`[DX Alert] B2Bアナリティクス取得エラー (HTTP ${response.status})`);
+            return null;
+        }
         const data = await response.json();
         
         if (data.error) throw new Error(data.error);
         return data;
     } catch (error) {
-        console.error("[DX Alert] B2Bアナリティクス取得エラー:", error);
+        console.error("[DX Alert] B2Bアナリティクス取得例外:", error);
         return null;
     }
 }
@@ -157,15 +184,15 @@ export async function fetchB2bAnalyticsApi(shopId) {
 
 export async function saveDiaryApi(payload) {
     try {
-        // 旧: API_URL (action payload) -> 新: /api/diaries (POST)
         const response = await fetch(`${API_BASE}/api/diaries`, { 
             method: "POST", 
             headers: getAuthHeaders(), 
             body: JSON.stringify(payload) 
         });
+        if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
         return await response.json();
     } catch (error) { 
-        console.error("[DX Alert] データ保存エラー:", error);
+        console.error("[DX Alert] データ保存例外:", error);
         return { success: false, error: "通信に失敗しました" }; 
     }
 }
@@ -176,54 +203,54 @@ export async function deleteDiaryApi(id) {
             method: "DELETE", 
             headers: getAuthHeaders() 
         });
+        if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
         return await response.json();
     } catch (error) { 
-        console.error("[DX Alert] データ削除エラー:", error);
+        console.error("[DX Alert] データ削除例外:", error);
         return { success: false, error: "通信エラーが発生しました。" }; 
     }
 }
 
 export async function toggleLocalStatusApi(shopId, isLocal) {
     try {
-        // 旧: action="toggle_local" -> 新: /api/shops/local-status (POST)
-        // ※ payloadから不要になった action キーを削除
         const response = await fetch(`${API_BASE}/api/shops/local-status`, { 
             method: "POST", 
             headers: getAuthHeaders(), 
             body: JSON.stringify({ shopId: shopId, isLocal: isLocal }) 
         });
+        if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
         return await response.json();
     } catch (error) { 
-        console.error("[DX Alert] ローカルステータス更新エラー:", error);
+        console.error("[DX Alert] ローカルステータス更新例外:", error);
         return { success: false, error: "通信に失敗しました" }; 
     }
 }
 
 export async function upgradeToAdminApi() {
     try {
-        // 旧: action="upgrade_admin" -> 新: /api/users/upgrade (POST)
         const response = await fetch(`${API_BASE}/api/users/upgrade`, { 
             method: "POST", 
             headers: getAuthHeaders() 
         });
+        if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
         return await response.json();
     } catch (error) { 
-        console.error("[DX Alert] 権限昇格エラー:", error);
+        console.error("[DX Alert] 権限昇格例外:", error);
         return { success: false, error: "通信エラー" }; 
     }
 }
 
 export async function reportStatusApi(shopId, shopName, statusType = "crowded") {
     try {
-        // 旧: action="report_status" -> 新: /api/statuses/report (POST)
         const response = await fetch(`${API_BASE}/api/statuses/report`, {
             method: "POST",
             headers: getAuthHeaders(),
             body: JSON.stringify({ shopId, shopName, statusType })
         });
+        if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
         return await response.json();
     } catch (error) {
-        console.error("[DX Alert] ステータス報告エラー:", error);
+        console.error("[DX Alert] ステータス報告例外:", error);
         return { success: false, error: "通信エラー" };
     }
 }
