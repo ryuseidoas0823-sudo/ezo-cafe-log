@@ -232,7 +232,7 @@ async function handlePhotoSelection(e) {
     }
 }
 
-// 📦 一括アップロード (直列処理によるメモリ保護)
+// 📦 一括アップロード (🚀 DX改善: Promise.allによる超高速並列処理)
 async function handleBulkUpload(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -243,38 +243,48 @@ async function handleBulkUpload(e) {
 
     const bulkStatusEl = document.getElementById('bulkStatus');
     e.target.disabled = true; 
-
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if(bulkStatusEl) { 
-            bulkStatusEl.innerText = `📦 一括登録中... (${i + 1} / ${files.length} 枚目)`; 
-            bulkStatusEl.style.color = "#8e44ad"; 
-        }
-
-        const base64 = await resizeImageAsync(file);
-        const { lat, lng, visitedAt, temp } = await extractExifAndWeather(file);
-
-        const payload = {
-            id: null, shopId: null, shopName: "未整理の写真", comment: "", visitedAt: visitedAt, tags: "", 
-            imageBase64: [base64], 
-            lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
-            userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
-            userUuid: localStorage.getItem('ezo_user_uuid'), isPublic: 0 
-        };
-        await saveDiaryApi(payload);
-    }
-
     if(bulkStatusEl) { 
-        bulkStatusEl.innerText = "✅ 全ての一括登録が完了しました！"; 
-        bulkStatusEl.style.color = "#27ae60"; 
+        bulkStatusEl.innerText = `📦 ${files.length}枚の写真を一括処理中...`; 
+        bulkStatusEl.style.color = "#3498db"; 
     }
-    e.target.value = ''; e.target.disabled = false;
-    
-    setTimeout(() => {
-        if (bulkStatusEl) bulkStatusEl.innerText = "";
-        refreshHistoryList();
-        window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'history' } }));
-    }, 1200);
+
+    try {
+        const uploadPromises = Array.from(files).map(async (file) => {
+            const base64 = await resizeImageAsync(file);
+            const { lat, lng, visitedAt, temp } = await extractExifAndWeather(file);
+
+            const payload = {
+                id: null, shopId: null, shopName: "未整理の写真", comment: "", visitedAt: visitedAt, tags: "", 
+                imageBase64: [base64], 
+                lat: lat, lng: lng, temperature: temp, weatherIcon: "📦", 
+                userGender: localStorage.getItem('ezo_gender') || "未設定", userAge: localStorage.getItem('ezo_age') || "未設定",
+                userUuid: localStorage.getItem('ezo_user_uuid'), isPublic: 0 
+            };
+            return saveDiaryApi(payload);
+        });
+
+        // クラウドの並列処理能力を活かし、全ファイルを一気に送信
+        await Promise.all(uploadPromises);
+
+        if(bulkStatusEl) { 
+            bulkStatusEl.innerText = "✅ 全ての一括登録が完了しました！"; 
+            bulkStatusEl.style.color = "#27ae60"; 
+        }
+    } catch (error) {
+        console.error("[DX Alert] 一括アップロード処理エラー:", error);
+        if(bulkStatusEl) {
+            bulkStatusEl.innerText = "❌ アップロード中にエラーが発生しました。";
+            bulkStatusEl.style.color = "#e74c3c";
+        }
+    } finally {
+        e.target.value = ''; 
+        e.target.disabled = false;
+        setTimeout(() => {
+            if (bulkStatusEl) bulkStatusEl.innerText = "";
+            refreshHistoryList();
+            window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'history' } }));
+        }, 1200);
+    }
 }
 
 // ✍️ 写真スキップ処理
