@@ -1,21 +1,45 @@
 // ==========================================
-// 📚 src/components/b2c/list.js (フリックUI＆ドット連動 完全対応版)
+// 📚 src/components/b2c/list.js (DX強化・パフォーマンス最適化版)
+// 責務: 履歴リストの描画、フィルター処理、イベント統合
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
 import { deleteDiaryApi, fetchDiariesApi } from '../../api.js';
 
-// タイポグラフィ画像の生成結果を保持するキャッシュ（パフォーマンス改善）
+// タイポグラフィ画像の生成結果を保持するキャッシュ
 const typographyCache = new Map();
 
 /**
  * 履歴タブの初期化
  */
 export function initHistoryTab() {
+    // 🏷️ タグフィルターの監視
     const tagFilterEl = document.getElementById('tagFilter');
-    if (tagFilterEl) {
+    if (tagFilterEl && !tagFilterEl.dataset.listened) {
         tagFilterEl.addEventListener('change', filterDiaries);
+        tagFilterEl.dataset.listened = "true";
     }
+
+    // 📦 未整理フィルターの監視（業務効率化用）
+    const unorganizedFilterEl = document.getElementById('unorganizedFilter');
+    if (unorganizedFilterEl && !unorganizedFilterEl.dataset.listened) {
+        unorganizedFilterEl.addEventListener('change', filterDiaries);
+        unorganizedFilterEl.dataset.listened = "true";
+    }
+
+    // 🌟 改善: イベントデリゲーション（親要素で一括してクリックイベントを監視）
+    const container = document.getElementById('diariesList');
+    if (container && !container.dataset.delegated) {
+        container.addEventListener('click', (e) => {
+            if (e.target.classList.contains('data-delete-btn')) {
+                deleteDiary(e.target.dataset.id);
+            } else if (e.target.classList.contains('data-edit-btn')) {
+                window.dispatchEvent(new CustomEvent('edit-diary', { detail: { id: e.target.dataset.id } }));
+            }
+        });
+        container.dataset.delegated = "true";
+    }
+
     refreshHistoryList();
 }
 
@@ -27,7 +51,7 @@ export async function refreshHistoryList() {
     mutators.setDiaries(diaries);
     
     renderTagClouds();
-    renderDiariesList(getters.getAllDiaries());
+    filterDiaries(); // 現在のフィルター状態を適用して描画
 }
 
 /**
@@ -70,18 +94,25 @@ export function renderTagClouds() {
 }
 
 /**
- * ドロップダウンの選択に応じてリストをフィルタリングする
+ * ドロップダウンとチェックボックスの選択に応じてリストをフィルタリングする
  */
 function filterDiaries() {
-    const selectedTag = document.getElementById('tagFilter').value;
-    mutators.setTagFilter(selectedTag);
+    const selectedTag = document.getElementById('tagFilter')?.value || "";
+    const isUnorganizedOnly = document.getElementById('unorganizedFilter')?.checked || false;
     
-    if (selectedTag === "") {
-        renderDiariesList(getters.getAllDiaries());
-    } else {
-        const filtered = getters.getAllDiaries().filter(diary => parseTags(diary.tags).includes(selectedTag));
-        renderDiariesList(filtered);
+    mutators.setTagFilter(selectedTag);
+    let filtered = getters.getAllDiaries();
+    
+    if (selectedTag !== "") {
+        filtered = filtered.filter(diary => parseTags(diary.tags).includes(selectedTag));
     }
+    
+    // 🌟 改善: 未整理バックログの抽出処理
+    if (isUnorganizedOnly) {
+        filtered = filtered.filter(diary => diary.weather_icon === "📦");
+    }
+    
+    renderDiariesList(filtered);
 }
 
 /**
@@ -90,7 +121,11 @@ function filterDiaries() {
 export function renderDiariesList(diaries) {
     const container = document.getElementById('diariesList');
     if (!container) return;
+    
     container.innerHTML = "";
+    
+    // 🌟 改善: DocumentFragmentを使用してDOMへの書き込みを1回にまとめる（高速化）
+    const fragment = document.createDocumentFragment();
 
     diaries.forEach(diary => {
         const isClosed = diary.weather_icon === "🚫";
@@ -104,16 +139,13 @@ export function renderDiariesList(diaries) {
             }
         });
 
-        // 🌟 画像データのパース
         let imageUrls = [];
         const rawImageData = diary.image_base64 || diary.image_url;
         
         if (rawImageData) {
             try {
                 imageUrls = JSON.parse(rawImageData);
-                if (!Array.isArray(imageUrls)) {
-                    imageUrls = [rawImageData]; 
-                }
+                if (!Array.isArray(imageUrls)) imageUrls = [rawImageData]; 
             } catch (e) {
                 imageUrls = [rawImageData];
             }
@@ -122,10 +154,8 @@ export function renderDiariesList(diaries) {
         let imageHTML = "";
         if (imageUrls.length > 0) {
             if (imageUrls.length === 1) {
-                // 単一画像
                 imageHTML = `<img src="${escapeHTML(imageUrls[0])}" class="diary-image" loading="lazy" alt="カフェの写真">`;
             } else {
-                // 🌟 新仕様：複数画像（ラッパーとドットインジケーターを含める）
                 imageHTML = `
                     <div class="flick-wrapper">
                         <div class="flick-container">
@@ -138,7 +168,6 @@ export function renderDiariesList(diaries) {
                 `;
             }
         } else {
-            // 画像がない場合はタイポグラフィ生成
             const typoBase64 = generateTypographyBase64(diary.shop_name, diary.tags, diary.weather_icon);
             imageHTML = `<img src="${typoBase64}" class="diary-image" loading="lazy" alt="タイポグラフィカード">`;
         }
@@ -168,7 +197,6 @@ export function renderDiariesList(diaries) {
             </div>
         `;
         
-        // 🌟 フリック時のドット連動ロジック
         if (imageUrls.length > 1) {
             const flickContainer = card.querySelector('.flick-container');
             if (flickContainer) {
@@ -177,7 +205,6 @@ export function renderDiariesList(diaries) {
                     const item = c.querySelector('.flick-item');
                     if (!item) return;
                     
-                    // スクロール量と要素幅＋ギャップ(8px)から現在のインデックスを算出
                     const itemWidthWithGap = item.clientWidth + 8;
                     const index = Math.round(c.scrollLeft / itemWidthWithGap);
                     
@@ -185,24 +212,27 @@ export function renderDiariesList(diaries) {
                     dots.forEach((dot, i) => {
                         dot.classList.toggle('active', i === index);
                     });
-                }, { passive: true }); // passive: true でスクロールパフォーマンスを最適化
+                }, { passive: true }); 
             }
         }
 
-        // イベントリスナー設定
-        card.querySelector('.data-delete-btn').addEventListener('click', () => deleteDiary(diary.id));
-        card.querySelector('.data-edit-btn').addEventListener('click', () => {
-            const event = new CustomEvent('edit-diary', { detail: { id: diary.id } });
-            window.dispatchEvent(event);
-        });
-
-        container.appendChild(card);
+        // イベントリスナーの個別付与を廃止し、フラグメントに追加
+        fragment.appendChild(card);
     });
+    
+    // 全カードを1回の処理でDOMに追加
+    container.appendChild(fragment);
+    
+    // リストが更新されたら初期状態では非表示になっているコンテナを表示する
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        const loader = document.getElementById('history-loading');
+        if (loader) loader.style.display = 'none';
+    }
 }
 
 /**
  * 写真がないとき用のタイポグラフィ生成 (Canvas API)
- * 🌟 パフォーマンス改善：キャッシュ機能を追加
  */
 function generateTypographyBase64(shopName, tags, weatherIcon) {
     const cacheKey = `${shopName}_${tags}_${weatherIcon}`;
@@ -214,7 +244,7 @@ function generateTypographyBase64(shopName, tags, weatherIcon) {
     canvas.width = 800; canvas.height = 450;
     const ctx = canvas.getContext('2d');
     const tagList = parseTags(tags);
-    const manualTags = tagList.filter(t => !t.startsWith('🤖') && !t.startsWith('🚨') && t !== '🥡テイクアウト' && t !== '☕️店内' && t !== '🛍️豆・グッズ' && t !== '🎪間借り・無店舗');
+    const manualTags = tagList.filter(t => !t.startsWith('🤖') && !t.startsWith('🚨') && !['🥡テイクアウト', '☕️店内', '🛍️豆・グッズ', '🎪間借り・無店舗'].includes(t));
     const mainTag = manualTags.length > 0 ? manualTags[0] : (tagList[0] || "カフェ");
     const baseColor = getColorFromTag(mainTag);
 
@@ -235,7 +265,7 @@ function generateTypographyBase64(shopName, tags, weatherIcon) {
     ctx.fillText(manualTags.length > 0 ? manualTags.join(' / ') : '日常の記録', 400, 260);
 
     const base64 = canvas.toDataURL('image/jpeg', 0.8);
-    typographyCache.set(cacheKey, base64); // キャッシュに保存
+    typographyCache.set(cacheKey, base64); 
     return base64;
 }
 

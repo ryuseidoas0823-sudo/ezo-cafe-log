@@ -4,17 +4,15 @@
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
-import { fetchActiveStatusesApi, fetchGhostPinsApi, reportStatusApi, fetchShopAnalyticsApi, toggleLocalStatusApi, saveDiaryApi, deleteDiaryApi } from '../../api.js';
+import { fetchActiveStatusesApi, reportStatusApi, fetchShopAnalyticsApi, saveDiaryApi, deleteDiaryApi } from '../../api.js';
 
 // 📍 拠点座標
 const HOME_LAT = 43.0600;
 const HOME_LNG = 141.3500;
 let viewMap = null;
-let mapMarkers = [];
+let markerLayerGroup = null; // 🌟 改善: マーカーを一括管理・高速描画するためのレイヤーグループ
 
-let isFetchingGhosts = false;
 let isFetchingStatuses = false;
-
 window.showMasterShops = false; 
 const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
 
@@ -33,8 +31,11 @@ export function initViewMap() {
 
     if (!viewMap) {
         viewMap = L.map('viewMap', {
-            maxBounds: HOKKAIDO_BOUNDS, maxBoundsViscosity: 1.0, minZoom: 7, maxZoom: 19,
-            preferCanvas: true 
+            maxBounds: HOKKAIDO_BOUNDS, 
+            maxBoundsViscosity: 1.0, 
+            minZoom: 7, 
+            maxZoom: 19,
+            preferCanvas: true // 🌟 改善: 大量マーカー描画時のパフォーマンスを向上させるCanvasモード
         }).setView([HOME_LAT, HOME_LNG], 13);
         
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
@@ -42,17 +43,15 @@ export function initViewMap() {
             crossOrigin: true,
             attribution: '&copy; OpenStreetMap &copy; CARTO'
         }).addTo(viewMap);
+
+        // 🌟 改善: レイヤーグループの初期化
+        markerLayerGroup = L.layerGroup().addTo(viewMap);
         
         const MasterToggleControl = L.Control.extend({
             options: { position: 'topright' },
             onAdd: function() {
                 const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-                div.style.backgroundColor = 'white';
-                div.style.padding = '5px 10px';
-                div.style.borderRadius = '8px';
-                div.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-                div.style.marginRight = '10px';
-                div.style.marginTop = '10px';
+                div.style.cssText = 'background-color: white; padding: 5px 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); margin-right: 10px; margin-top: 10px;';
                 div.innerHTML = `<label style="cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; gap:5px; color:#2c3e50;">
                     <input type="checkbox" id="master-shop-toggle" ${window.showMasterShops ? 'checked' : ''}> 🏪 マスタ表示
                 </label>`;
@@ -62,18 +61,20 @@ export function initViewMap() {
         });
         viewMap.addControl(new MasterToggleControl());
 
+        // 🌟 改善: イベントリスナーの多重登録を防止
+        viewMap.off('zoomend').on('zoomend', () => updateViewMarkers(false));
+        viewMap.off('click').on('click', closeBottomSheet);
+
         setTimeout(() => {
             const toggle = document.getElementById('master-shop-toggle');
-            if (toggle) {
+            if (toggle && !toggle.dataset.listened) {
                 toggle.addEventListener('change', (e) => {
                     window.showMasterShops = e.target.checked;
                     updateViewMarkers(false);
                 });
+                toggle.dataset.listened = "true";
             }
         }, 100);
-
-        viewMap.on('zoomend', () => { updateViewMarkers(false); });
-        viewMap.on('click', closeBottomSheet);
 
         const mapTagFilter = document.getElementById('mapTagFilter');
         if (mapTagFilter && !mapTagFilter.dataset.listened) {
@@ -81,7 +82,6 @@ export function initViewMap() {
             mapTagFilter.dataset.listened = "true";
         }
 
-        // 🌟 DX実践: インクリメンタルサーチの負荷をDebounceで抑制
         const mapSearchInput = document.getElementById('mapSearchInput');
         if (mapSearchInput && !mapSearchInput.dataset.listened) {
             mapSearchInput.addEventListener('input', debounce(() => updateViewMarkers(false), 300));
@@ -104,13 +104,11 @@ export function toggleMapFilter(type) {
 }
 
 export function updateViewMarkers(autoFit = false) {
-    if (!viewMap) return;
+    if (!viewMap || !markerLayerGroup) return;
     const currentZoom = viewMap.getZoom();
     
-    mapMarkers.forEach(marker => {
-        if (viewMap.hasLayer(marker)) viewMap.removeLayer(marker);
-    });
-    mapMarkers = []; 
+    // 🌟 改善: ループで消すのではなく、レイヤーグループごと一瞬でクリア（超高速化）
+    markerLayerGroup.clearLayers();
     
     const bounds = L.latLngBounds(); 
     const locationMap = {};
@@ -254,16 +252,16 @@ export function updateViewMarkers(autoFit = false) {
         
         if (mainShop.isClosed) {
             let customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: #a67c52; position:relative; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">🎞️</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
-            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 0.85}).addTo(viewMap);
+            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 0.85});
         } else if (mainShop.isGracePeriod) {
             let customIcon = L.divIcon({ html: `<div class="emoji-pin" style="background-color: #7f8c8d; position:relative;">👻</div>`, className: 'custom-div-icon', iconSize: [36, 36], iconAnchor: [18, 18] });
-            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 0.6}).addTo(viewMap);
+            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 0.6});
         } else if (mainShop.isMasterOnly) {
             if (!window.showMasterShops) return; 
             if (currentZoom < 12) return; 
             marker = L.circleMarker([loc.lat, loc.lng], {
                 radius: 5, fillColor: '#bdc3c7', color: '#ffffff', weight: 1.5, opacity: 1, fillOpacity: 0.9
-            }).addTo(viewMap);
+            });
         } else {
             let emoji = mainShop.hasGoods ? '🛍️' : (mainShop.hasTakeout ? '🥡' : '☕️');
             let bgColor = getColorFromTag(mainShop.mainTag); 
@@ -280,11 +278,13 @@ export function updateViewMarkers(autoFit = false) {
             const badgeHtml = locTotalVisits > 0 ? `<div style="position:absolute; bottom:-2px; right:-2px; background:#e74c3c; color:white; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:bold; line-height:20px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index:10;">${locTotalVisits}</div>` : '';
             
             let customIcon = L.divIcon({ html: `<div style="background-color: ${bgColor}; width: ${scaledSize}px; height: ${scaledSize}px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: ${Math.round(18 * scale)}px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); position: relative; transition: all 0.3s ease;">${emoji}${badgeHtml}</div>`, className: 'custom-div-icon', iconSize: [scaledSize, scaledSize], iconAnchor: [anchorSize, anchorSize] });
-            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 1.0}).addTo(viewMap);
+            marker = L.marker([loc.lat, loc.lng], {icon: customIcon, opacity: 1.0});
         }
         
         marker.shopData = mainShop;
-        mapMarkers.push(marker);
+        
+        // 🌟 改善: viewMapに直接描画するのではなく、LayerGroupに追加する
+        marker.addTo(markerLayerGroup);
         
         marker.on('click', () => { openShopBottomSheet(mainShop, shopList, loc, locTotalVisits); });
         
@@ -298,7 +298,6 @@ export function updateViewMarkers(autoFit = false) {
         viewMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
     }
 
-    // 🌟 DX実践: 状態解放とエラーハンドリングの徹底
     if (!isFetchingStatuses) {
         isFetchingStatuses = true;
         fetchActiveStatusesApi()
@@ -316,8 +315,10 @@ export function updateViewMarkers(autoFit = false) {
 }
 
 function applyActiveStatuses(statuses) {
-    if (!statuses || statuses.length === 0) return;
-    mapMarkers.forEach(marker => {
+    if (!statuses || statuses.length === 0 || !markerLayerGroup) return;
+    
+    // 🌟 改善: レイヤーグループから安全にマーカーを抽出
+    markerLayerGroup.eachLayer(marker => {
         if (!marker.shopData) return; 
         const isHot = statuses.some(st => (st.shop_id && st.shop_id === marker.shopData.shopId) || (!st.shop_id && st.shop_name === marker.shopData.shopName));
         if (isHot) {
@@ -347,31 +348,30 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     const content = document.getElementById('bottomSheetContent');
     const currentUser = getters.getCurrentUser();
     
-    let html = `<div style="text-align:center;">`;
-    html += `<h2 style="margin: 0 0 5px 0; color:#2c3e50; font-size: 1.4rem;">${escapeHTML(mainShop.shopName)}</h2>`;
-    
-    let servicesHtml = '<div style="margin: 8px 0 15px 0; font-size: 0.9rem; color: #7f8c8d;">✨ 対応: ';
-    if (mainShop.hasDining) servicesHtml += '☕️店内 ';
-    if (mainShop.hasTakeout) servicesHtml += '🥡テイクアウト ';
-    if (mainShop.hasGoods) servicesHtml += '🛍️豆・グッズ ';
-    if (mainShop.hasEvent) servicesHtml += '🎪無店舗/イベント ';
-    if (!mainShop.hasDining && !mainShop.hasTakeout && !mainShop.hasGoods && !mainShop.hasEvent) servicesHtml += '🏳️ 未確認';
-    servicesHtml += '</div>';
-    html += servicesHtml;
+    // 🌟 改善: 文字列結合を整理し、ブロックごとに分割（保守性の向上）
+    const generateHeaderHtml = () => {
+        let servicesHtml = '<div style="margin: 8px 0 15px 0; font-size: 0.9rem; color: #7f8c8d;">✨ 対応: ';
+        if (mainShop.hasDining) servicesHtml += '☕️店内 ';
+        if (mainShop.hasTakeout) servicesHtml += '🥡テイクアウト ';
+        if (mainShop.hasGoods) servicesHtml += '🛍️豆・グッズ ';
+        if (mainShop.hasEvent) servicesHtml += '🎪無店舗/イベント ';
+        if (!mainShop.hasDining && !mainShop.hasTakeout && !mainShop.hasGoods && !mainShop.hasEvent) servicesHtml += '🏳️ 未確認';
+        servicesHtml += '</div>';
+        return `<div style="text-align:center;"><h2 style="margin: 0 0 5px 0; color:#2c3e50; font-size: 1.4rem;">${escapeHTML(mainShop.shopName)}</h2>${servicesHtml}`;
+    };
 
-    if (shopList.length > 1) {
-        html += `<div style="margin: 10px 0; padding: 12px; background: rgba(244,244,249,0.7); border-radius: 12px; font-size: 0.85rem; text-align: left;">`;
-        html += `<p style="margin: 0 0 8px 0; font-weight: bold; color: #7f8c8d;">🏢 歴代・併設の店舗</p>`;
+    const generateHistoryHtml = () => {
+        if (shopList.length <= 1) return '';
+        let listHtml = `<div style="margin: 10px 0; padding: 12px; background: rgba(244,244,249,0.7); border-radius: 12px; font-size: 0.85rem; text-align: left;">
+                        <p style="margin: 0 0 8px 0; font-weight: bold; color: #7f8c8d;">🏢 歴代・併設の店舗</p>`;
         shopList.forEach(s => {
             let badge = s.isClosed ? '<span style="color:#a67c52;">[🎞️思い出]</span>' : (s.isGracePeriod ? '<span style="color:#f39c12;">[👻休業中]</span>' : '<span style="color:#27ae60;">[☕️現存]</span>');
-            html += `<div style="margin-bottom: 6px;">${badge} ${escapeHTML(s.shopName)}</div>`;
+            listHtml += `<div style="margin-bottom: 6px;">${badge} ${escapeHTML(s.shopName)}</div>`;
         });
-        html += `</div>`;
-    }
+        return listHtml + `</div>`;
+    };
 
     let statusText = ''; 
-    let actionBtn = `<div style="margin-top:15px; border-top:1px solid rgba(0,0,0,0.1); padding-top:15px; display:flex; flex-direction:column; gap:10px;">`;
-
     if (mainShop.isClosed) { 
         statusText = '<span style="color:#a67c52; font-size:1.1rem;">🎞️ 記憶に残る思い出の地</span>'; 
     } else if (mainShop.isGracePeriod) {
@@ -383,30 +383,31 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         else statusText = '💭 行きたいお店に登録中';
     }
 
-    if (!mainShop.isClosed && !mainShop.isGracePeriod) {
-        if (mainShop.isMasterOnly || mainShop.isBookmarkOnly) {
-            actionBtn += `<button onclick="window.recordFromMap('${mainShop.shopId || ''}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng})" style="background:#27ae60; border:none; color:white; padding:12px; border-radius:8px; font-weight:bold; cursor:pointer;">📝 このお店を開拓・記録する</button>`;
+    const generateActionButtonsHtml = () => {
+        let btnHtml = `<div style="margin-top:15px; border-top:1px solid rgba(0,0,0,0.1); padding-top:15px; display:flex; flex-direction:column; gap:10px;">`;
+        if (!mainShop.isClosed && !mainShop.isGracePeriod) {
+            if (mainShop.isMasterOnly || mainShop.isBookmarkOnly) {
+                btnHtml += `<button onclick="window.recordFromMap('${mainShop.shopId || ''}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng})" style="background:#27ae60; border:none; color:white; padding:12px; border-radius:8px; font-weight:bold; cursor:pointer;">📝 このお店を開拓・記録する</button>`;
+            }
+            if (!mainShop.isDraftOnly && !mainShop.isBookmarkOnly) {
+                btnHtml += `
+                <div style="margin-top:5px; background: rgba(231, 76, 60, 0.05); padding: 12px; border-radius: 12px; border: 1px solid rgba(231, 76, 60, 0.2); text-align: center;">
+                    <button onclick="window.reportShopStatus('${mainShop.shopId || ''}', '${escapeHTML(mainShop.shopName)}')" style="background:#e74c3c; border:none; color:white; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);">🔥 今、混んでる！と報告する</button>
+                </div>`;
+            }
         }
-        
-        if (!mainShop.isDraftOnly && !mainShop.isBookmarkOnly) {
-            actionBtn += `
-            <div style="margin-top:5px; background: rgba(231, 76, 60, 0.05); padding: 12px; border-radius: 12px; border: 1px solid rgba(231, 76, 60, 0.2); text-align: center;">
-                <button onclick="window.reportShopStatus('${mainShop.shopId || ''}', '${escapeHTML(mainShop.shopName)}')" style="background:#e74c3c; border:none; color:white; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);">🔥 今、混んでる！と報告する</button>
-            </div>`;
+        if (!mainShop.isClosed) {
+            let closeBtnColor = mainShop.isGracePeriod ? "#e74c3c" : "#95a5a6";
+            let closeBtnText = mainShop.isGracePeriod ? "🚨 閉店報告を取り消す" : "🚫 閉店・移転を報告する";
+            let closeAction = mainShop.isGracePeriod ? `window.cancelCloseReport(${mainShop.closedDiaryId})` : `window.reportClosed('${mainShop.shopId || mainShop.shopName}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng})`;
+            btnHtml += `<a href="#" onclick="${closeAction}; return false;" style="color:${closeBtnColor}; font-size:0.85rem; text-decoration:none; text-align:center; margin-top:5px;">${closeBtnText}</a>`;
         }
-    }
+        return btnHtml + `</div>`;
+    };
 
-    if (!mainShop.isClosed) {
-        let closeBtnColor = mainShop.isGracePeriod ? "#e74c3c" : "#95a5a6";
-        let closeBtnText = mainShop.isGracePeriod ? "🚨 閉店報告を取り消す" : "🚫 閉店・移転を報告する";
-        let closeAction = mainShop.isGracePeriod ? `window.cancelCloseReport(${mainShop.closedDiaryId})` : `window.reportClosed('${mainShop.shopId || mainShop.shopName}', '${escapeHTML(mainShop.shopName)}', ${loc.lat}, ${loc.lng})`;
-        actionBtn += `<a href="#" onclick="${closeAction}; return false;" style="color:${closeBtnColor}; font-size:0.85rem; text-decoration:none; text-align:center; margin-top:5px;">${closeBtnText}</a>`;
-    }
-    actionBtn += `</div>`;
-
-    html += `<p style="margin: 10px 0; font-weight:bold; color:#34495e;">${statusText}</p>`;
+    let html = generateHeaderHtml() + generateHistoryHtml() + `<p style="margin: 10px 0; font-weight:bold; color:#34495e;">${statusText}</p>`;
     
-    let analyticsHtml = "";
+    // アナリティクス (Personal)
     const allDiaries = getters.getAllDiaries();
     const shopDiaries = allDiaries.filter(d =>
         ((mainShop.shopId && d.shop_id === mainShop.shopId) || (!mainShop.shopId && d.shop_name === mainShop.shopName))
@@ -417,28 +418,29 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         const tagsCount = {};
         shopDiaries.forEach(d => {
             parseTags(d.tags).forEach(t => {
-                if (!t.startsWith("🤖") && !t.startsWith("🚨") && t !== "☕️店内" && t !== "🥡テイクアウト" && t !== "🛍️豆・グッズ" && t !== "🎪間借り・無店舗") {
+                if (!t.startsWith("🤖") && !t.startsWith("🚨") && !['☕️店内','🥡テイクアウト','🛍️豆・グッズ','🎪間借り・無店舗'].includes(t)) {
                     tagsCount[t] = (tagsCount[t] || 0) + 1;
                 }
             });
         });
         const topTags = Object.entries(tagsCount).sort((a,b) => b[1] - a[1]).slice(0, 5); 
 
-        analyticsHtml += `<details style="margin-top: 15px; background: rgba(255, 255, 255, 0.7); padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05); text-align: left;"><summary style="font-size: 0.95rem; color: #2c3e50; font-weight: bold; outline: none; cursor:pointer;">📊 あなたの訪問傾向</summary><div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(0,0,0,0.1);">`;
+        html += `<details style="margin-top: 15px; background: rgba(255, 255, 255, 0.7); padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05); text-align: left;">
+            <summary style="font-size: 0.95rem; color: #2c3e50; font-weight: bold; outline: none; cursor:pointer;">📊 あなたの訪問傾向</summary>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(0,0,0,0.1);">`;
         if (topTags.length > 0) {
-            analyticsHtml += `<div style="display: flex; flex-wrap: wrap; gap: 6px;">`;
+            html += `<div style="display: flex; flex-wrap: wrap; gap: 6px;">`;
             topTags.forEach(tag => {
-                analyticsHtml += `<span style="background: ${getColorFromTag(tag[0])}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">#${escapeHTML(tag[0])} <span style="opacity: 0.8; font-size: 0.65rem;">x${tag[1]}</span></span>`;
+                html += `<span style="background: ${getColorFromTag(tag[0])}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">#${escapeHTML(tag[0])} <span style="opacity: 0.8; font-size: 0.65rem;">x${tag[1]}</span></span>`;
             });
-            analyticsHtml += `</div>`;
+            html += `</div>`;
         } else {
-            analyticsHtml += `<p style="margin: 0; font-size: 0.8rem; color: #bdc3c7;">タグの記録はまだありません</p>`;
+            html += `<p style="margin: 0; font-size: 0.8rem; color: #bdc3c7;">タグの記録はまだありません</p>`;
         }
-        analyticsHtml += `</div></details>`;
+        html += `</div></details>`;
     }
 
-    html += analyticsHtml;
-
+    // アナリティクス (B2B)
     if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'business')) {
         const safeShopId = mainShop.shopId ? `'${mainShop.shopId}'` : 'null';
         const safeShopName = `'${mainShop.shopName.replace(/'/g, "\\'")}'`;
@@ -452,15 +454,14 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         </div>`;
     }
 
-    html += actionBtn;
-    html += `</div>`;
-    
+    html += generateActionButtonsHtml() + `</div>`;
     content.innerHTML = html;
     sheet.classList.add('active');
 }
 
 // ==========================================
 // 🌐 window へのグローバル関数の公開
+// ※フロントエンド統合・将来的なモジュール化に向けて
 // ==========================================
 window.recordFromMap = function(shopId, shopName, lat, lng) {
     closeBottomSheet();

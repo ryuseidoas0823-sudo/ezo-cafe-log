@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="./style.css?v=9">
     
     <style>
-        /* 🌟 マップ用ボトムシートのCSS (ネイティブアプリ水準のUXを復旧) */
+        /* 🌟 マップ用ボトムシートのCSS */
         .bottom-sheet {
             position: fixed;
             bottom: -100%;
@@ -52,6 +52,32 @@
             align-items: center;
             justify-content: center;
             color: #7f8c8d;
+        }
+
+        /* 🌟 ローディングUI (非同期読み込み用) */
+        .loader-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 0;
+            width: 100%;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #8b5a2b; /* カフェ風のブラウン */
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 12px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -152,7 +178,7 @@
         </main>
 
         <!-- ==========================================
-             📚 2. 履歴タブ (未整理フィルター復旧)
+             📚 2. 履歴タブ (非同期読み込み対応)
              ========================================== -->
         <main id="tab-history" class="tab-content hidden" style="padding-top: 16px;">
             <div class="form-group" style="display: flex; gap: 8px; align-items: center; margin-bottom: 15px;">
@@ -165,11 +191,18 @@
                 </label>
             </div>
             
-            <div id="diariesList"></div>
+            <!-- 🌟 ローディング表示エリア -->
+            <div id="history-loading" class="loader-container">
+                <div class="spinner"></div>
+                <p>履歴データを読み込んでいます...</p>
+            </div>
+
+            <!-- 🌟 データ描画エリア (初期非表示) -->
+            <div id="diariesList" style="display: none;"></div>
         </main>
 
         <!-- ==========================================
-             🗺️ 3. マップタブ (検索＆保存機能復旧)
+             🗺️ 3. マップタブ (非同期読み込み対応)
              ========================================== -->
         <main id="tab-map" class="tab-content hidden" style="padding-top: 16px; height: calc(100vh - 150px); display: flex; flex-direction: column;">
             <div class="form-group" style="margin-bottom: 8px;">
@@ -186,8 +219,14 @@
                 📸 現在のマップを画像として保存
             </button>
 
-            <!-- viewMapに変更済の安全なコンテナ -->
-            <div id="viewMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1; border: 1px solid var(--border-color);"></div>
+            <!-- 🌟 ローディング表示エリア -->
+            <div id="map-loading" class="loader-container" style="flex-grow: 1;">
+                <div class="spinner"></div>
+                <p>マップを展開中...</p>
+            </div>
+
+            <!-- viewMapに変更済の安全なコンテナ (初期非表示) -->
+            <div id="viewMap" style="flex-grow: 1; width: 100%; border-radius: 8px; z-index: 1; border: 1px solid var(--border-color); display: none;"></div>
 
             <!-- 📸 マップ画像生成用のウォーターマーク -->
             <div id="map-watermark-template" style="display: none; position: absolute; bottom: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 9999; text-align: right; border: 2px solid #5d4037;">
