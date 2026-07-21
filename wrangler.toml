@@ -2,8 +2,8 @@
 # ⚙️ 基本設定 (Core Configuration)
 # ==========================================
 name = "cafe-pipeline"
-# Honoのエントリーポイントに合わせています (ファイル名が異なる場合は適宜変更してください)
-main = "worker.js" 
+# ▼ ここを実際のファイルの場所（srcフォルダの中）に合わせて修正します！
+main = "src/worker.js" 
 compatibility_date = "2026-07-09"
 account_id = "32baac0d4fff9a0eaaf437ec150dc723" 
 
