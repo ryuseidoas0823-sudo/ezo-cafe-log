@@ -572,11 +572,19 @@ window.cancelCloseReport = async function(diaryId) {
 window.toggleMapFilter = toggleMapFilter;
 
 // ==========================================
-// 📸 画像化機能 (堅牢化)
+// 📸 画像化機能 (堅牢化・ポカヨケ実装)
 // ==========================================
 window.downloadMapImage = async function() {
     const btn = document.getElementById('btn-save-map-image');
     if (!btn) return;
+    
+    const mapEl = document.getElementById('viewMap');
+    
+    // 🚨 破損ガード処理: マップが見えない状態（高さ0）での出力をブロック
+    if (!mapEl || mapEl.offsetHeight === 0 || mapEl.style.opacity === '0') {
+        alert("⚠️ マップの読み込みが完了していないか、表示されていません。マップが表示されてから再度お試しください。");
+        return;
+    }
 
     const originalText = btn.innerHTML;
     btn.innerHTML = "⏳ 画像を生成中...";
@@ -584,28 +592,35 @@ window.downloadMapImage = async function() {
     let controls = [];
 
     try {
-        const mapEl = document.getElementById('viewMap');
         const watermarkTemplate = document.getElementById('map-watermark-template');
+        let watermark = null;
         
-        const watermark = watermarkTemplate.cloneNode(true);
-        watermark.id = "temp-watermark";
-        watermark.style.display = "block";
-        
-        const validDiaries = getters.getAllDiaries().filter(d => 
-            d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫"
-        );
-        const uniqueShops = new Set(validDiaries.map(d => d.shop_id || d.shop_name));
-        watermark.querySelector('#watermark-shop-count').textContent = uniqueShops.size;
-        
-        mapEl.appendChild(watermark);
+        if (watermarkTemplate) {
+            watermark = watermarkTemplate.cloneNode(true);
+            watermark.id = "temp-watermark";
+            watermark.style.display = "block";
+            
+            const validDiaries = getters.getAllDiaries().filter(d => 
+                d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫"
+            );
+            const uniqueShops = new Set(validDiaries.map(d => d.shop_id || d.shop_name));
+            
+            const countEl = watermark.querySelector('#watermark-shop-count');
+            if(countEl) countEl.textContent = uniqueShops.size;
+            
+            mapEl.appendChild(watermark);
+        }
 
         controls = mapEl.querySelectorAll('.leaflet-control-container');
         controls.forEach(c => c.style.display = 'none');
 
+        // 少しだけ待機してDOMのレンダリングを安定させる（重要）
+        await new Promise(resolve => setTimeout(resolve, 200));
+
         const canvas = await html2canvas(mapEl, {
             useCORS: true,
             allowTaint: true,
-            backgroundColor: null, 
+            backgroundColor: '#f8f9fa', // 透過によるエラーを防ぐため背景色を指定
             scale: 2 
         });
 
@@ -620,11 +635,11 @@ window.downloadMapImage = async function() {
         a.click();
         document.body.removeChild(a);
 
-        mapEl.removeChild(watermark);
+        if (watermark) mapEl.removeChild(watermark);
 
     } catch (error) {
         console.error("[DX Alert] Map Image Generation Error:", error);
-        alert("画像の生成に失敗しました。タイルサーバー等のCORS制限が原因の可能性があります。");
+        alert("画像の生成に失敗しました。時間をおいて再度お試しください。");
     } finally {
         controls.forEach(c => c.style.display = '');
         btn.innerHTML = originalText;
@@ -633,17 +648,26 @@ window.downloadMapImage = async function() {
 };
 
 // ==========================================
-// 🌟 【DX改修】SPAタブ切り替え時のマップ再描画検知
-// 非表示状態（display: none）で初期化されたLeafletの描画バグを防止
+// 🌟 【DX改修】SPAタブ切り替え時の確実なマップ再描画
 // ==========================================
 window.addEventListener('switch-tab', (e) => {
-    // タブ切り替えイベントが発火し、対象がマップだった場合
     if (e.detail && e.detail.tab === 'map') {
-        // DOMの表示が完了するのをわずかに待ち、サイズを再計算させる
+        // タブが表示されるアニメーション等の時間を考慮し、少し長めに待つ（300ms）
         setTimeout(() => {
-            if (typeof viewMap !== 'undefined' && viewMap !== null) {
-                viewMap.invalidateSize();
+            const mapEl = document.getElementById('viewMap');
+            if (mapEl) {
+                // 強制的に表示状態を上書きしてLeafletにサイズを認識させる
+                mapEl.style.visibility = 'visible';
+                mapEl.style.opacity = '1';
+                mapEl.style.display = 'block';
+                
+                if (typeof viewMap !== 'undefined' && viewMap !== null) {
+                    viewMap.invalidateSize();
+                } else if (typeof initViewMap === 'function') {
+                    // もし未初期化ならここで初期化を叩く
+                    initViewMap();
+                }
             }
-        }, 150);
+        }, 300);
     }
 });

@@ -29,24 +29,22 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* スマホ閲覧最適化 兼 PC閲覧時のアプリビュー化 */
+/* ==========================================
+   ✨ 修正後: 画面幅の制限を解除し、レスポンシブ対応
+   ========================================== */
 .app-container {
-    max-width: 600px;
+    width: 100%;
+    max-width: 1200px; /* PCでの広がりすぎを防止（必要に応じて100%に変更可） */
     margin: 0 auto;
     background-color: var(--bg-color);
-    
-    /* 📱 スマホUI最適化：100vh問題の解消 (dvhの導入) */
-    min-height: 100vh; /* フォールバック */
+    min-height: 100vh; 
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
+    padding-bottom: 80px; 
     
-    padding-bottom: 80px; /* 下部ナビゲーションなどの余白 */
-
-    /* 💻 PC閲覧時の境界線を明確にし、業務ツールとしての視認性を向上 */
+    /* 業務ツールとしての視認性を維持 */
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
-    border-left: 1px solid var(--border-color);
-    border-right: 1px solid var(--border-color);
 }
 
 /* --- 2. Typography & Utilities --- */
