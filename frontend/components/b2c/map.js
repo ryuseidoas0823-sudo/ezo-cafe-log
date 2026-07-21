@@ -423,10 +423,12 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     
     // アナリティクス (Personal)
     const allDiaries = getters.getAllDiaries();
-    const shopDiaries = allDiaries.filter(d =>
-        ((mainShop.shopId && d.shop_id === mainShop.shopId) || (!mainShop.shopId && d.shop_name === mainShop.shopName))
-        && d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫"
-    );
+    const shopDiaries = allDiaries.filter(d => {
+        // IDが一致するか、または名前が一致すれば「過去の同店舗データ」として救出する
+        const isSameShop = (mainShop.shopId && d.shop_id === mainShop.shopId) || (d.shop_name === mainShop.shopName);
+        const isValidStatus = d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫";
+        return isSameShop && isValidStatus;
+    });
 
     if (shopDiaries.length > 0) {
         const tagsCount = {};
