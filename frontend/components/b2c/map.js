@@ -309,7 +309,7 @@ export function updateViewMarkers(autoFit = false) {
             .finally(() => {
                 isFetchingStatuses = false;
                 // 🌟 【DX改修】通信完了後、ローディングUIを確実に消し、マップを表示する
-                const mapLoader = document.getElementById('mapLoader'); // ※HTML側のIDと一致させてください
+                const mapLoader = document.getElementById('map-loading'); // ※HTML側のIDと一致させてください
                 const viewMapEl = document.getElementById('viewMap');
                 
                 if (mapLoader) {
