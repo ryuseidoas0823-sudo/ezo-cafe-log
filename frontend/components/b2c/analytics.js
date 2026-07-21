@@ -15,11 +15,21 @@ export function renderAnalytics() {
         d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫"
     );
 
+   
     if (validDiaries.length === 0) {
-        container.innerHTML = `<p style="text-align:center; color: var(--text-sub); margin-top: 40px; line-height: 1.8;">まだ訪問記録がありません。<br>記録をつけると、ここに分析データが表示されます☕️</p>`;
+        container.innerHTML = `
+            <div style="text-align:center; margin-top: 40px; animation: fadeIn 0.5s ease;">
+                <p style="color: var(--text-sub); line-height: 1.8; margin-bottom: 20px;">
+                    まだ訪問記録がありません。<br>お気に入りのカフェを記録して、<br>自分だけの分析データを作りましょう☕️
+                </p>
+                <!-- 記録フォームへ遷移するボタン（ルーティングの実装に合わせてonclickを調整） -->
+                <button onclick="document.getElementById('nav-form').click()" class="btn-primary" style="width: auto; padding: 10px 24px; display: inline-block;">
+                    ✍️ 最初の記録をつける
+                </button>
+            </div>
+        `;
         return;
     }
-
     // ==========================================
     // 1. 基本統計の計算とID割り当て（マップ画像連携用）
     // ==========================================
