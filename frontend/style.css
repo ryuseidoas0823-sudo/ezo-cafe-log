@@ -1,5 +1,6 @@
 /* ==========================================
    ☕️ EzoCafe Log - Master Style Sheet
+   DX・業務ツール基準: レスポンシブ & セーフエリア対応完全版
    ========================================== */
 
 /* --- 1. Base & Reset --- */
@@ -28,7 +29,7 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* スマホでの閲覧を最適化（中央寄せのコンテナ） */
+/* スマホ閲覧最適化 兼 PC閲覧時のアプリビュー化 */
 .app-container {
     max-width: 600px;
     margin: 0 auto;
@@ -41,6 +42,11 @@ body {
     flex-direction: column;
     
     padding-bottom: 80px; /* 下部ナビゲーションなどの余白 */
+
+    /* 💻 PC閲覧時の境界線を明確にし、業務ツールとしての視認性を向上 */
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+    border-left: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
 }
 
 /* --- 2. Typography & Utilities --- */
@@ -79,7 +85,7 @@ textarea {
     padding: 10px 12px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    font-size: 16px; /* スマホでのズーム防止 */
+    font-size: 16px; /* スマホでのズーム防止（ポカヨケ） */
     background-color: var(--card-bg);
     transition: border-color 0.3s ease;
 }
@@ -129,7 +135,7 @@ button:active {
     border: 1px solid var(--border-color);
 }
 
-/* 🚀 新規追加：位置確定ボタン用のフローティングコンテナ（セーフエリア対応） */
+/* 🚀 位置確定ボタン用フローティングコンテナ（セーフエリア対応） */
 .confirm-button-container {
     position: fixed;
     left: 50%;
@@ -142,7 +148,6 @@ button:active {
     z-index: 1000;
 }
 
-/* 新規追加：フローティング用の確定ボタン本体 */
 .confirm-button {
     width: 100%;
     padding: 15px;
@@ -168,7 +173,6 @@ button:active {
 .map-modal-content {
     background-color: var(--card-bg);
     width: 100%;
-    /* 📱 スマホUI最適化：モーダルもdvhに対応 */
     height: 90vh; /* フォールバック */
     height: 90dvh;
     border-radius: 16px 16px 0 0;
@@ -191,7 +195,7 @@ button:active {
     z-index: 2;
 }
 
-/* 🌟 ポカヨケ：テキストと閉じるボタンの被り防止 */
+/* 🌟 テキストと閉じるボタンの被り防止 */
 .map-modal-header-text {
     padding-right: 60px;
     text-align: left;
@@ -304,7 +308,7 @@ button:active {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
-/* 🌟 インスタ風：フリックドットインジケーター */
+/* 🌟 フリックドットインジケーター */
 .flick-dots {
     display: flex;
     justify-content: center;
@@ -327,7 +331,6 @@ button:active {
     transform: scale(1.2);
 }
 
-/* 単一画像の場合 */
 .diary-image {
     width: calc(100% - 32px);
     margin: 12px 16px;
@@ -419,9 +422,7 @@ button:active {
     white-space: pre-wrap;
 }
 
-/* ==========================================
-   ローディングUI (非同期読み込み用)
-   ========================================== */
+/* --- 10. ローディングUI --- */
 .loader-container {
   display: flex;
   flex-direction: column;
@@ -429,14 +430,14 @@ button:active {
   align-items: center;
   padding: 30px 0;
   width: 100%;
-  color: #666; /* 落ち着いたテキストカラー */
+  color: #666;
 }
 
 .spinner {
   width: 40px;
   height: 40px;
   border: 4px solid #f3f3f3;
-  border-top: 4px solid #8b5a2b; /* カフェの雰囲気に合わせたブラウン系 */
+  border-top: 4px solid #8b5a2b; 
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 10px;
@@ -445,4 +446,31 @@ button:active {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* ==========================================
+   🗺️ 11. メインマップUI (#viewMap) - 【追加・修正部分】
+   ========================================== */
+#viewMap {
+    width: 100%;
+    /* 画面の高さからヘッダーやナビゲーション分を引いた高さを動的に計算 */
+    height: calc(100dvh - 200px); 
+    min-height: 400px;
+    z-index: 1; /* ドロップダウン等より下、背景より上に配置 */
+    border-radius: 0 0 16px 16px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+/* 📍 Leafletのカスタムアイコン（ピン）用スタイル */
+.custom-div-icon {
+    background: transparent;
+    border: none;
+}
+.hot-status-pin {
+    animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+    70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
 }
