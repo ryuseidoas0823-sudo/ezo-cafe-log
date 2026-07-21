@@ -63,7 +63,8 @@ export function generateDemographicsHTML(analyticsData) {
     `;
 
     // グラフのバーの長さを相対的に計算するため、最も人数の多い年代のカウントを取得
-    const maxAgeCount = Math.max(...Object.values(ages), 1);
+    const safeAges = ages || {};
+    const maxAgeCount = Math.max(...Object.values(safeAges), 1);
 
     ageLabels.forEach(age => {
         const count = ages[age] || 0;

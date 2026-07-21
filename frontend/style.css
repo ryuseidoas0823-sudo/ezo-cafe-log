@@ -8,7 +8,7 @@
     --primary-hover: #219150;
     --danger-color: #e74c3c;
     --text-main: #2c3e50;
-    --text-sub: #7f8c8d;
+    --text-sub: #596263;
     --bg-color: #f8f9fa;
     --card-bg: #ffffff;
     --border-color: #e0e0e0;
@@ -247,7 +247,7 @@ button:active {
 }
 
 .suggest-item {
-    padding: 12px 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--border-color);
     cursor: pointer;
     font-size: 14px;
