@@ -244,3 +244,41 @@ app.get('/api/analytics/b2b', async (c) => {
 // 🏁 7. アプリケーションのエクスポート
 // ==========================================
 export default app
+
+// ==========================================
+// 👻 他者の足跡（ゴーストピン）取得API
+// ==========================================
+app.get('/api/footprints', async (c) => {
+  const auth = await checkAuthorization(c, ['free', 'premium', 'business', 'admin']);
+  if (!auth.authorized) return c.json({ error: auth.error }, auth.status);
+
+  try {
+    // 自身のUUID「以外」の記録を抽出。
+    // ※ 下書き(📦)や閉店報告(🚫)は除外する
+    const query = `
+      SELECT 
+        id, 
+        shop_id, 
+        shop_name, 
+        latitude, 
+        longitude, 
+        tags, 
+        weather_icon
+      FROM diaries 
+      WHERE user_uuid != ? 
+        AND weather_icon NOT IN ('📦', '🚫')
+    `;
+    
+    const { results } = await c.env.DB.prepare(query).bind(auth.user.userUuid).all();
+    
+    // プライバシー保護のため、データをさらに丸める（必要に応じて）
+    const anonymizedResults = results.map(row => ({
+      ...row,
+      isGhost: true // フロントエンドで判別するためのフラグ
+    }));
+
+    return c.json(anonymizedResults);
+  } catch (err) {
+    return c.json({ error: err.message }, 500);
+  }
+});

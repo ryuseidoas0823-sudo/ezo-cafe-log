@@ -1,19 +1,22 @@
 // ==========================================
 // 🗺️ src/components/b2c/map.js (DX強化・パフォーマンス最適化版)
-// 責務: マップ描画、マーカー集約、フィルター処理、UI統合
+// 責務: マップ描画、マーカー集約、フィルター処理、UI統合、他者の足跡(ゴースト)管理
 // ==========================================
 import { getters, mutators } from '../../state.js';
 import { parseTags, getColorFromTag, escapeHTML } from '../../utils/text.js';
-import { fetchActiveStatusesApi, reportStatusApi, fetchShopAnalyticsApi, saveDiaryApi, deleteDiaryApi } from '../../api.js';
+// 🌟 fetchGhostPinsApi をインポートに追加
+import { fetchActiveStatusesApi, reportStatusApi, fetchShopAnalyticsApi, saveDiaryApi, deleteDiaryApi, fetchGhostPinsApi } from '../../api.js';
 
 // 📍 拠点座標
 const HOME_LAT = 43.0600;
 const HOME_LNG = 141.3500;
 let viewMap = null;
-let markerLayerGroup = null; // 🌟 改善: マーカーを一括管理・高速描画するためのレイヤーグループ
+let markerLayerGroup = null; 
+let ghostLayerGroup = null; // 🌟 改善: ゴーストピン（他者の足跡）専用のレイヤーグループ
 
 let isFetchingStatuses = false;
 window.showMasterShops = false; 
+window.showFootprints = false; // 🌟 改善: 足跡の表示状態管理
 const HOKKAIDO_BOUNDS = L.latLngBounds([41.2000, 139.2000], [45.6000, 146.0000]);
 
 // 🛠️ ユーティリティ: 連続呼び出しを間引くDebounce関数（UIフリーズ防止）
@@ -35,7 +38,7 @@ export function initViewMap() {
             maxBoundsViscosity: 1.0, 
             minZoom: 7, 
             maxZoom: 19,
-            preferCanvas: true // 🌟 改善: 大量マーカー描画時のパフォーマンスを向上させるCanvasモード
+            preferCanvas: true 
         }).setView([HOME_LAT, HOME_LNG], 13);
         
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
@@ -44,9 +47,11 @@ export function initViewMap() {
             attribution: '&copy; OpenStreetMap &copy; CARTO'
         }).addTo(viewMap);
 
-        // 🌟 改善: レイヤーグループの初期化
+        // レイヤーグループの初期化
         markerLayerGroup = L.layerGroup().addTo(viewMap);
+        ghostLayerGroup = L.layerGroup().addTo(viewMap); // 🌟 ゴースト用レイヤーを追加
         
+        // 🏪 マスタ表示コントロール
         const MasterToggleControl = L.Control.extend({
             options: { position: 'topright' },
             onAdd: function() {
@@ -61,18 +66,41 @@ export function initViewMap() {
         });
         viewMap.addControl(new MasterToggleControl());
 
-        // 🌟 改善: イベントリスナーの多重登録を防止
+        // 👻 他者の足跡（ゴーストピン）コントロール
+        const FootprintToggleControl = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: function() {
+                const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+                div.style.cssText = 'background-color: white; padding: 5px 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); margin-right: 10px; margin-top: 10px; border: 1px solid #8e44ad;';
+                div.innerHTML = `<label style="cursor:pointer; font-weight:bold; font-size:12px; display:flex; align-items:center; gap:5px; color:#8e44ad;">
+                    <input type="checkbox" id="footprint-toggle" ${window.showFootprints ? 'checked' : ''}> 👻 誰かの足跡
+                </label>`;
+                L.DomEvent.disableClickPropagation(div);
+                return div;
+            }
+        });
+        viewMap.addControl(new FootprintToggleControl());
+
         viewMap.off('zoomend').on('zoomend', () => updateViewMarkers(false));
         viewMap.off('click').on('click', closeBottomSheet);
 
         setTimeout(() => {
-            const toggle = document.getElementById('master-shop-toggle');
-            if (toggle && !toggle.dataset.listened) {
-                toggle.addEventListener('change', (e) => {
+            const masterToggle = document.getElementById('master-shop-toggle');
+            if (masterToggle && !masterToggle.dataset.listened) {
+                masterToggle.addEventListener('change', (e) => {
                     window.showMasterShops = e.target.checked;
                     updateViewMarkers(false);
                 });
-                toggle.dataset.listened = "true";
+                masterToggle.dataset.listened = "true";
+            }
+
+            const footprintToggle = document.getElementById('footprint-toggle');
+            if (footprintToggle && !footprintToggle.dataset.listened) {
+                footprintToggle.addEventListener('change', (e) => {
+                    window.showFootprints = e.target.checked;
+                    loadAndRenderFootprints(); // 🌟 足跡の取得と描画をトリガー
+                });
+                footprintToggle.dataset.listened = "true";
             }
         }, 100);
 
@@ -103,11 +131,84 @@ export function toggleMapFilter(type) {
     updateViewMarkers(false); 
 }
 
+// ==========================================
+// 👻 ゴーストピン（他者の足跡）の取得と描画
+// ==========================================
+async function loadAndRenderFootprints() {
+    if (!viewMap || !ghostLayerGroup) return;
+    ghostLayerGroup.clearLayers();
+
+    if (!window.showFootprints) return;
+
+    try {
+        const footprints = await fetchGhostPinsApi();
+        if (!footprints || footprints.length === 0) return;
+
+        const footprintMap = {};
+        footprints.forEach(fp => {
+            const lat = parseFloat(fp.latitude || fp.lat);
+            const lng = parseFloat(fp.longitude || fp.lng);
+            if (isNaN(lat) || isNaN(lng)) return;
+            
+            const key = `${lat}_${lng}`;
+            if (!footprintMap[key]) {
+                footprintMap[key] = { lat, lng, count: 0, tags: new Set() };
+            }
+            footprintMap[key].count++;
+            
+            if (fp.tags) {
+                const parsedTags = parseTags(fp.tags);
+                parsedTags.forEach(t => footprintMap[key].tags.add(t));
+            }
+        });
+
+        Object.values(footprintMap).forEach(loc => {
+            const scale = 1.0 + (Math.min(loc.count, 10) * 0.05); 
+            const size = Math.round(30 * scale);
+            const anchor = Math.round(size / 2);
+
+            const ghostHtml = `
+                <div style="
+                    background: rgba(142, 68, 173, 0.6);
+                    width: ${size}px; height: ${size}px;
+                    border-radius: 50%;
+                    border: 2px solid rgba(255,255,255,0.8);
+                    box-shadow: 0 0 15px rgba(142, 68, 173, 0.8);
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: ${Math.round(14 * scale)}px;
+                    animation: pulse-ghost 2.5s infinite alternate;
+                ">👻</div>
+            `;
+
+            const icon = L.divIcon({
+                html: ghostHtml,
+                className: 'ghost-div-icon',
+                iconSize: [size, size],
+                iconAnchor: [anchor, anchor]
+            });
+
+            // zIndexOffsetをマイナスにして、自分のピン（通常マーカー）より背面に潜り込ませる
+            const marker = L.marker([loc.lat, loc.lng], { icon: icon, zIndexOffset: -100 }); 
+            
+            let tagsHtml = Array.from(loc.tags).slice(0, 4).map(t => `<span style="background:#8e44ad; color:white; padding:2px 6px; border-radius:8px; font-size:10px; margin: 2px;">${escapeHTML(t)}</span>`).join('');
+            if(!tagsHtml) tagsHtml = '<span style="color:#7f8c8d; font-size:10px;">名もなき足跡</span>';
+
+            marker.bindPopup(`<div style="text-align:center; min-width: 120px;">
+                <p style="margin:0 0 8px 0; color:#8e44ad; font-weight:bold; font-size:12px;">誰かの痕跡</p>
+                <div style="display:flex; flex-wrap:wrap; justify-content:center;">${tagsHtml}</div>
+            </div>`, { closeButton: false, offset: [0, -10] });
+
+            marker.addTo(ghostLayerGroup);
+        });
+    } catch (err) {
+        console.error("[DX Alert] 足跡描画エラー:", err);
+    }
+}
+
 export function updateViewMarkers(autoFit = false) {
     if (!viewMap || !markerLayerGroup) return;
     const currentZoom = viewMap.getZoom();
     
-    // 🌟 改善: ループで消すのではなく、レイヤーグループごと一瞬でクリア（超高速化）
     markerLayerGroup.clearLayers();
     
     const bounds = L.latLngBounds(); 
@@ -282,10 +383,7 @@ export function updateViewMarkers(autoFit = false) {
         }
         
         marker.shopData = mainShop;
-        
-        // 🌟 改善: viewMapに直接描画するのではなく、LayerGroupに追加する
         marker.addTo(markerLayerGroup);
-        
         marker.on('click', () => { openShopBottomSheet(mainShop, shopList, loc, locTotalVisits); });
         
         if (!mainShop.isMasterOnly && !mainShop.isGracePeriod && !mainShop.isClosed) {
@@ -308,19 +406,15 @@ export function updateViewMarkers(autoFit = false) {
             .catch(err => console.error("[DX Alert] ステータス取得エラー:", err))
             .finally(() => {
                 isFetchingStatuses = false;
-                // 🌟 【DX改修】通信完了後、ローディングUIを確実に消し、マップを表示する
-                const mapLoader = document.getElementById('map-loading'); // ※HTML側のIDと一致させてください
+                const mapLoader = document.getElementById('map-loading'); 
                 const viewMapEl = document.getElementById('viewMap');
                 
-                if (mapLoader) {
-                    mapLoader.style.display = 'none';
-                }
+                if (mapLoader) mapLoader.style.display = 'none';
                 if (viewMapEl) {
                     viewMapEl.style.opacity = '1';
                     viewMapEl.style.visibility = 'visible';
                 }
                 
-                // DOMの表示が更新された後、確実にLeafletにサイズを認識させる
                 setTimeout(() => { if (viewMap) viewMap.invalidateSize(); }, 150);
             });
     } else if (getters.getActiveStatuses().length > 0) {
@@ -331,7 +425,6 @@ export function updateViewMarkers(autoFit = false) {
 function applyActiveStatuses(statuses) {
     if (!statuses || statuses.length === 0 || !markerLayerGroup) return;
     
-    // 🌟 改善: レイヤーグループから安全にマーカーを抽出
     markerLayerGroup.eachLayer(marker => {
         if (!marker.shopData) return; 
         const isHot = statuses.some(st => (st.shop_id && st.shop_id === marker.shopData.shopId) || (!st.shop_id && st.shop_name === marker.shopData.shopName));
@@ -362,7 +455,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     const content = document.getElementById('bottomSheetContent');
     const currentUser = getters.getCurrentUser();
     
-    // 🌟 改善: 文字列結合を整理し、ブロックごとに分割（保守性の向上）
     const generateHeaderHtml = () => {
         let servicesHtml = '<div style="margin: 8px 0 15px 0; font-size: 0.9rem; color: #7f8c8d;">✨ 対応: ';
         if (mainShop.hasDining) servicesHtml += '☕️店内 ';
@@ -421,10 +513,8 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
 
     let html = generateHeaderHtml() + generateHistoryHtml() + `<p style="margin: 10px 0; font-weight:bold; color:#34495e;">${statusText}</p>`;
     
-    // アナリティクス (Personal)
     const allDiaries = getters.getAllDiaries();
     const shopDiaries = allDiaries.filter(d => {
-        // IDが一致するか、または名前が一致すれば「過去の同店舗データ」として救出する
         const isSameShop = (mainShop.shopId && d.shop_id === mainShop.shopId) || (d.shop_name === mainShop.shopName);
         const isValidStatus = d.weather_icon !== "💭" && d.weather_icon !== "📦" && d.weather_icon !== "🚫";
         return isSameShop && isValidStatus;
@@ -456,7 +546,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
         html += `</div></details>`;
     }
 
-    // アナリティクス (B2B)
     if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'business')) {
         const safeShopId = mainShop.shopId ? `'${mainShop.shopId}'` : 'null';
         const safeShopName = `'${mainShop.shopName.replace(/'/g, "\\'")}'`;
@@ -475,10 +564,6 @@ function openShopBottomSheet(mainShop, shopList, loc, locTotalVisits) {
     sheet.classList.add('active');
 }
 
-// ==========================================
-// 🌐 window へのグローバル関数の公開
-// ※フロントエンド統合・将来的なモジュール化に向けて
-// ==========================================
 window.recordFromMap = function(shopId, shopName, lat, lng) {
     closeBottomSheet();
     window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'record' } }));
@@ -573,16 +658,12 @@ window.cancelCloseReport = async function(diaryId) {
 
 window.toggleMapFilter = toggleMapFilter;
 
-// ==========================================
-// 📸 画像化機能 (堅牢化・ポカヨケ実装)
-// ==========================================
 window.downloadMapImage = async function() {
     const btn = document.getElementById('btn-save-map-image');
     if (!btn) return;
     
     const mapEl = document.getElementById('viewMap');
     
-    // 🚨 破損ガード処理: マップが見えない状態（高さ0）での出力をブロック
     if (!mapEl || mapEl.offsetHeight === 0 || mapEl.style.opacity === '0') {
         alert("⚠️ マップの読み込みが完了していないか、表示されていません。マップが表示されてから再度お試しください。");
         return;
@@ -616,13 +697,12 @@ window.downloadMapImage = async function() {
         controls = mapEl.querySelectorAll('.leaflet-control-container');
         controls.forEach(c => c.style.display = 'none');
 
-        // 少しだけ待機してDOMのレンダリングを安定させる（重要）
         await new Promise(resolve => setTimeout(resolve, 200));
 
         const canvas = await html2canvas(mapEl, {
             useCORS: true,
             allowTaint: true,
-            backgroundColor: '#f8f9fa', // 透過によるエラーを防ぐため背景色を指定
+            backgroundColor: '#f8f9fa', 
             scale: 2 
         });
 
@@ -649,16 +729,11 @@ window.downloadMapImage = async function() {
     }
 };
 
-// ==========================================
-// 🌟 【DX改修】SPAタブ切り替え時の確実なマップ再描画
-// ==========================================
 window.addEventListener('switch-tab', (e) => {
     if (e.detail && e.detail.tab === 'map') {
-        // タブが表示されるアニメーション等の時間を考慮し、少し長めに待つ（300ms）
         setTimeout(() => {
             const mapEl = document.getElementById('viewMap');
             if (mapEl) {
-                // 強制的に表示状態を上書きしてLeafletにサイズを認識させる
                 mapEl.style.visibility = 'visible';
                 mapEl.style.opacity = '1';
                 mapEl.style.display = 'block';
@@ -666,7 +741,6 @@ window.addEventListener('switch-tab', (e) => {
                 if (typeof viewMap !== 'undefined' && viewMap !== null) {
                     viewMap.invalidateSize();
                 } else if (typeof initViewMap === 'function') {
-                    // もし未初期化ならここで初期化を叩く
                     initViewMap();
                 }
             }
