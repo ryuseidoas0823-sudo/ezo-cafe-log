@@ -9,6 +9,49 @@ import { initFormHandlers } from './components/b2c/form.js';
 import { initViewMap, updateViewMarkers } from './components/b2c/map.js';
 import { renderAnalytics } from './components/b2c/analytics.js';
 
+// ==========================================
+// 🔐 ゼロトラスト認証: UUIDの初期化と権限ルーティング (DX堅牢化版)
+// ==========================================
+function initAuth() {
+    // 1. URLパラメータによる「隠し管理者ログイン」（開発者・運用者専用）
+    // アクセス例: https://(あなたのドメイン)/?admin_key=secret_ezo_2026
+    const urlParams = new URLSearchParams(window.location.search);
+    const adminKey = urlParams.get('admin_key');
+    
+    // ※ 'secret_ezo_2026' の部分は、推測されにくいお好きなパスワードに変更してください
+    if (adminKey === 'secret_ezo_2026') { 
+        localStorage.setItem('ezo_user_uuid', 'test-terminal-001');
+        console.log("[DX Auth] 隠しパラメータを検知。管理者としてログインしました。");
+        
+        // 🚨 ポカヨケ: URLからパスワード部分を即座に消去し、シェア時の事故を防ぐ
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return; // 管理者処理を終えて抜ける
+    }
+
+    // 2. 一般ユーザーのロジック（UUIDがない、または不正に管理者IDを持っている場合）
+    let currentUuid = localStorage.getItem('ezo_user_uuid');
+    
+    // 一般ユーザーなのに偶然（または前回のテストの残骸で）管理者IDを持っている場合は剥奪する
+    if (currentUuid === 'test-terminal-001' && adminKey !== 'secret_ezo_2026') {
+        console.warn("[DX Alert] 不正な管理者セッションを破棄し、一般ユーザーに降格します。");
+        currentUuid = null; 
+    }
+
+    // UUIDを持っていなければ、完全に新規のランダムIDを発行する
+    if (!currentUuid) { 
+        // 堅牢な暗号論的疑似乱数ジェネレータ（非対応ブラウザ用フォールバック付き）
+        currentUuid = typeof crypto !== 'undefined' && crypto.randomUUID 
+            ? crypto.randomUUID() 
+            : 'user-' + new Date().getTime() + '-' + Math.random().toString(36).substring(2, 15);
+            
+        localStorage.setItem('ezo_user_uuid', currentUuid);
+        console.log("[DX Auth] 新規一般ユーザーとしてUUIDを発行しました。");
+    }
+}
+
+// アプリ起動時に必ず実行
+initAuth();
+
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. 基本設定と認証の初期化
     resetDateToToday();
