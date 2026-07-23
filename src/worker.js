@@ -197,9 +197,37 @@ app.post('/api/shops/local-status', async (c) => {
   }
 })
 
-// 🌟 ピン・ステータス関連 (UIの描画用モックとして安全に配列を返す)
+// ==========================================
+// 👻 ゴーストピン（他者の足跡）取得API
+// ==========================================
 app.get('/api/pins/ghost', async (c) => {
-  return c.json([]); // TODO: 実運用時にゴーストピン抽出ロジックを実装
+  const auth = await checkAuthorization(c, ['free', 'premium', 'business', 'admin']);
+  if (!auth.authorized) return c.json({ error: auth.error }, auth.status);
+
+  try {
+    // 現在のユーザーUUID「以外」の記録を抽出
+    // ※ 下書き(📦)や閉店報告(🚫)は除外し、有効な記録のみを取得する
+    const query = `
+      SELECT 
+        id, 
+        shop_id, 
+        shop_name, 
+        latitude, 
+        longitude, 
+        tags, 
+        weather_icon
+      FROM diaries 
+      WHERE user_uuid != ? 
+        AND weather_icon NOT IN ('📦', '🚫')
+    `;
+    
+    // DBからデータを取得（バインド変数に現在のUUIDを入れて除外する）
+    const { results } = await c.env.DB.prepare(query).bind(auth.user.userUuid).all();
+    
+    return c.json(results);
+  } catch (err) {
+    return c.json({ error: err.message }, 500);
+  }
 })
 
 app.get('/api/statuses/active', async (c) => {
