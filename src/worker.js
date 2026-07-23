@@ -285,16 +285,18 @@ app.get('/api/footprints', async (c) => {
     // ※ 下書き(📦)や閉店報告(🚫)は除外する
     const query = `
       SELECT 
-        id, 
-        shop_id, 
-        shop_name, 
-        latitude, 
-        longitude, 
-        tags, 
-        weather_icon
+        id, shop_id, shop_name, latitude, longitude, tags, weather_icon
       FROM diaries 
-      WHERE user_uuid != ? 
-        AND weather_icon NOT IN ('📦', '🚫')
+      WHERE user_uuid = (
+          -- 自分以外のユーザーの中から、ランダムに1人のUUIDを選出
+          SELECT user_uuid 
+          FROM diaries 
+          WHERE user_uuid != ? 
+            AND weather_icon NOT IN ('📦', '🚫')
+          ORDER BY RANDOM() 
+          LIMIT 1
+      )
+      AND weather_icon NOT IN ('📦', '🚫')
     `;
     
     const { results } = await c.env.DB.prepare(query).bind(auth.user.userUuid).all();
